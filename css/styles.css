@@ -27,7 +27,7 @@ body {
 }
 
 .chart-section.trading-open {
-    height: 420px;
+    height: 340px;
 }
 
 .chart-slider {
@@ -147,6 +147,52 @@ body {
 .chart-toggle-btn:active { transform: scale(0.95); }
 .chart-toggle-btn.active { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
 
+.header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.action-btn-mini {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s;
+}
+
+.action-btn-mini.sell {
+    background: #ef4444;
+    color: white;
+}
+
+.action-btn-mini.sell:hover:not(:disabled) { background: #dc2626; }
+
+.action-btn-mini.buy {
+    background: #22c55e;
+    color: white;
+}
+
+.action-btn-mini.buy:hover:not(:disabled) { background: #16a34a; }
+
+.action-btn-mini:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-btn-mini.spinning {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 .mini-chart-container {
     height: 0;
     overflow: hidden;
@@ -167,108 +213,10 @@ body {
     overflow: hidden;
 }
 
-/* NEW: Direction Selector */
-.direction-selector {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.direction-btn {
-    padding: 14px 10px;
-    border-radius: 12px;
-    border: 2px solid transparent;
-    background: rgba(30, 41, 59, 0.5);
-    color: #94a3b8;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.direction-btn .icon {
-    font-size: 20px;
-    line-height: 1;
-}
-
-.direction-btn .label {
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.direction-btn small {
-    font-size: 10px;
-    opacity: 0.7;
-}
-
-.direction-btn.sell:hover {
-    border-color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-}
-
-.direction-btn.sell.selected {
-    border-color: #ef4444;
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
-}
-
-.direction-btn.buy:hover {
-    border-color: #22c55e;
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
-}
-
-.direction-btn.buy.selected {
-    border-color: #22c55e;
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
-}
-
-/* NEW: Order Config Panel */
-.order-config {
-    background: rgba(15, 23, 42, 0.5);
-    border-radius: 12px;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    animation: slideDown 0.3s ease;
-}
-
-.order-config.hidden {
-    display: none;
-}
-
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* NEW: Balance Display */
-.balance-display {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 12px;
-    padding: 8px;
-    background: rgba(30, 41, 59, 0.5);
-    border-radius: 8px;
-}
-
-.balance-item {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 500;
-}
-
 .order-toggle {
     display: flex;
     gap: 4px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     background: rgba(15, 23, 42, 0.5);
     padding: 3px;
     border-radius: 8px;
@@ -302,7 +250,7 @@ body {
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     padding: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     transition: all 0.3s ease;
 }
 
@@ -378,30 +326,18 @@ body {
 .slider-track {
     position: absolute;
     width: 100%;
-    height: 4px;
+    height: 3px;
     background: rgba(51, 65, 85, 0.5);
     border-radius: 2px;
 }
 
 .slider-fill {
     position: absolute;
-    height: 4px;
+    height: 3px;
+    background: #3b82f6;
     border-radius: 2px;
-    transition: all 0.1s;
-}
-
-/* Buy mode: fill from right to left (red) */
-.slider-box.buy-mode .slider-fill {
-    right: 50%;
-    left: auto;
-    background: linear-gradient(90deg, #dc2626, #ef4444);
-}
-
-/* Sell mode: fill from left to right (green) */
-.slider-box.sell-mode .slider-fill {
-    left: 50%;
-    right: auto;
-    background: linear-gradient(90deg, #22c55e, #16a34a);
+    left: 0;
+    transition: width 0.1s;
 }
 
 input[type=range] {
@@ -417,18 +353,17 @@ input[type=range] {
 
 input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     background: white;
     border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     cursor: grab;
-    margin-top: -7px;
-    border: 2px solid #3b82f6;
+    margin-top: -6.5px;
 }
 
 input[type=range]::-webkit-slider-runnable-track {
-    height: 4px;
+    height: 3px;
     background: transparent;
 }
 
@@ -437,20 +372,15 @@ input[type=range]::-webkit-slider-runnable-track {
     justify-content: space-between;
     font-size: 10px;
     color: #475569;
-    margin-top: 4px;
+    margin-top: 2px;
 }
-
-.slider-labels .discount { color: #ef4444; }
-.slider-labels .premium { color: #22c55e; }
-.slider-labels .current { color: #f8fafc; font-weight: bold; }
 
 .trigger-compact {
     background: rgba(30, 41, 59, 0.4);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 10px;
+    padding: 8px 10px;
     display: none;
-    margin-bottom: 10px;
 }
 
 .trigger-compact.show {
@@ -461,11 +391,11 @@ input[type=range]::-webkit-slider-runnable-track {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .trigger-title {
-    font-size: 11px;
+    font-size: 10px;
     color: #64748b;
     text-transform: uppercase;
     font-weight: 600;
@@ -483,38 +413,29 @@ input[type=range]::-webkit-slider-runnable-track {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 6px;
 }
 
 .trigger-price {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
 }
 
 .trigger-offset {
     font-size: 13px;
     font-weight: 600;
-    padding: 3px 10px;
+    padding: 2px 8px;
     border-radius: 6px;
-    background: rgba(148, 163, 184, 0.15);
-    color: #94a3b8;
-}
-
-.trigger-guide {
-    text-align: center;
-    margin-bottom: 8px;
-    font-size: 11px;
-    color: #64748b;
+    background: rgba(34, 197, 94, 0.15);
 }
 
 .auto-compact {
     background: rgba(30, 41, 59, 0.4);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 10px;
+    padding: 8px 10px;
     display: none;
-    margin-bottom: 10px;
 }
 
 .auto-compact.show {
@@ -529,7 +450,7 @@ input[type=range]::-webkit-slider-runnable-track {
 }
 
 .auto-title {
-    font-size: 11px;
+    font-size: 10px;
     color: #64748b;
     text-transform: uppercase;
     font-weight: 600;
@@ -584,35 +505,6 @@ input[type=range]::-webkit-slider-runnable-track {
     font-size: 13px;
     font-weight: 600;
     color: #22c55e;
-}
-
-/* NEW: Review Order Button */
-.review-order-btn {
-    width: 100%;
-    padding: 14px;
-    border-radius: 10px;
-    border: none;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-top: 8px;
-}
-
-.review-order-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
-}
-
-.review-order-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.review-order-btn.spinning {
-    animation: pulse 1.5s infinite;
 }
 
 .card { 
@@ -688,11 +580,6 @@ header {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
 }
 
 .bottom-nav { 
@@ -916,6 +803,25 @@ header {
     font-size: 11px;
     margin-top: 8px;
     text-align: center;
+}
+
+.guide-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.guide-badge.buy {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.guide-badge.sell {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
 }
 
 /* PIN Modal Styles */
