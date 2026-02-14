@@ -1,14 +1,14 @@
-* { 
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; 
-    -webkit-tap-highlight-color: transparent; 
-    box-sizing: border-box; 
+* {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
 }
 
-body { 
-    background: #0a0e1a; 
-    color: white; 
-    margin: 0; 
-    padding: 0; 
+body {
+    background: #0a0e1a;
+    color: white;
+    margin: 0;
+    padding: 0;
 }
 
 .main-container {
@@ -375,11 +375,12 @@ input[type=range]::-webkit-slider-runnable-track {
     margin-top: 2px;
 }
 
+/* TRIGGER SECTION STYLES */
 .trigger-compact {
     background: rgba(30, 41, 59, 0.4);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 10px;
+    padding: 10px;
     display: none;
 }
 
@@ -391,7 +392,7 @@ input[type=range]::-webkit-slider-runnable-track {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
 
 .trigger-title {
@@ -409,12 +410,53 @@ input[type=range]::-webkit-slider-runnable-track {
     font-weight: 500;
 }
 
+/* Wallet Balances Display */
+.trigger-balances {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 8px;
+}
+
+.balance-item {
+    flex: 1;
+    text-align: center;
+    padding: 6px;
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.balance-label {
+    font-size: 10px;
+    color: #64748b;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.balance-amount {
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+}
+
+.balance-amount.aud {
+    color: #f59e0b;
+}
+
+.balance-amount.usdc {
+    color: #22c55e;
+}
+
 .trigger-price-row {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 .trigger-price {
@@ -427,9 +469,181 @@ input[type=range]::-webkit-slider-runnable-track {
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 6px;
-    background: rgba(34, 197, 94, 0.15);
+    transition: all 0.2s;
 }
 
+/* Offset colors - Green for positive, Red for negative */
+.trigger-offset.positive {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.trigger-offset.negative {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.trigger-offset.neutral {
+    background: rgba(100, 116, 139, 0.15);
+    color: #64748b;
+}
+
+/* Trigger Slider with dynamic colors */
+.trigger-slider-box {
+    position: relative;
+    height: 24px;
+    display: flex;
+    align-items: center;
+}
+
+.trigger-slider-track {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background: rgba(51, 65, 85, 0.5);
+    border-radius: 2px;
+}
+
+/* Center marker for current price */
+.trigger-slider-track::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    width: 2px;
+    height: 8px;
+    background: #64748b;
+    transform: translateX(-50%);
+}
+
+.trigger-slider-fill {
+    position: absolute;
+    height: 4px;
+    border-radius: 2px;
+    transition: all 0.1s;
+}
+
+/* Left side (negative) - Red */
+.trigger-slider-fill.negative {
+    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+    right: 50%;
+    left: auto;
+}
+
+/* Right side (positive) - Green */
+.trigger-slider-fill.positive {
+    background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+    left: 50%;
+}
+
+input[type=range].trigger-slider {
+    position: absolute;
+    width: 100%;
+    height: 24px;
+    -webkit-appearance: none;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+    z-index: 2;
+}
+
+input[type=range].trigger-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    cursor: grab;
+    margin-top: -7px;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+}
+
+input[type=range].trigger-slider.negative::-webkit-slider-thumb {
+    border-color: #ef4444;
+}
+
+input[type=range].trigger-slider.positive::-webkit-slider-thumb {
+    border-color: #22c55e;
+}
+
+input[type=range].trigger-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: transparent;
+}
+
+.trigger-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #475569;
+    margin-top: 4px;
+}
+
+.trigger-labels .left { color: #ef4444; }
+.trigger-labels .center { color: #64748b; }
+.trigger-labels .right { color: #22c55e; }
+
+/* Cash toggle for trigger - shows Buy/Sell context */
+.trigger-cash-context {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    padding: 4px;
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 8px;
+}
+
+.cash-context-btn {
+    flex: 1;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(30, 41, 59, 0.3);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.15s;
+}
+
+.cash-context-btn.active.buy-context {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.cash-context-btn.active.sell-context {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.cash-context-btn .icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: bold;
+}
+
+/* Guide text */
+.trigger-guide {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: #64748b;
+}
+
+/* AUTO SECTION - unchanged */
 .auto-compact {
     background: rgba(30, 41, 59, 0.4);
     border-radius: 12px;
@@ -501,35 +715,18 @@ input[type=range]::-webkit-slider-runnable-track {
     color: #64748b;
 }
 
-
-.balance-display {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 8px 0;
-    padding: 6px 8px;
-    background: rgba(30, 41, 59, 0.5);
-    border-radius: 6px;
-    font-size: 11px;
-    color: #94a3b8;
-}
-
-
-
-
-
 .auto-allocation-value {
     font-size: 13px;
     font-weight: 600;
     color: #22c55e;
 }
 
-.card { 
-    background: rgba(30, 41, 59, 0.4); 
-    border: 1px solid rgba(255, 255, 255, 0.06); 
-    border-radius: 12px; 
-    padding: 12px; 
-    margin-bottom: 8px; 
+.card {
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -589,7 +786,6 @@ header {
 }
 
 .wallet-btn:hover { background: rgba(71, 85, 105, 0.6); color: white; }
-
 .wallet-btn.spinning svg {
     animation: spin 1s linear infinite;
 }
@@ -599,16 +795,16 @@ header {
     to { transform: rotate(360deg); }
 }
 
-.bottom-nav { 
-    position: fixed; 
-    bottom: 0; 
-    left: 0; 
-    right: 0; 
-    background: rgba(10, 14, 26, 0.95); 
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(10, 14, 26, 0.95);
     backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.05); 
-    padding: 8px 20px 24px; 
-    z-index: 100; 
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 20px 24px;
+    z-index: 100;
 }
 
 .nav-item {
