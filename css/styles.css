@@ -249,17 +249,16 @@ body {
     display: none;
 }
 
-/* Cash Toggle - Horizontal layout with balance below */
 .cash-toggle {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     margin-bottom: 10px;
 }
 
 .cash-option {
     flex: 1;
-    height: 56px;
-    border-radius: 10px;
+    height: 48px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 23, 42, 0.3);
     color: #64748b;
@@ -282,49 +281,92 @@ body {
 }
 
 .cash-option .icon {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: bold;
-    margin-bottom: 2px;
-}
-
-.cash-option .currency-name {
-    font-size: 12px;
-    font-weight: 600;
 }
 
 .cash-option .balance {
-    font-size: 11px;
+    font-size: 10px;
     opacity: 0.9;
     font-weight: 500;
 }
 
-/* Limit Buttons - Buy Limit / Sell Limit */
+/* Streamlined cash toggle for trigger section */
+.trigger-compact .cash-toggle.streamlined {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.trigger-compact .cash-toggle.streamlined .cash-option {
+    flex: 1;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(15, 23, 42, 0.3);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.15s;
+    padding: 0 8px;
+}
+
+.trigger-compact .cash-toggle.streamlined .cash-option.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+.trigger-compact .cash-toggle.streamlined .cash-option .icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+.trigger-compact .cash-toggle.streamlined .cash-option .balance {
+    font-size: 10px;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+/* Limit toggle buttons */
 .limit-toggle {
     display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
+    gap: 4px;
+    margin-bottom: 8px;
 }
 
 .limit-btn {
     flex: 1;
-    height: 56px;
-    border-radius: 10px;
+    height: 28px;
+    border-radius: 6px;
     border: none;
     background: rgba(15, 23, 42, 0.4);
     color: #64748b;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     transition: all 0.2s;
 }
 
@@ -336,18 +378,63 @@ body {
     border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
+.limit-btn.buy-limit:hover {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.limit-btn.sell-limit:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
 .limit-btn.buy-limit.active {
     background: #22c55e;
     color: white;
     border-color: #22c55e;
-    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .limit-btn.sell-limit.active {
     background: #ef4444;
     color: white;
     border-color: #ef4444;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Confirmation button */
+.confirm-limit-btn {
+    width: 100%;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: #3b82f6;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+    margin-bottom: 8px;
+}
+
+.confirm-limit-btn:hover {
+    background: #2563eb;
+}
+
+.confirm-limit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.confirm-limit-btn .spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .amount-display {
@@ -427,6 +514,32 @@ input[type=range]::-webkit-slider-runnable-track {
     margin-top: 2px;
 }
 
+/* Slider sections for trigger */
+.slider-section {
+    margin-bottom: 12px;
+}
+
+.slider-section.hidden {
+    display: none;
+}
+
+.slider-section .slider-label {
+    font-size: 10px;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+
+.amount-display-small {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 6px;
+}
+
 /* TRIGGER SECTION */
 .trigger-compact {
     background: rgba(30, 41, 59, 0.4);
@@ -467,7 +580,8 @@ input[type=range]::-webkit-slider-runnable-track {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    margin-top: 8px;
 }
 
 .trigger-price {
@@ -476,11 +590,12 @@ input[type=range]::-webkit-slider-runnable-track {
 }
 
 .trigger-offset {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 6px;
-    background: rgba(34, 197, 94, 0.15);
+    background: rgba(100, 116, 139, 0.2);
+    color: #94a3b8;
 }
 
 /* AUTO SECTION */
@@ -637,6 +752,27 @@ header {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     padding: 8px 20px 24px;
     z-index: 100;
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: #64748b;
+    text-decoration: none;
+    transition: all 0.15s;
+    padding: 4px 12px;
+    border-radius: 8px;
+}
+
+.nav-item.active {
+    color: #3b82f6;
+}
+
+.nav-icon {
+    width: 24px;
+    height: 24px;
 }
 
 .modal-overlay {
@@ -920,4 +1056,197 @@ header {
 
 .pin-error.show {
     display: block;
+}
+
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+.px-3 {
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.pb-20 {
+    padding-bottom: 80px;
+}
+
+.text-xs {
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.text-sm {
+    font-size: 14px;
+    line-height: 20px;
+}
+
+.text-base {
+    font-size: 16px;
+    line-height: 24px;
+}
+
+.text-lg {
+    font-size: 18px;
+    line-height: 28px;
+}
+
+.text-xl {
+    font-size: 20px;
+    line-height: 28px;
+}
+
+.font-medium {
+    font-weight: 500;
+}
+
+.font-semibold {
+    font-weight: 600;
+}
+
+.font-bold {
+    font-weight: 700;
+}
+
+.text-slate-400 {
+    color: #94a3b8;
+}
+
+.text-slate-500 {
+    color: #64748b;
+}
+
+.text-blue-400 {
+    color: #60a5fa;
+}
+
+.bg-yellow-400 {
+    background-color: #fbbf24;
+}
+
+.rounded-full {
+    border-radius: 9999px;
+}
+
+.w-2 {
+    width: 8px;
+}
+
+.h-2 {
+    height: 8px;
+}
+
+.w-4 {
+    width: 16px;
+}
+
+.h-4 {
+    height: 16px;
+}
+
+.w-5 {
+    width: 20px;
+}
+
+.h-5 {
+    height: 20px;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.justify-around {
+    justify-content: space-around;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.gap-2 {
+    gap: 8px;
+}
+
+.gap-4 {
+    gap: 16px;
+}
+
+.gap-6 {
+    gap: 24px;
+}
+
+.space-y-2 > * + * {
+    margin-top: 8px;
+}
+
+.mb-4 {
+    margin-bottom: 16px;
+}
+
+.mt-2 {
+    margin-top: 8px;
+}
+
+.mt-20 {
+    margin-top: 80px;
+}
+
+.p-2 {
+    padding: 8px;
+}
+
+.px-4 {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+.py-3 {
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.w-full {
+    width: 100%;
+}
+
+.max-w-lg {
+    max-width: 512px;
+}
+
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.hover\:bg-slate-700:hover {
+    background-color: #334155;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 12px;
 }
