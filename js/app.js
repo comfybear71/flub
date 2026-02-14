@@ -48,7 +48,7 @@ const CONFIG = {
 const State = {
     portfolioData: { assets: [] },
     selectedAsset: null,
-    cashAsset: 'USDC', // Changed to USDC only
+    cashAsset: 'USDC',
     orderType: 'instant',
     amountSliderValue: 0,
     triggerOffset: 0,
@@ -63,7 +63,7 @@ const State = {
         deviation: 0,
         allocation: 0
     },
-    selectedTriggerCash: 'USDC', // Changed to USDC only
+    selectedTriggerCash: 'USDC',
     selectedLimitType: null,
     triggerAmountPercent: 0,
     liveRates: {},
@@ -354,6 +354,20 @@ const UI = {
         const usdcBalance = usdcAsset ? usdcAsset.aud_value : 0;
         const audBalance = audAsset ? audAsset.aud_value : 0;
         
+        // Update header balances
+        const headerUsdc = document.getElementById('headerUsdcBalance');
+        const headerAud = document.getElementById('headerAudBalance');
+        if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
+        if (headerAud) headerAud.textContent = Assets.formatCurrency(audBalance);
+        
+        // Update instant trading balance display
+        const instantUsdcBalance = document.getElementById('instantUsdcBalance');
+        if (instantUsdcBalance) instantUsdcBalance.textContent = Assets.formatCurrency(usdcBalance);
+        
+        // Update trigger trading balance display
+        const triggerUsdcBalance = document.getElementById('triggerUsdcBalance');
+        if (triggerUsdcBalance) triggerUsdcBalance.textContent = Assets.formatCurrency(usdcBalance);
+        
         // Crypto assets only (exclude cash)
         const cryptoAssets = State.portfolioData.assets.filter(a => 
             a.code !== 'AUD' && a.code !== 'USDC' && a.aud_value > 10
@@ -391,27 +405,6 @@ const UI = {
             }
         });
         
-        // Update header with cash balances on left, Holdings centered
-        const headerEl = document.getElementById('portfolioHeader');
-        if (headerEl) {
-            headerEl.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
-                        <div style="font-size: 12px; color: #22c55e; font-weight: 600;">
-                            USDC: ${Assets.formatCurrency(usdcBalance)}
-                        </div>
-                        <div style="font-size: 12px; color: #f59e0b; font-weight: 600;">
-                            AUD: ${Assets.formatCurrency(audBalance)}
-                        </div>
-                    </div>
-                    <div style="font-size: 18px; font-weight: bold; color: white; position: absolute; left: 50%; transform: translateX(-50%);">
-                        Holdings
-                    </div>
-                    <div style="width: 80px;"></div>
-                </div>
-            `;
-        }
-        
         // Update total value in center
         const totalEl = document.getElementById('total-value');
         const countEl = document.getElementById('asset-count');
@@ -441,7 +434,7 @@ const UI = {
             <div class="card" onclick="UI.openTrade('${asset.code}')">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg" 
+                        <div class="w-10 h-10 rounded-full flex items-center justify-content-center font-bold text-lg" 
                              style="background: ${style.color}20; color: ${style.color};">
                             ${style.icon}
                         </div>
@@ -642,6 +635,15 @@ const UI = {
         UI.updateAmountDisplay();
     },
 
+    setCash(currency) {
+        State.cashAsset = currency;
+        
+        const optUSDC = document.getElementById('optUSDC');
+        if (optUSDC) optUSDC.classList.add('active');
+        
+        UI.updateAmountDisplay();
+    },
+
     updateAmountSlider(value) {
         State.amountSliderValue = parseInt(value);
         
@@ -716,9 +718,6 @@ const Trading = {
             const balanceEl = usdcBtn.querySelector('.balance');
             if (balanceEl) balanceEl.textContent = Assets.formatCurrency(usdcBalance);
         }
-        
-        const amountSliderLabel = document.getElementById('amountSliderLabel');
-        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (USDC)`;
     },
 
     setTriggerCash(currency) {
@@ -772,6 +771,30 @@ const Trading = {
         this.setTriggerConstraints(type);
         
         Logger.log(`Selected ${type} trigger`, 'info');
+    },
+
+    setTriggerConstraints(side) {
+        const slider = document.getElementById('triggerSlider');
+        const labels = document.getElementById('triggerLabels');
+        
+        if (!slider) return;
+        
+        // CRITICAL FIX: 
+        // BUY orders: trigger must be BELOW market price (negative offset only: -20% to 0%)
+        // SELL orders: trigger must be ABOVE market price (positive offset only: 0% to +20%)
+        if (side === 'buy') {
+            slider.min = -20;
+            slider.max = 0;
+            slider.value = -5; // Default to 5% below market
+            State.triggerOffset = -5;
+        } else {
+            slider.min = 0;
+            slider.max = 20;
+            slider.value = 5; // Default to 5% above market
+            State.triggerOffset = 5;
+        }
+        
+        this.updateTriggerDisplay();
     },
 
     updateTriggerSlider(value) {
@@ -849,7 +872,11 @@ const Trading = {
         
         const triggerSlider = document.getElementById('triggerSlider');
         const triggerAmountSlider = document.getElementById('triggerAmountSlider');
-        if (triggerSlider) triggerSlider.value = 0;
+        if (triggerSlider) {
+            triggerSlider.min = -20;
+            triggerSlider.max = 20;
+            triggerSlider.value = 0;
+        }
         if (triggerAmountSlider) triggerAmountSlider.value = 0;
         
         this.updateTriggerDisplay();
@@ -1007,20 +1034,6 @@ const Trading = {
     closeSuccessModal() {
         const successModal = document.getElementById('successModal');
         if (successModal) successModal.classList.remove('show');
-    },
-
-    setTriggerConstraints(side) {
-        const slider = document.getElementById('triggerSlider');
-        const labels = document.getElementById('triggerLabels');
-        
-        if (!slider) return;
-        
-        slider.min = -20;
-        slider.max = 20;
-        
-        if (labels) labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
-        
-        this.updateTriggerDisplay();
     },
 
     updateAutoTradeConstraints(side) {
