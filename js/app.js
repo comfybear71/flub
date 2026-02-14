@@ -4,6 +4,7 @@
 const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
+    AUD_TO_USD_RATE: 0.65, // Conversion rate 0.63-0.7
     ASSET_STYLES: {
         'BTC': { color: '#f97316', icon: '₿', name: 'Bitcoin' },
         'NEO': { color: '#22c55e', icon: 'N', name: 'NEO' },
@@ -142,8 +143,9 @@ const API = {
                     name: asset.name || asset.code || 'Unknown',
                     balance: parseFloat(asset.balance || 0),
                     aud_value: parseFloat(asset.aud_value || asset.value || 0),
-                    // Calculate USDC price (approximate using AUD value)
+                    usd_value: parseFloat(asset.aud_value || asset.value || 0) * CONFIG.AUD_TO_USD_RATE, // Convert to USD
                     price: parseFloat(asset.aud_value || asset.value || 0) / parseFloat(asset.balance || 1),
+                    usd_price: (parseFloat(asset.aud_value || asset.value || 0) / parseFloat(asset.balance || 1)) * CONFIG.AUD_TO_USD_RATE, // USD price
                     change_24h: parseFloat(asset.change_24h || asset.change || 0),
                     asset_id: asset.asset_id || asset.id
                 }))
@@ -171,7 +173,7 @@ const API = {
 
     getRealtimePrice(assetCode) {
         const asset = State.portfolioData.assets.find(a => a.code === assetCode);
-        return asset ? asset.price : 0;
+        return asset ? asset.usd_price : 0; // Return USD price
     },
 
     async placeOrder(orderData) {
@@ -250,7 +252,7 @@ const Assets = {
         if (sortLabel) sortLabel.textContent = labels[sortType];
         
         if (sortType === 'value') {
-            State.portfolioData.assets.sort((a, b) => (b.aud_value || 0) - (a.aud_value || 0));
+            State.portfolioData.assets.sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0)); // Sort by USD value
         } else if (sortType === 'change') {
             State.portfolioData.assets.sort((a, b) => (b.change_24h || 0) - (a.change_24h || 0));
         } else if (sortType === 'name') {
@@ -262,8 +264,10 @@ const Assets = {
 
     formatCurrency(value) {
         if (!value || isNaN(value)) return '$0.00';
+        // Value should already be in USD now
         if (value >= 1000) return '$' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        return '$' + value.toFixed(2);
+        if (value >= 1) return '$' + value.toFixed(2);
+        return '$' + value.toFixed(4);
     },
 
     formatNumber(num) {
@@ -349,34 +353,34 @@ const UI = {
         
         if (State.portfolioChart) State.portfolioChart.destroy();
         
-        // Get cash balances
+        // Get cash balances in USD
         const usdcAsset = State.portfolioData.assets.find(a => a.code === 'USDC');
         const audAsset = State.portfolioData.assets.find(a => a.code === 'AUD');
-        const usdcBalance = usdcAsset ? usdcAsset.aud_value : 0;
-        const audBalance = audAsset ? audAsset.aud_value : 0;
+        const usdcBalance = usdcAsset ? usdcAsset.usd_value : 0;
+        const audBalance = audAsset ? audAsset.usd_value : 0;
         
-        // Update header balances
-        const headerUsdc = document.getElementById('headerUsdcBalance');
-        const headerAud = document.getElementById('headerAudBalance');
-        if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
-        if (headerAud) headerAud.textContent = Assets.formatCurrency(audBalance);
+        // Update header balances - show USD only
+        const headerUsdcBalance = document.getElementById('headerUsdcBalance');
+        const headerAudBalance = document.getElementById('headerAudBalance');
+        if (headerUsdcBalance) headerUsdcBalance.textContent = Assets.formatCurrency(usdcBalance);
+        if (headerAudBalance) headerAudBalance.textContent = Assets.formatCurrency(audBalance);
         
         // Crypto assets only (exclude cash)
         const cryptoAssets = State.portfolioData.assets.filter(a => 
-            a.code !== 'AUD' && a.code !== 'USDC' && a.aud_value > 10
+            a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
         );
         
         const colors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color || '#666');
-        const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.aud_value || 0), 0);
+        const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
         
-        // Total including cash
+        // Total including cash in USD
         const totalValue = cryptoTotal + usdcBalance + audBalance;
         
         State.portfolioChart = new Chart(ctx.getContext('2d'), {
             type: 'doughnut',
             data: {
                 datasets: [{
-                    data: cryptoAssets.map(a => a.aud_value || 0),
+                    data: cryptoAssets.map(a => a.usd_value || 0),
                     backgroundColor: colors,
                     borderWidth: 0
                 }]
@@ -389,7 +393,7 @@ const UI = {
                         callbacks: {
                             label: function(context) {
                                 const asset = cryptoAssets[context.dataIndex];
-                                return `${asset.code}: ${Assets.formatCurrency(asset.aud_value)}`;
+                                return `${asset.code}: ${Assets.formatCurrency(asset.usd_value)}`;
                             }
                         }
                     }
@@ -423,16 +427,12 @@ const UI = {
             const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
             const changeSign = change >= 0 ? '+' : '';
             
-            // Display price in USDC (using AUD value as proxy for now)
-            const usdcPrice = asset.price;
-            
             html += `
             <div class="card" onclick="UI.openTrade('${asset.code}')">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-content-center font-bold text-lg" 
-                             style="background: ${style.color}20; color: ${style.color};">
-                            ${style.icon}
+                        <div class="coin-icon-wrapper" style="background: ${style.color}20; color: ${style.color};">
+                            <span class="coin-icon-letter">${style.icon}</span>
                         </div>
                         <div>
                             <div class="font-bold text-sm">${asset.code}</div>
@@ -440,8 +440,8 @@ const UI = {
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-bold text-sm">${Assets.formatCurrency(asset.aud_value)}</div>
-                        <div class="text-xs text-slate-400">$${Assets.formatNumber(usdcPrice)} USDC</div>
+                        <div class="font-bold text-sm">${Assets.formatCurrency(asset.usd_value)}</div>
+                        <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
                         <div class="text-xs font-semibold" style="color: ${changeColor};">${changeSign}${change.toFixed(2)}%</div>
                     </div>
                 </div>
@@ -543,14 +543,14 @@ const UI = {
         
         const data = [];
         const change = State.selectedAsset.change_24h || 0;
-        let price = State.selectedAsset.price * (1 - change/100);
+        let price = State.selectedAsset.usd_price * (1 - change/100); // Use USD price
         const volatility = Math.abs(change) / 20 || 0.01;
         
         for (let i = 0; i < 20; i++) {
             price = price * (1 + (Math.random() - 0.5) * volatility);
             data.push(price);
         }
-        data[data.length - 1] = State.selectedAsset.price;
+        data[data.length - 1] = State.selectedAsset.usd_price;
         
         const context = ctx.getContext('2d');
         const gradient = context.createLinearGradient(0, 0, 0, 70);
@@ -643,9 +643,9 @@ const UI = {
     },
 
     updateAmountDisplay() {
-        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
+        const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.usd_value || 0; // USD
         const assetBalance = State.selectedAsset?.balance || 0;
-        const currentPrice = State.selectedAsset?.price || 0;
+        const currentPrice = State.selectedAsset?.usd_price || 0; // USD price
         
         let displayAmount, conversionText;
         
@@ -694,11 +694,38 @@ const UI = {
 const Trading = {
     getTriggerCashBalance(currency) {
         const asset = State.portfolioData.assets.find(a => a.code === currency);
-        return asset ? (asset.aud_value || 0) : 0;
+        return asset ? (asset.usd_value || 0) : 0; // Return USD value
     },
 
     updateTriggerButtonBalances() {
-        // No big buttons to update anymore
+        const usdcBalance = this.getTriggerCashBalance('USDC');
+        
+        const usdcBtn = document.getElementById('triggerOptUSDC');
+        if (usdcBtn) {
+            const balanceEl = usdcBtn.querySelector('.balance');
+            if (balanceEl) balanceEl.textContent = Assets.formatCurrency(usdcBalance);
+        }
+        
+        const amountSliderLabel = document.getElementById('amountSliderLabel');
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (USDC)`;
+    },
+
+    setTriggerCash(currency) {
+        State.selectedTriggerCash = currency;
+        
+        const triggerOptUSDC = document.getElementById('triggerOptUSDC');
+        if (triggerOptUSDC) triggerOptUSDC.classList.add('active');
+        
+        const balance = this.getTriggerCashBalance('USDC');
+        const amountSliderLabel = document.getElementById('amountSliderLabel');
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (USDC)`;
+        
+        const balanceText = document.querySelector(`#triggerOptUSDC .balance`);
+        if (balanceText) balanceText.textContent = Assets.formatCurrency(balance);
+        
+        this.updateTriggerAmountSlider(0);
+        
+        Logger.log(`Selected USDC for trigger order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
     },
 
     selectLimitType(type) {
@@ -736,30 +763,6 @@ const Trading = {
         Logger.log(`Selected ${type} trigger`, 'info');
     },
 
-    setTriggerConstraints(side) {
-        const slider = document.getElementById('triggerSlider');
-        const labels = document.getElementById('triggerLabels');
-        
-        if (!slider) return;
-        
-        // CRITICAL FIX: 
-        // BUY orders: trigger must be BELOW market price (negative offset only: -20% to 0%)
-        // SELL orders: trigger must be ABOVE market price (positive offset only: 0% to +20%)
-        if (side === 'buy') {
-            slider.min = -20;
-            slider.max = 0;
-            slider.value = -5; // Default to 5% below market
-            State.triggerOffset = -5;
-        } else {
-            slider.min = 0;
-            slider.max = 20;
-            slider.value = 5; // Default to 5% above market
-            State.triggerOffset = 5;
-        }
-        
-        this.updateTriggerDisplay();
-    },
-
     updateTriggerSlider(value) {
         State.triggerOffset = parseInt(value);
         this.updateTriggerDisplay();
@@ -782,7 +785,7 @@ const Trading = {
     updateTriggerDisplay() {
         if (!State.selectedAsset) return;
         
-        const currentPrice = State.selectedAsset.price || 0;
+        const currentPrice = State.selectedAsset.usd_price || 0; // USD price
         const multiplier = 1 + (State.triggerOffset / 100);
         const triggerPrice = currentPrice * multiplier;
         
@@ -835,11 +838,7 @@ const Trading = {
         
         const triggerSlider = document.getElementById('triggerSlider');
         const triggerAmountSlider = document.getElementById('triggerAmountSlider');
-        if (triggerSlider) {
-            triggerSlider.min = -20;
-            triggerSlider.max = 20;
-            triggerSlider.value = 0;
-        }
+        if (triggerSlider) triggerSlider.value = 0;
         if (triggerAmountSlider) triggerAmountSlider.value = 0;
         
         this.updateTriggerDisplay();
@@ -980,6 +979,7 @@ const Trading = {
             if (successModal) successModal.classList.add('show');
             
             await API.refreshData();
+            this.updateTriggerButtonBalances();
             
         } catch (error) {
             Logger.log(`❌ Order failed: ${error.message}`, 'error');
@@ -996,6 +996,20 @@ const Trading = {
     closeSuccessModal() {
         const successModal = document.getElementById('successModal');
         if (successModal) successModal.classList.remove('show');
+    },
+
+    setTriggerConstraints(side) {
+        const slider = document.getElementById('triggerSlider');
+        const labels = document.getElementById('triggerLabels');
+        
+        if (!slider) return;
+        
+        slider.min = -20;
+        slider.max = 20;
+        
+        if (labels) labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
+        
+        this.updateTriggerDisplay();
     },
 
     updateAutoTradeConstraints(side) {
@@ -1034,7 +1048,7 @@ const Trading = {
     updateAutoTradeDisplay() {
         if (!State.selectedAsset) return;
         
-        const currentPrice = State.selectedAsset.price || 0;
+        const currentPrice = State.selectedAsset.usd_price || 0;
         const multiplier = 1 + (State.autoTradeConfig.deviation / 100);
         const triggerPrice = currentPrice * multiplier;
         
@@ -1069,7 +1083,7 @@ const Trading = {
             }
         }
         
-        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
+        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value || 0;
         const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
         
         const autoAllocFill = document.getElementById('autoAllocFill');
@@ -1127,9 +1141,9 @@ const Trading = {
         
         UI.updateAmountDisplay();
         
-        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
+        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value || 0;
         const assetBalance = State.selectedAsset.balance || 0;
-        const currentPrice = State.selectedAsset.price;
+        const currentPrice = State.selectedAsset.usd_price;
         
         Logger.log(`Preparing ${side.toUpperCase()} order - Type: ${State.orderType}, Cash: USDC`, 'info');
         
@@ -1245,7 +1259,7 @@ const Trading = {
         try {
             const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
             
-            const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
+            const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value || 0;
             const assetBalance = State.selectedAsset.balance || 0;
             
             let orderData;
@@ -1360,6 +1374,10 @@ const Trading = {
             }
             
             await API.refreshData();
+            
+            if (State.orderType === 'trigger') {
+                this.updateTriggerButtonBalances();
+            }
             
         } catch (error) {
             Logger.log(`❌ Trade failed: ${error.message}`, 'error');
