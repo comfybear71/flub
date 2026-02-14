@@ -249,17 +249,17 @@ body {
     display: none;
 }
 
-/* Updated cash-toggle for vertical layout with balance */
+/* Cash Toggle - Horizontal layout with balance below */
 .cash-toggle {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
 .cash-option {
     flex: 1;
-    height: 48px;
-    border-radius: 8px;
+    height: 56px;
+    border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 23, 42, 0.3);
     color: #64748b;
@@ -282,42 +282,43 @@ body {
 }
 
 .cash-option .icon {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: bold;
+    margin-bottom: 2px;
 }
 
 .cash-option .currency-name {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
 }
 
 .cash-option .balance {
-    font-size: 10px;
+    font-size: 11px;
     opacity: 0.9;
     font-weight: 500;
 }
 
-/* Limit Order Buttons - Buy Limit / Sell Limit */
+/* Limit Buttons - Buy Limit / Sell Limit */
 .limit-toggle {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
 .limit-btn {
     flex: 1;
-    height: 36px;
-    border-radius: 8px;
+    height: 56px;
+    border-radius: 10px;
     border: none;
     background: rgba(15, 23, 42, 0.4);
     color: #64748b;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
