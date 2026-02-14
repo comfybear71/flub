@@ -12,7 +12,7 @@
             <div class="api-status api-connecting" id="apiStatus">
                 <span>●</span> Connecting...
             </div>
-            <button class="wallet-btn" id="walletBtn" onclick="Trading.refreshWallet()">
+            <button class="wallet-btn" id="walletBtn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
                     <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
@@ -59,21 +59,6 @@
                                     <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
                                 </svg>
                             </button>
-                            
-                            <div class="header-actions">
-                                <button class="action-btn-mini sell" id="sellBtn" onclick="Trading.prepareTrade('sell')">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                        <path d="M5 12h14"/>
-                                    </svg>
-                                    Sell
-                                </button>
-                                <button class="action-btn-mini buy" id="buyBtn" onclick="Trading.prepareTrade('buy')">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                        <path d="M12 5v14M5 12h14"/>
-                                    </svg>
-                                    Buy
-                                </button>
-                            </div>
                         </div>
                     </div>
                     
@@ -105,16 +90,18 @@
                         </button>
                     </div>
                     
-                    <!-- AMOUNT SECTION - shown for Instant and Trigger -->
+                    <!-- AMOUNT SECTION - For Instant orders only -->
                     <div class="amount-compact" id="amountSection">
                         <div class="cash-toggle">
                             <button class="cash-option active" id="optAUD" onclick="UI.setCash('AUD')">
                                 <div class="icon" style="background: #f59e0b20; color: #f59e0b;">A$</div>
                                 <span>AUD</span>
+                                <span class="balance">$12,450.00</span>
                             </button>
                             <button class="cash-option" id="optUSDC" onclick="UI.setCash('USDC')">
                                 <div class="icon" style="background: #22c55e20; color: #22c55e;">$</div>
                                 <span>USDC</span>
+                                <span class="balance">$8,230.50</span>
                             </button>
                         </div>
 
@@ -135,59 +122,85 @@
                         </div>
                     </div>
                     
-                    <!-- TRIGGER SECTION - Enhanced with wallet balances and color-coded slider -->
+                    <!-- TRIGGER SECTION - Redesigned -->
                     <div class="trigger-compact" id="triggerSection">
-                        <div class="trigger-header">
-                            <span class="trigger-title" id="triggerTitle">Trigger Price</span>
-                            <span class="trigger-reset" onclick="Trading.resetTrigger()">Reset</span>
-                        </div>
                         
-                        <!-- Wallet Balances Display -->
-                        <div class="trigger-balances">
-                            <div class="balance-item">
-                                <div class="balance-label">AUD Balance</div>
-                                <div class="balance-amount aud" id="audBalance">$0.00</div>
-                            </div>
-                            <div class="balance-item">
-                                <div class="balance-label">USDC Balance</div>
-                                <div class="balance-amount usdc" id="usdcBalance">$0.00</div>
-                            </div>
-                        </div>
-                        
-                        <!-- Cash Context Toggle - Shows Buy/Sell mode -->
-                        <div class="trigger-cash-context" id="triggerCashContext">
-                            <button class="cash-context-btn active buy-context" id="triggerBuyContext" onclick="Trading.setTriggerContext('buy')">
-                                <div class="icon" style="background: #22c55e20; color: #22c55e;">B</div>
-                                <span>Buy with Cash</span>
+                        <!-- Step 1: Buy Limit / Sell Limit Toggle -->
+                        <div class="trigger-type-toggle">
+                            <button class="trigger-type-btn active buy-limit" id="btnBuyLimit" onclick="Trading.setTriggerType('buy')">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 5v14M5 12h14"/>
+                                </svg>
+                                Buy Limit
                             </button>
-                            <button class="cash-context-btn sell-context" id="triggerSellContext" onclick="Trading.setTriggerContext('sell')">
-                                <div class="icon" style="background: #ef444420; color: #ef4444;">S</div>
-                                <span>Sell for Cash</span>
+                            <button class="trigger-type-btn sell-limit" id="btnSellLimit" onclick="Trading.setTriggerType('sell')">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M5 12h14"/>
+                                </svg>
+                                Sell Limit
                             </button>
                         </div>
                         
-                        <div class="trigger-price-row">
-                            <div class="trigger-price" id="triggerPrice">$0.00</div>
-                            <div class="trigger-offset neutral" id="triggerOffset">0%</div>
+                        <!-- Step 2: Currency Selection with Balances -->
+                        <div class="trigger-currency-toggle" id="triggerCurrencyToggle">
+                            <!-- For Buy Limit: Show AUD/USDC with balances -->
+                            <button class="trigger-currency-btn active aud" id="btnTriggerAUD" onclick="Trading.setTriggerCurrency('AUD')">
+                                <span class="currency-code">AUD</span>
+                                <span class="currency-balance">$12,450.00</span>
+                            </button>
+                            <button class="trigger-currency-btn usdc" id="btnTriggerUSDC" onclick="Trading.setTriggerCurrency('USDC')">
+                                <span class="currency-code">USDC</span>
+                                <span class="currency-balance">$8,230.50</span>
+                            </button>
                         </div>
                         
-                        <div class="trigger-guide" id="triggerGuide">
-                            Drag left for lower trigger (red), right for higher trigger (green)
+                        <!-- Step 3: Amount to Buy/Sell -->
+                        <div class="trigger-amount-section">
+                            <div class="trigger-amount-display">
+                                <div class="trigger-amount-value" id="triggerAmountValue">$0.00</div>
+                                <div class="trigger-amount-conversion" id="triggerAmountConversion">≈ 0 BTC</div>
+                            </div>
+                            
+                            <div class="slider-box">
+                                <div class="slider-track"></div>
+                                <div class="slider-fill" id="triggerAmountFill" style="width: 0%;"></div>
+                                <input type="range" id="triggerAmountSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateTriggerAmount(this.value)">
+                            </div>
+                            <div class="slider-labels">
+                                <span>0%</span>
+                                <span id="triggerAmountPercent">0%</span>
+                                <span>100%</span>
+                            </div>
                         </div>
                         
-                        <div id="triggerError" class="error-message" style="display: none;"></div>
+                        <!-- Step 4: Trigger Price with Color-Coded Slider -->
+                        <div class="trigger-price-section">
+                            <div class="trigger-price-header">
+                                <span class="trigger-price-label">Trigger Price</span>
+                                <span class="trigger-reset" onclick="Trading.resetTriggerPrice()">Reset</span>
+                            </div>
+                            
+                            <div class="trigger-price-display">
+                                <div class="trigger-price-value" id="triggerPriceValue">$0.00</div>
+                                <div class="trigger-price-offset neutral" id="triggerPriceOffset">0%</div>
+                            </div>
+                            
+                            <div class="trigger-guide-text" id="triggerGuideText">
+                                Drag left for lower price (red), right for higher price (green)
+                            </div>
+                            
+                            <div class="trigger-slider-container">
+                                <div class="trigger-slider-track"></div>
+                                <div class="trigger-slider-fill" id="triggerPriceFill"></div>
+                                <input type="range" class="trigger-slider" id="triggerPriceSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateTriggerPrice(this.value)">
+                            </div>
+                            <div class="trigger-slider-labels">
+                                <span class="below">-20% Below</span>
+                                <span class="current">Current</span>
+                                <span class="above">+20% Above</span>
+                            </div>
+                        </div>
                         
-                        <!-- Color-coded Trigger Slider -->
-                        <div class="trigger-slider-box">
-                            <div class="trigger-slider-track"></div>
-                            <div class="trigger-slider-fill" id="triggerFill" style="width: 0; left: 50%;"></div>
-                            <input type="range" class="trigger-slider" id="triggerSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateTriggerSlider(this.value)">
-                        </div>
-                        <div class="trigger-labels">
-                            <span class="left">-20%</span>
-                            <span class="center">Current</span>
-                            <span class="right">+20%</span>
-                        </div>
                     </div>
                     
                     <!-- AUTO SECTION - unchanged -->
