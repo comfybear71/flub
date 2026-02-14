@@ -3,7 +3,7 @@
 // ==========================================
 const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
-    TRADE_PIN: '', // Set via PIN modal
+    TRADE_PIN: '',
     ASSET_STYLES: {
         'BTC': { color: '#f97316', icon: '₿', name: 'Bitcoin' },
         'NEO': { color: '#22c55e', icon: 'N', name: 'NEO' },
@@ -62,9 +62,11 @@ const State = {
     autoTradeConfig: {
         deviation: 0,
         allocation: 0
-    }
+    },
+    selectedTriggerCash: 'AUD',
+    selectedLimitType: null,
+    triggerAmountPercent: 0
 };
-
 
 // ==========================================
 // API - All Network Requests
@@ -117,7 +119,6 @@ const API = {
             const response = await fetch(CONFIG.API_URL);
             const data = await response.json();
             
-            // Transform to your format - exclude USD
             State.portfolioData.assets = data.assets
                 .filter(asset => asset.code !== 'USD')
                 .map(asset => ({
@@ -131,7 +132,6 @@ const API = {
                 }))
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
             
-            // Apply current sort
             Assets.sort(State.currentSort);
             
             UI.renderPortfolio();
@@ -161,8 +161,6 @@ const API = {
         return res;
     }
 };
-
-
 
 // ==========================================
 // LOGGER - Activity Logging
@@ -197,7 +195,6 @@ const Assets = {
     sort(sortType) {
         State.currentSort = sortType;
         
-        // Update UI
         document.querySelectorAll('[id^="check-"]').forEach(el => el.classList.add('hidden'));
         document.getElementById(`check-${sortType}`).classList.remove('hidden');
         
@@ -209,7 +206,6 @@ const Assets = {
         };
         document.getElementById('currentSortLabel').textContent = labels[sortType];
         
-        // Sort data
         if (sortType === 'value') {
             State.portfolioData.assets.sort((a, b) => (b.aud_value || 0) - (a.aud_value || 0));
         } else if (sortType === 'change') {
@@ -254,8 +250,6 @@ const Assets = {
     }
 };
 
-
-
 // ==========================================
 // UI - User Interface & DOM Manipulation
 // ==========================================
@@ -281,7 +275,6 @@ const UI = {
         pinBtn.disabled = true;
         pinBtn.textContent = 'Verifying...';
         
-        // Simple client-side check (real check happens server-side)
         if (pinInput.length >= 4) {
             CONFIG.TRADE_PIN = pinInput;
             localStorage.setItem('tradePin', pinInput);
@@ -322,7 +315,6 @@ const UI = {
         
         if (State.portfolioChart) State.portfolioChart.destroy();
         
-        // Exclude AUD and USDC from chart
         const cryptoAssets = State.portfolioData.assets.filter(a => 
             a.code !== 'AUD' && a.code !== 'USDC' && a.aud_value > 10
         );
@@ -354,7 +346,6 @@ const UI = {
         const container = document.getElementById('holdings-list');
         if (!container) return;
         
-        // Exclude AUD and USDC from holdings list
         const holdings = State.portfolioData.assets.filter(a => a.code !== 'AUD' && a.code !== 'USDC');
         
         if (holdings.length === 0) {
@@ -411,7 +402,6 @@ const UI = {
         }
         if (nameEl) nameEl.textContent = code;
         
-        // Reset sliders
         State.amountSliderValue = 0;
         State.triggerOffset = 0;
         State.isMiniChartVisible = false;
@@ -420,7 +410,6 @@ const UI = {
         document.getElementById('miniChartContainer').classList.remove('show');
         document.getElementById('chartToggleBtn').classList.remove('active');
         
-        // Reset auto trade
         State.autoTradeConfig = { deviation: 0, allocation: 0 };
         document.getElementById('autoDevSlider').value = 0;
         document.getElementById('autoAllocSlider').value = 0;
@@ -429,11 +418,9 @@ const UI = {
         Trading.updateTriggerDisplay();
         Trading.updateAutoTradeDisplay();
         
-        // Show trading view
         document.getElementById('chartSection').classList.add('trading-open');
         document.getElementById('chartSlider').classList.add('slide-left');
         
-        // Highlight selected card
         document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
         event.currentTarget.classList.add('selected');
     },
@@ -511,167 +498,165 @@ const UI = {
                 }
             }
         });
+    },
+
+    setOrderType(type) {
+        State.orderType = type;
+        document.getElementById('btnInstant').classList.toggle('active', type === 'instant');
+        document.getElementById('btnTrigger').classList.toggle('active', type === 'trigger');
+        document.getElementById('btnAuto').classList.toggle('active', type === 'auto');
+        
+        const amountSection = document.getElementById('amountSection');
+        const triggerSection = document.getElementById('triggerSection');
+        const autoSection = document.getElementById('autoSection');
+        
+        if (type === 'instant') {
+            amountSection.classList.remove('hidden');
+            triggerSection.classList.remove('show');
+            autoSection.classList.remove('show');
+        } else if (type === 'trigger') {
+            amountSection.classList.add('hidden');
+            triggerSection.classList.add('show');
+            autoSection.classList.remove('show');
+            Trading.resetTrigger();
+        } else if (type === 'auto') {
+            amountSection.classList.add('hidden');
+            triggerSection.classList.remove('show');
+            autoSection.classList.add('show');
+        }
+        
+        State.triggerOffset = 0;
+        State.autoTradeConfig.deviation = 0;
+        document.getElementById('triggerSlider').value = 0;
+        document.getElementById('autoDevSlider').value = 0;
+        
+        document.getElementById('triggerError').style.display = 'none';
+        document.getElementById('autoError').style.display = 'none';
+        
+        Trading.updateTriggerDisplay();
+        Trading.updateAutoTradeDisplay();
+        UI.updateAmountDisplay();
+    },
+
+    setCash(cash) {
+        State.cashAsset = cash;
+        document.getElementById('optAUD').classList.toggle('active', cash === 'AUD');
+        document.getElementById('optUSDC').classList.toggle('active', cash === 'USDC');
+        UI.updateAmountDisplay();
+        Trading.updateAutoTradeDisplay();
+        Trading.updateTriggerDisplay();
+    },
+
+    updateAmountSlider(value) {
+        State.amountSliderValue = parseInt(value);
+        document.getElementById('amountFill').style.width = State.amountSliderValue + '%';
+        document.getElementById('amountPercent').textContent = State.amountSliderValue + '%';
+        UI.updateAmountDisplay();
+    },
+
+    updateAmountDisplay() {
+        const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
+        const assetBalance = State.selectedAsset?.balance || 0;
+        const currentPrice = State.selectedAsset?.price || 0;
+        
+        let displayAmount, conversionText;
+        
+        if (State.pendingTradeSide === 'sell') {
+            const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
+            const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
+            const cashValue = sellQuantity * cashPrice;
+            displayAmount = cashValue;
+            conversionText = `${sellQuantity.toFixed(8)} ${State.selectedAsset?.code || ''}`;
+        } else {
+            const cashAmount = (State.amountSliderValue / 100) * cashBalance;
+            displayAmount = cashAmount;
+            const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
+            const receiveAmount = cashPrice > 0 ? cashAmount / cashPrice : 0;
+            conversionText = `≈ ${receiveAmount.toFixed(8)} ${State.selectedAsset?.code || ''}`;
+        }
+        
+        document.getElementById('amountValue').textContent = Assets.formatCurrency(displayAmount);
+        document.getElementById('conversionText').textContent = conversionText;
+    },
+
+    toggleSort() {
+        document.getElementById('sortModal').classList.add('show');
+        document.getElementById('modalOverlay').classList.add('show');
+    },
+
+    closeSort() {
+        document.getElementById('sortModal').classList.remove('show');
+        document.getElementById('modalOverlay').classList.remove('show');
+    },
+
+    selectSort(type) {
+        Assets.sort(type);
+        UI.renderHoldings();
+        UI.closeSort();
     }
-};
-
-
-
-// ==========================================
-// UI Module (continued)
-// ==========================================
-
-UI.setOrderType = function(type) {
-    State.orderType = type;
-    document.getElementById('btnInstant').classList.toggle('active', type === 'instant');
-    document.getElementById('btnTrigger').classList.toggle('active', type === 'trigger');
-    document.getElementById('btnAuto').classList.toggle('active', type === 'auto');
-    
-    // Show/hide appropriate sections
-    document.getElementById('triggerSection').classList.toggle('show', type === 'trigger');
-    document.getElementById('autoSection').classList.toggle('show', type === 'auto');
-    
-    // Hide amount card when auto trade is selected, show for instant and trigger
-    const amountSection = document.getElementById('amountSection');
-    if (type === 'auto') {
-        amountSection.classList.add('hidden');
-    } else {
-        amountSection.classList.remove('hidden');
-    }
-    
-    // Reset trigger and auto offsets when switching order types
-    State.triggerOffset = 0;
-    State.autoTradeConfig.deviation = 0;
-    document.getElementById('triggerSlider').value = 0;
-    document.getElementById('autoDevSlider').value = 0;
-    
-    // Reset error messages
-    document.getElementById('triggerError').style.display = 'none';
-    document.getElementById('autoError').style.display = 'none';
-    
-    Trading.updateTriggerDisplay();
-    Trading.updateAutoTradeDisplay();
-    UI.updateAmountDisplay();
-};
-
-UI.setCash = function(cash) {
-    State.cashAsset = cash;
-    document.getElementById('optAUD').classList.toggle('active', cash === 'AUD');
-    document.getElementById('optUSDC').classList.toggle('active', cash === 'USDC');
-    UI.updateAmountDisplay();
-    Trading.updateAutoTradeDisplay();
-    Trading.updateTriggerDisplay();
-};
-
-UI.updateAmountSlider = function(value) {
-    State.amountSliderValue = parseInt(value);
-    document.getElementById('amountFill').style.width = State.amountSliderValue + '%';
-    document.getElementById('amountPercent').textContent = State.amountSliderValue + '%';
-    UI.updateAmountDisplay();
-};
-
-UI.updateAmountDisplay = function() {
-    const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
-    const assetBalance = State.selectedAsset?.balance || 0;
-    const currentPrice = State.selectedAsset?.price || 0;
-    
-    let displayAmount, conversionText;
-    
-    if (State.pendingTradeSide === 'sell') {
-        // SELL: Slider is % of crypto holdings
-        const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
-        // Convert to cash currency value
-        const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
-        const cashValue = sellQuantity * cashPrice;
-        displayAmount = cashValue;
-        conversionText = `${sellQuantity.toFixed(8)} ${State.selectedAsset?.code || ''}`;
-    } else {
-        // BUY: Slider is % of cash balance
-        const cashAmount = (State.amountSliderValue / 100) * cashBalance;
-        displayAmount = cashAmount;
-        const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
-        const receiveAmount = cashPrice > 0 ? cashAmount / cashPrice : 0;
-        conversionText = `≈ ${receiveAmount.toFixed(8)} ${State.selectedAsset?.code || ''}`;
-    }
-    
-    document.getElementById('amountValue').textContent = Assets.formatCurrency(displayAmount);
-    document.getElementById('conversionText').textContent = conversionText;
-};
-
-UI.toggleSort = function() {
-    document.getElementById('sortModal').classList.add('show');
-    document.getElementById('modalOverlay').classList.add('show');
-};
-
-UI.closeSort = function() {
-    document.getElementById('sortModal').classList.remove('show');
-    document.getElementById('modalOverlay').classList.remove('show');
-};
-
-UI.selectSort = function(type) {
-    Assets.sort(type);
-    UI.renderHoldings();
-    UI.closeSort();
 };
 
 // ==========================================
 // TRADING - Trading Logic & Order Management
 // ==========================================
 const Trading = {
-    updateTriggerConstraints(side) {
-        const slider = document.getElementById('triggerSlider');
-        const labels = document.getElementById('triggerLabels');
-        const title = document.getElementById('triggerTitle');
-        const guide = document.getElementById('triggerGuide');
+    setTriggerCash(currency) {
+        State.selectedTriggerCash = currency;
+        document.getElementById('triggerOptAUD').classList.toggle('active', currency === 'AUD');
+        document.getElementById('triggerOptUSDC').classList.toggle('active', currency === 'USDC');
+        document.getElementById('amountSliderLabel').textContent = `Amount (${currency})`;
+        this.updateTriggerAmountSlider(0);
+        Logger.log(`Selected ${currency} for limit order`, 'info');
+    },
+
+    selectLimitType(type) {
+        State.selectedLimitType = type;
+        State.pendingTradeSide = type;
         
-        if (side === 'buy') {
-            // For BUY: Trigger must be AT OR BELOW current price (0% to -20%)
-            slider.min = -20;
-            slider.max = 0;
-            // Only clamp if value is positive
-            if (parseInt(slider.value) > 0) {
-                slider.value = 0;
-                State.triggerOffset = 0;
-            }
-            labels.innerHTML = '<span>-20%</span><span>Current</span><span>0%</span>';
-            title.innerHTML = 'Buy Trigger <span class="guide-badge buy">≤ Current Price</span>';
-            guide.textContent = 'Set trigger at or below current price to buy the dip';
+        document.getElementById('limitButtons').classList.add('hidden');
+        document.getElementById('confirmLimitBtn').classList.remove('hidden');
+        document.getElementById('confirmBtnText').textContent = type === 'buy' ? 'Confirm Buy Limit' : 'Confirm Sell Limit';
+        
+        document.getElementById('triggerSliderSection').classList.remove('hidden');
+        document.getElementById('amountSliderSection').classList.remove('hidden');
+        
+        const confirmBtn = document.getElementById('confirmLimitBtn');
+        if (type === 'buy') {
+            confirmBtn.style.background = '#22c55e';
+            confirmBtn.onmouseenter = () => confirmBtn.style.background = '#16a34a';
+            confirmBtn.onmouseleave = () => confirmBtn.style.background = '#22c55e';
+            this.setTriggerConstraints('buy');
         } else {
-            // For SELL: Trigger must be AT OR ABOVE current price (0% to +20%)
-            slider.min = 0;
-            slider.max = 20;
-            // Only clamp if value is negative
-            if (parseInt(slider.value) < 0) {
-                slider.value = 0;
-                State.triggerOffset = 0;
-            }
-            labels.innerHTML = '<span>0%</span><span>Current</span><span>+20%</span>';
-            title.innerHTML = 'Sell Trigger <span class="guide-badge sell">≥ Current Price</span>';
-            guide.textContent = 'Set trigger at or above current price to take profit';
+            confirmBtn.style.background = '#ef4444';
+            confirmBtn.onmouseenter = () => confirmBtn.style.background = '#dc2626';
+            confirmBtn.onmouseleave = () => confirmBtn.style.background = '#ef4444';
+            this.setTriggerConstraints('sell');
         }
         
-        this.updateTriggerDisplay();
+        Logger.log(`Selected ${type} limit`, 'info');
     },
 
     updateTriggerSlider(value) {
         State.triggerOffset = parseInt(value);
         this.updateTriggerDisplay();
-        this.validateTrigger();
+    },
+
+    updateTriggerAmountSlider(value) {
+        State.triggerAmountPercent = parseInt(value);
+        const balance = State.selectedTriggerCash === 'AUD' ? 379.00 : 478.00;
+        const amount = (balance * State.triggerAmountPercent / 100).toFixed(2);
+        document.getElementById('triggerAmountDisplay').textContent = `$${amount}`;
+        document.getElementById('triggerAmountPercent').textContent = State.triggerAmountPercent + '%';
+        document.getElementById('triggerAmountFill').style.width = State.triggerAmountPercent + '%';
     },
 
     updateTriggerDisplay() {
         if (!State.selectedAsset) return;
         
         const currentPrice = State.selectedAsset.price || 0;
-        const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
         const multiplier = 1 + (State.triggerOffset / 100);
-        const triggerPrice = cashPrice * multiplier;
-        
-        // Calculate fill width based on slider range
-        const slider = document.getElementById('triggerSlider');
-        const min = parseInt(slider.min);
-        const max = parseInt(slider.max);
-        const range = max - min;
-        const percent = ((State.triggerOffset - min) / range) * 100;
+        const triggerPrice = currentPrice * multiplier;
+        const percent = ((State.triggerOffset + 20) / 40) * 100;
         
         document.getElementById('triggerFill').style.width = percent + '%';
         document.getElementById('triggerPrice').textContent = Assets.formatCurrency(triggerPrice);
@@ -691,34 +676,109 @@ const Trading = {
         }
     },
 
-    validateTrigger() {
-        const errorEl = document.getElementById('triggerError');
-        const side = State.pendingTradeSide;
+    resetTrigger() {
+        State.selectedLimitType = null;
+        State.triggerOffset = 0;
+        State.triggerAmountPercent = 0;
+        State.pendingTradeSide = null;
         
-        if (!side || State.orderType !== 'trigger') {
-            errorEl.style.display = 'none';
-            return true;
-        }
+        document.getElementById('limitButtons').classList.remove('hidden');
+        document.getElementById('confirmLimitBtn').classList.add('hidden');
+        document.getElementById('triggerSliderSection').classList.add('hidden');
+        document.getElementById('amountSliderSection').classList.add('hidden');
         
-        if (side === 'buy' && State.triggerOffset > 0) {
-            errorEl.textContent = '⚠️ Buy trigger must be at or below current price (0% or negative)';
-            errorEl.style.display = 'block';
-            return false;
-        } else if (side === 'sell' && State.triggerOffset < 0) {
-            errorEl.textContent = '⚠️ Sell trigger must be at or above current price (0% or positive)';
-            errorEl.style.display = 'block';
-            return false;
-        }
+        document.getElementById('triggerSlider').value = 0;
+        document.getElementById('triggerAmountSlider').value = 0;
+        this.updateTriggerDisplay();
+        this.updateTriggerAmountSlider(0);
         
-        errorEl.style.display = 'none';
-        return true;
+        const confirmBtn = document.getElementById('confirmLimitBtn');
+        confirmBtn.style.background = '#3b82f6';
+        confirmBtn.onmouseenter = null;
+        confirmBtn.onmouseleave = null;
+        
+        Logger.log('Reset trigger settings', 'info');
     },
 
-    resetTrigger() {
-        State.triggerOffset = 0;
-        document.getElementById('triggerSlider').value = 0;
+    showConfirmModal() {
+        const btn = document.getElementById('confirmLimitBtn');
+        const spinner = document.getElementById('confirmSpinner');
+        const text = document.getElementById('confirmBtnText');
+        
+        btn.disabled = true;
+        spinner.classList.remove('hidden');
+        text.textContent = 'Processing...';
+        
+        setTimeout(() => {
+            const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
+            const multiplier = 1 + (State.triggerOffset / 100);
+            const triggerPrice = currentPrice * multiplier;
+            const balance = State.selectedTriggerCash === 'AUD' ? 379.00 : 478.00;
+            const amount = (balance * State.triggerAmountPercent / 100);
+            
+            document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Limit' : 'Sell Limit';
+            document.getElementById('limitModalType').style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+            document.getElementById('limitModalAsset').textContent = State.selectedAsset ? State.selectedAsset.code : 'BTC';
+            document.getElementById('limitModalTrigger').textContent = Assets.formatCurrency(triggerPrice);
+            document.getElementById('limitModalAmount').textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
+            
+            const receiveAmount = amount / triggerPrice;
+            document.getElementById('limitModalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset ? State.selectedAsset.code : 'BTC'}`;
+            
+            document.getElementById('limitConfirmModal').classList.add('show');
+            
+            btn.disabled = false;
+            spinner.classList.add('hidden');
+            text.textContent = State.selectedLimitType === 'buy' ? 'Confirm Buy Limit' : 'Confirm Sell Limit';
+        }, 500);
+    },
+
+    closeLimitModal() {
+        document.getElementById('limitConfirmModal').classList.remove('show');
+    },
+
+    executeLimitOrder() {
+        const btn = document.getElementById('limitModalExecuteBtn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        
+        setTimeout(() => {
+            document.getElementById('limitConfirmModal').classList.remove('show');
+            document.getElementById('successModal').classList.add('show');
+            btn.disabled = false;
+            btn.textContent = 'Execute';
+            this.resetTrigger();
+        }, 800);
+    },
+
+    closeSuccessModal() {
+        document.getElementById('successModal').classList.remove('show');
+        UI.closeTradingView();
+    },
+
+    setTriggerConstraints(side) {
+        const slider = document.getElementById('triggerSlider');
+        const labels = document.getElementById('triggerLabels');
+        
+        if (side === 'buy') {
+            slider.min = -20;
+            slider.max = 0;
+            if (parseInt(slider.value) > 0) {
+                slider.value = 0;
+                State.triggerOffset = 0;
+            }
+            labels.innerHTML = '<span>-20%</span><span>Current</span><span>0%</span>';
+        } else {
+            slider.min = 0;
+            slider.max = 20;
+            if (parseInt(slider.value) < 0) {
+                slider.value = 0;
+                State.triggerOffset = 0;
+            }
+            labels.innerHTML = '<span>0%</span><span>Current</span><span>+20%</span>';
+        }
+        
         this.updateTriggerDisplay();
-        this.validateTrigger();
     },
 
     updateAutoTradeConstraints(side) {
@@ -727,10 +787,8 @@ const Trading = {
         const guideText = document.getElementById('autoGuideText');
         
         if (side === 'buy') {
-            // For BUY: Deviation must be NEGATIVE (buy when price drops)
             slider.min = -20;
             slider.max = 0;
-            // Only clamp if current value is positive
             if (parseInt(slider.value) > 0) {
                 slider.value = 0;
                 State.autoTradeConfig.deviation = 0;
@@ -738,10 +796,8 @@ const Trading = {
             labels.innerHTML = '<span>-20%</span><span>Current</span><span>0%</span>';
             guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> to buy when price drops';
         } else {
-            // For SELL: Deviation must be POSITIVE (sell when price rises)
             slider.min = 0;
             slider.max = 20;
-            // Only clamp if current value is negative
             if (parseInt(slider.value) < 0) {
                 slider.value = 0;
                 State.autoTradeConfig.deviation = 0;
@@ -756,7 +812,6 @@ const Trading = {
     updateAutoDevSlider(value) {
         State.autoTradeConfig.deviation = parseInt(value);
         this.updateAutoTradeDisplay();
-        this.validateAutoTrade();
     },
 
     updateAutoAllocSlider(value) {
@@ -769,12 +824,9 @@ const Trading = {
         
         const currentPrice = State.selectedAsset.price || 0;
         const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
-        
-        // Update deviation display
         const multiplier = 1 + (State.autoTradeConfig.deviation / 100);
         const triggerPrice = cashPrice * multiplier;
         
-        // Calculate fill width based on slider range
         const slider = document.getElementById('autoDevSlider');
         const min = parseInt(slider.min);
         const max = parseInt(slider.max);
@@ -799,7 +851,6 @@ const Trading = {
             devEl.style.background = 'rgba(148, 163, 184, 0.15)';
         }
         
-        // Update allocation display
         const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
         const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
         
@@ -809,369 +860,308 @@ const Trading = {
             `${State.autoTradeConfig.allocation}% of ${Assets.formatCurrency(cashBalance)} ${State.cashAsset}`;
     },
 
-    validateAutoTrade() {
-        const errorEl = document.getElementById('autoError');
-        const side = State.pendingTradeSide;
-        
-        if (!side || State.orderType !== 'auto') {
-            errorEl.style.display = 'none';
-            return true;
-        }
-        
-        if (side === 'buy' && State.autoTradeConfig.deviation > 0) {
-            errorEl.textContent = '⚠️ Auto buy requires negative % (buy when cheaper)';
-            errorEl.style.display = 'block';
-            return false;
-        } else if (side === 'sell' && State.autoTradeConfig.deviation < 0) {
-            errorEl.textContent = '⚠️ Auto sell requires positive % (sell when higher)';
-            errorEl.style.display = 'block';
-            return false;
-        }
-        
-        errorEl.style.display = 'none';
-        return true;
-    },
-
     resetAutoTrade() {
         State.autoTradeConfig = { deviation: 0, allocation: 0 };
         document.getElementById('autoDevSlider').value = 0;
         document.getElementById('autoAllocSlider').value = 0;
         this.updateAutoTradeDisplay();
-        this.validateAutoTrade();
-    }
-};
+    },
 
-
-// ==========================================
-// TRADING Module (continued)
-// ==========================================
-
-Trading.prepareTrade = function(side) {
-    // Store the side first
-    State.pendingTradeSide = side;
-    
-    // Check PIN is set
-    if (!CONFIG.TRADE_PIN) {
-        alert('Please set trading PIN in settings');
-        document.getElementById('pinModal').classList.add('show');
-        return;
-    }
-    
-    // Update constraints based on side BEFORE validation
-    if (State.orderType === 'trigger') {
-        this.updateTriggerConstraints(side);
-    } else if (State.orderType === 'auto') {
-        this.updateAutoTradeConstraints(side);
-    }
-    
-    // Now validate
-    if (State.orderType === 'trigger' && !this.validateTrigger()) {
-        alert('Please fix the trigger price: ' + document.getElementById('triggerError').textContent);
-        return;
-    }
-    if (State.orderType === 'auto' && !this.validateAutoTrade()) {
-        alert('Please fix the auto trade settings: ' + document.getElementById('autoError').textContent);
-        return;
-    }
-    
-    // Check amounts
-    if (State.orderType !== 'auto' && State.amountSliderValue === 0) {
-        alert('Please select an amount');
-        return;
-    }
-    
-    if (State.orderType === 'auto' && State.autoTradeConfig.allocation === 0) {
-        alert('Please set portfolio allocation for auto trade');
-        return;
-    }
-    
-    if (!State.selectedAsset) return;
-    
-    UI.updateAmountDisplay();
-    
-    const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
-    const assetBalance = State.selectedAsset.balance || 0;
-    const currentAudPrice = State.selectedAsset.price;
-    const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
-    
-    // Log for debugging
-    Logger.log(`Preparing ${side.toUpperCase()} order - Type: ${State.orderType}, Cash: ${State.cashAsset}`, 'info');
-    Logger.log(`Current price: ${cashPrice}, Offset/Deviation: ${State.orderType === 'auto' ? State.autoTradeConfig.deviation : State.triggerOffset}%`, 'info');
-    
-    // Calculate values based on side and order type
-    let amount, receiveAmount, triggerPrice;
-    
-    if (State.orderType === 'auto') {
-        // AUTO TRADE: Use allocation percentage
-        const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
+    prepareTrade(side) {
+        State.pendingTradeSide = side;
         
-        // Calculate trigger price with deviation
-        const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
-        triggerPrice = cashPrice * deviationMultiplier;
-        
-        // Safety check: For buys, ensure trigger is below current; for sells, ensure above
-        if (side === 'buy' && triggerPrice > cashPrice) {
-            alert('Error: Buy trigger cannot exceed current price. Setting to current price.');
-            triggerPrice = cashPrice;
-            State.autoTradeConfig.deviation = 0;
-            this.updateAutoTradeDisplay();
-        } else if (side === 'sell' && triggerPrice < cashPrice) {
-            alert('Error: Sell trigger cannot be below current price. Setting to current price.');
-            triggerPrice = cashPrice;
-            State.autoTradeConfig.deviation = 0;
-            this.updateAutoTradeDisplay();
+        if (!CONFIG.TRADE_PIN) {
+            alert('Please set trading PIN in settings');
+            document.getElementById('pinModal').classList.add('show');
+            return;
         }
-        
-        if (side === 'buy') {
-            amount = allocationAmount;
-            receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
-        } else {
-            const sellValue = allocationAmount;
-            amount = sellValue / cashPrice;
-            receiveAmount = sellValue;
-        }
-    } else if (side === 'buy') {
-        // BUY: Amount is cash spent, receive is crypto
-        amount = (State.amountSliderValue / 100) * cashBalance;
-        let effectivePrice = cashPrice;
         
         if (State.orderType === 'trigger') {
-            const offsetMultiplier = 1 + (State.triggerOffset / 100);
-            effectivePrice = cashPrice * offsetMultiplier;
-            
-            // Safety check
-            if (effectivePrice > cashPrice) {
-                alert('Error: Buy trigger cannot exceed current price. Please set to 0% or below.');
-                return;
-            }
+            this.updateTriggerConstraints(side);
+        } else if (State.orderType === 'auto') {
+            this.updateAutoTradeConstraints(side);
         }
         
-        receiveAmount = effectivePrice > 0 ? amount / effectivePrice : 0;
-        if (State.orderType === 'trigger') triggerPrice = effectivePrice;
-    } else {
-        // SELL: Amount is crypto sold, receive is cash
-        const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
-        amount = sellQuantity;
-        let effectivePrice = cashPrice;
-        
-        if (State.orderType === 'trigger') {
-            const offsetMultiplier = 1 + (State.triggerOffset / 100);
-            effectivePrice = cashPrice * offsetMultiplier;
-            
-            // Safety check
-            if (effectivePrice < cashPrice) {
-                alert('Error: Sell trigger cannot be below current price. Please set to 0% or above.');
-                return;
-            }
+        if (State.orderType === 'trigger' && State.selectedLimitType === null) {
+            return;
         }
         
-        receiveAmount = sellQuantity * effectivePrice;
-        if (State.orderType === 'trigger') triggerPrice = effectivePrice;
-    }
-    
-    // Populate modal
-    const modalTitle = document.getElementById('tradeModalTitle');
-    modalTitle.textContent = `Confirm ${side === 'buy' ? 'Buy' : 'Sell'}`;
-    modalTitle.className = `trade-modal-title ${side}`;
-    
-    const orderTypeDisplay = State.orderType === 'instant' ? 'Instant (Market)' : 
-                           State.orderType === 'trigger' ? 'Trigger (Limit)' : 
-                           `Auto Trade (${State.autoTradeConfig.deviation >= 0 ? '+' : ''}${State.autoTradeConfig.deviation}%)`;
-    document.getElementById('modalOrderType').textContent = orderTypeDisplay;
-    document.getElementById('modalAsset').textContent = State.selectedAsset.code;
-    
-    if (side === 'buy') {
-        document.getElementById('modalAmount').textContent = `${Assets.formatCurrency(amount)} ${State.cashAsset}`;
-        document.getElementById('modalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
-    } else {
-        document.getElementById('modalAmount').textContent = `${amount.toFixed(8)} ${State.selectedAsset.code}`;
-        document.getElementById('modalReceive').textContent = `${Assets.formatCurrency(receiveAmount)} ${State.cashAsset}`;
-    }
-    
-    const triggerRow = document.getElementById('modalTriggerRow');
-    if ((State.orderType === 'trigger' || State.orderType === 'auto') && triggerPrice) {
-        triggerRow.style.display = 'flex';
-        document.getElementById('modalTrigger').textContent = Assets.formatCurrency(triggerPrice);
-    } else {
-        triggerRow.style.display = 'none';
-    }
-    
-    const confirmBtn = document.getElementById('modalConfirmBtn');
-    confirmBtn.className = `trade-modal-btn confirm ${side}`;
-    
-    document.getElementById('tradeModal').classList.add('show');
-};
-
-Trading.cancelTrade = function() {
-    document.getElementById('tradeModal').classList.remove('show');
-    State.pendingTradeSide = null;
-};
-
-Trading.confirmTrade = async function() {
-    const side = State.pendingTradeSide;
-    
-    if (!side || !State.selectedAsset) {
-        document.getElementById('tradeModal').classList.remove('show');
-        State.pendingTradeSide = null;
-        return;
-    }
-    
-    document.getElementById('tradeModal').classList.remove('show');
-    
-    const btn = side === 'buy' ? document.getElementById('buyBtn') : document.getElementById('sellBtn');
-    
-    btn.disabled = true;
-    btn.classList.add('spinning');
-    
-    try {
+        if (State.orderType !== 'auto' && State.amountSliderValue === 0 && State.orderType !== 'trigger') {
+            alert('Please select an amount');
+            return;
+        }
+        
+        if (State.orderType === 'auto' && State.autoTradeConfig.allocation === 0) {
+            alert('Please set portfolio allocation for auto trade');
+            return;
+        }
+        
+        if (!State.selectedAsset) return;
+        
+        UI.updateAmountDisplay();
+        
         const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
         const assetBalance = State.selectedAsset.balance || 0;
         const currentAudPrice = State.selectedAsset.price;
         const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
         
-        let orderData;
-        let quantity, triggerPrice;
+        Logger.log(`Preparing ${side.toUpperCase()} order - Type: ${State.orderType}, Cash: ${State.cashAsset}`, 'info');
+        
+        let amount, receiveAmount, triggerPrice;
         
         if (State.orderType === 'auto') {
-            // AUTO TRADE logic
             const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
             const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
-            triggerPrice = parseFloat((cashPrice * deviationMultiplier).toFixed(2));
+            triggerPrice = cashPrice * deviationMultiplier;
             
-            // Final validation before sending
             if (side === 'buy' && triggerPrice > cashPrice) {
-                throw new Error('Buy trigger cannot exceed current market rate');
-            }
-            if (side === 'sell' && triggerPrice < cashPrice) {
-                throw new Error('Sell trigger cannot be below current market rate');
+                alert('Error: Buy trigger cannot exceed current price. Setting to current price.');
+                triggerPrice = cashPrice;
+                State.autoTradeConfig.deviation = 0;
+                this.updateAutoTradeDisplay();
+            } else if (side === 'sell' && triggerPrice < cashPrice) {
+                alert('Error: Sell trigger cannot be below current price. Setting to current price.');
+                triggerPrice = cashPrice;
+                State.autoTradeConfig.deviation = 0;
+                this.updateAutoTradeDisplay();
             }
             
             if (side === 'buy') {
-                quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    assetQuantity: State.selectedAsset.code,
-                    orderType: 'LIMIT_BUY',
-                    trigger: triggerPrice
-                };
+                amount = allocationAmount;
+                receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
             } else {
-                quantity = parseFloat((allocationAmount / cashPrice).toFixed(8));
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    assetQuantity: State.selectedAsset.code,
-                    orderType: 'LIMIT_SELL',
-                    trigger: triggerPrice
-                };
+                const sellValue = allocationAmount;
+                amount = sellValue / cashPrice;
+                receiveAmount = sellValue;
             }
         } else if (side === 'buy') {
-            // Regular BUY logic
-            const cashAmount = (State.amountSliderValue / 100) * cashBalance;
+            amount = (State.amountSliderValue / 100) * cashBalance;
+            let effectivePrice = cashPrice;
             
-            if (State.orderType === 'instant') {
-                quantity = parseFloat((cashAmount / cashPrice).toFixed(8));
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    orderType: 'MARKET_BUY',
-                    assetQuantity: State.selectedAsset.code
-                };
-            } else {
+            if (State.orderType === 'trigger') {
                 const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
+                effectivePrice = cashPrice * offsetMultiplier;
                 
-                // Validate trigger
-                if (triggerPrice > cashPrice) {
+                if (effectivePrice > cashPrice) {
+                    alert('Error: Buy trigger cannot exceed current price. Please set to 0% or below.');
+                    return;
+                }
+            }
+            
+            receiveAmount = effectivePrice > 0 ? amount / effectivePrice : 0;
+            if (State.orderType === 'trigger') triggerPrice = effectivePrice;
+        } else {
+            const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
+            amount = sellQuantity;
+            let effectivePrice = cashPrice;
+            
+            if (State.orderType === 'trigger') {
+                const offsetMultiplier = 1 + (State.triggerOffset / 100);
+                effectivePrice = cashPrice * offsetMultiplier;
+                
+                if (effectivePrice < cashPrice) {
+                    alert('Error: Sell trigger cannot be below current price. Please set to 0% or above.');
+                    return;
+                }
+            }
+            
+            receiveAmount = sellQuantity * effectivePrice;
+            if (State.orderType === 'trigger') triggerPrice = effectivePrice;
+        }
+        
+        const modalTitle = document.getElementById('tradeModalTitle');
+        modalTitle.textContent = `Confirm ${side === 'buy' ? 'Buy' : 'Sell'}`;
+        modalTitle.className = `trade-modal-title ${side}`;
+        
+        const orderTypeDisplay = State.orderType === 'instant' ? 'Instant (Market)' : 
+                               State.orderType === 'trigger' ? 'Trigger (Limit)' : 
+                               `Auto Trade (${State.autoTradeConfig.deviation >= 0 ? '+' : ''}${State.autoTradeConfig.deviation}%)`;
+        document.getElementById('modalOrderType').textContent = orderTypeDisplay;
+        document.getElementById('modalAsset').textContent = State.selectedAsset.code;
+        
+        if (side === 'buy') {
+            document.getElementById('modalAmount').textContent = `${Assets.formatCurrency(amount)} ${State.cashAsset}`;
+            document.getElementById('modalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
+        } else {
+            document.getElementById('modalAmount').textContent = `${amount.toFixed(8)} ${State.selectedAsset.code}`;
+            document.getElementById('modalReceive').textContent = `${Assets.formatCurrency(receiveAmount)} ${State.cashAsset}`;
+        }
+        
+        const triggerRow = document.getElementById('modalTriggerRow');
+        if ((State.orderType === 'trigger' || State.orderType === 'auto') && triggerPrice) {
+            triggerRow.style.display = 'flex';
+            document.getElementById('modalTrigger').textContent = Assets.formatCurrency(triggerPrice);
+        } else {
+            triggerRow.style.display = 'none';
+        }
+        
+        const confirmBtn = document.getElementById('modalConfirmBtn');
+        confirmBtn.className = `trade-modal-btn confirm ${side}`;
+        
+        document.getElementById('tradeModal').classList.add('show');
+    },
+
+    cancelTrade() {
+        document.getElementById('tradeModal').classList.remove('show');
+        State.pendingTradeSide = null;
+    },
+
+    confirmTrade: async function() {
+        const side = State.pendingTradeSide;
+        
+        if (!side || !State.selectedAsset) {
+            document.getElementById('tradeModal').classList.remove('show');
+            State.pendingTradeSide = null;
+            return;
+        }
+        
+        document.getElementById('tradeModal').classList.remove('show');
+        
+        const btn = side === 'buy' ? document.getElementById('buyBtn') : document.getElementById('sellBtn');
+        
+        btn.disabled = true;
+        btn.classList.add('spinning');
+        
+        try {
+            const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
+            const assetBalance = State.selectedAsset.balance || 0;
+            const currentAudPrice = State.selectedAsset.price;
+            const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
+            
+            let orderData;
+            let quantity, triggerPrice;
+            
+            if (State.orderType === 'auto') {
+                const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
+                const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
+                triggerPrice = parseFloat((cashPrice * deviationMultiplier).toFixed(2));
+                
+                if (side === 'buy' && triggerPrice > cashPrice) {
                     throw new Error('Buy trigger cannot exceed current market rate');
                 }
-                
-                quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    assetQuantity: State.selectedAsset.code,
-                    orderType: 'LIMIT_BUY',
-                    trigger: triggerPrice
-                };
-            }
-        } else {
-            // Regular SELL logic
-            const sellPercentage = State.amountSliderValue / 100;
-            quantity = parseFloat((assetBalance * sellPercentage).toFixed(8));
-            
-            if (State.orderType === 'instant') {
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    orderType: 'MARKET_SELL',
-                    assetQuantity: State.selectedAsset.code
-                };
-            } else {
-                const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
-                
-                // Validate trigger
-                if (triggerPrice < cashPrice) {
+                if (side === 'sell' && triggerPrice < cashPrice) {
                     throw new Error('Sell trigger cannot be below current market rate');
                 }
                 
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    assetQuantity: State.selectedAsset.code,
-                    orderType: 'LIMIT_SELL',
-                    trigger: triggerPrice
-                };
+                if (side === 'buy') {
+                    quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'LIMIT_BUY',
+                        trigger: triggerPrice
+                    };
+                } else {
+                    quantity = parseFloat((allocationAmount / cashPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'LIMIT_SELL',
+                        trigger: triggerPrice
+                    };
+                }
+            } else if (side === 'buy') {
+                const cashAmount = (State.amountSliderValue / 100) * cashBalance;
+                
+                if (State.orderType === 'instant') {
+                    quantity = parseFloat((cashAmount / cashPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        orderType: 'MARKET_BUY',
+                        assetQuantity: State.selectedAsset.code
+                    };
+                } else {
+                    const offsetMultiplier = 1 + (State.triggerOffset / 100);
+                    triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
+                    
+                    if (triggerPrice > cashPrice) {
+                        throw new Error('Buy trigger cannot exceed current market rate');
+                    }
+                    
+                    quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'LIMIT_BUY',
+                        trigger: triggerPrice
+                    };
+                }
+            } else {
+                const sellPercentage = State.amountSliderValue / 100;
+                quantity = parseFloat((assetBalance * sellPercentage).toFixed(8));
+                
+                if (State.orderType === 'instant') {
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        orderType: 'MARKET_SELL',
+                        assetQuantity: State.selectedAsset.code
+                    };
+                } else {
+                    const offsetMultiplier = 1 + (State.triggerOffset / 100);
+                    triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
+                    
+                    if (triggerPrice < cashPrice) {
+                        throw new Error('Sell trigger cannot be below current market rate');
+                    }
+                    
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'LIMIT_SELL',
+                        trigger: triggerPrice
+                    };
+                }
             }
-        }
-        
-        Logger.log(`Sending ${side.toUpperCase()} order:`, 'info');
-        Logger.log(`OrderType: ${orderData.orderType}, Quantity: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
-        Logger.log(`Current Price: ${cashPrice}, Deviation: ${State.orderType === 'auto' ? State.autoTradeConfig.deviation : State.triggerOffset}%`, 'info');
-        
-        const res = await API.placeOrder(orderData);
-        
-        if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(errorText || `HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        
-        const totalCash = side === 'buy' 
-            ? (State.orderType === 'auto' ? (State.autoTradeConfig.allocation / 100) * cashBalance : (State.amountSliderValue / 100) * cashBalance)
-            : orderData.quantity * cashPrice;
             
-        Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
-        Logger.log(`Order: ${orderData.quantity} ${State.selectedAsset.code} ≈ $${totalCash.toFixed(2)} ${State.cashAsset}`, 'trade');
-        
-        // Reset sliders
-        State.amountSliderValue = 0;
-        document.getElementById('amountSlider').value = 0;
-        UI.updateAmountSlider(0);
-        
-        if (State.orderType === 'auto') {
-            this.resetAutoTrade();
+            Logger.log(`Sending ${side.toUpperCase()} order:`, 'info');
+            
+            const res = await API.placeOrder(orderData);
+            
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(errorText || `HTTP ${res.status}`);
+            }
+            
+            const data = await res.json();
+            
+            const totalCash = side === 'buy' 
+                ? (State.orderType === 'auto' ? (State.autoTradeConfig.allocation / 100) * cashBalance : (State.amountSliderValue / 100) * cashBalance)
+                : orderData.quantity * cashPrice;
+                
+            Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
+            
+            State.amountSliderValue = 0;
+            document.getElementById('amountSlider').value = 0;
+            UI.updateAmountSlider(0);
+            
+            if (State.orderType === 'auto') {
+                this.resetAutoTrade();
+            }
+            
+            setTimeout(() => {
+                API.refreshData();
+            }, 2000);
+            
+        } catch (error) {
+            Logger.log(`❌ Trade failed: ${error.message}`, 'error');
+            alert('Trade failed: ' + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('spinning');
+            State.pendingTradeSide = null;
         }
-        
-        setTimeout(() => {
-            API.refreshData();
-        }, 2000);
-        
-    } catch (error) {
-        Logger.log(`❌ Trade failed: ${error.message}`, 'error');
-        alert('Trade failed: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.classList.remove('spinning');
-        State.pendingTradeSide = null;
     }
 };
 
