@@ -702,7 +702,13 @@ const Trading = {
         const currentPrice = State.selectedAsset.price || 0;
         const multiplier = 1 + (State.triggerOffset / 100);
         const triggerPrice = currentPrice * multiplier;
-        const percent = ((State.triggerOffset + 20) / 40) * 100;
+        
+        // FIX: Calculate percentage correctly based on min/max range
+        const slider = document.getElementById('triggerSlider');
+        const min = parseInt(slider.min);
+        const max = parseInt(slider.max);
+        const range = max - min;
+        const percent = ((State.triggerOffset - min) / range) * 100;
         
         document.getElementById('triggerFill').style.width = percent + '%';
         document.getElementById('triggerPrice').textContent = Assets.formatCurrency(triggerPrice);
@@ -781,6 +787,20 @@ const Trading = {
             return;
         }
         
+        // FIX: Validate trigger price before showing modal
+        const currentPrice = State.selectedAsset.price || 0;
+        const multiplier = 1 + (State.triggerOffset / 100);
+        const triggerPrice = currentPrice * multiplier;
+        
+        if (State.selectedLimitType === 'buy' && triggerPrice > currentPrice) {
+            alert('Buy trigger cannot exceed current market price');
+            return;
+        }
+        if (State.selectedLimitType === 'sell' && triggerPrice < currentPrice) {
+            alert('Sell trigger cannot be below current market price');
+            return;
+        }
+        
         const btn = document.getElementById('confirmLimitBtn');
         const spinner = document.getElementById('confirmSpinner');
         const text = document.getElementById('confirmBtnText');
@@ -789,9 +809,6 @@ const Trading = {
         spinner.classList.remove('hidden');
         text.textContent = 'Loading...';
         
-        const currentPrice = State.selectedAsset.price || 0;
-        const multiplier = 1 + (State.triggerOffset / 100);
-        const triggerPrice = currentPrice * multiplier;
         const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
         const amount = (balance * State.triggerAmountPercent / 100);
         
@@ -829,6 +846,14 @@ const Trading = {
             const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
             const amount = (balance * State.triggerAmountPercent / 100);
             const quantity = parseFloat((amount / triggerPrice).toFixed(8));
+            
+            // FIX: Validate before sending
+            if (State.selectedLimitType === 'buy' && triggerPrice > currentPrice) {
+                throw new Error('Limit buy trigger cannot exceed the current market rate');
+            }
+            if (State.selectedLimitType === 'sell' && triggerPrice < currentPrice) {
+                throw new Error('Limit sell trigger cannot be below the current market rate');
+            }
             
             const orderData = {
                 primary: State.selectedAsset.code,
@@ -880,6 +905,7 @@ const Trading = {
         const labels = document.getElementById('triggerLabels');
         
         if (side === 'buy') {
+            // Buy: trigger must be BELOW current price (negative offset)
             slider.min = -20;
             slider.max = 0;
             if (parseInt(slider.value) > 0) {
@@ -888,6 +914,7 @@ const Trading = {
             }
             labels.innerHTML = '<span>-20%</span><span>Current</span><span>0%</span>';
         } else {
+            // Sell: trigger must be ABOVE current price (positive offset)
             slider.min = 0;
             slider.max = 20;
             if (parseInt(slider.value) < 0) {
@@ -906,6 +933,7 @@ const Trading = {
         const guideText = document.getElementById('autoGuideText');
         
         if (side === 'buy') {
+            // Buy: deviation must be negative (buy when price drops)
             slider.min = -20;
             slider.max = 0;
             if (parseInt(slider.value) > 0) {
@@ -915,6 +943,7 @@ const Trading = {
             labels.innerHTML = '<span>-20%</span><span>Current</span><span>0%</span>';
             guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> to buy when price drops';
         } else {
+            // Sell: deviation must be positive (sell when price rises)
             slider.min = 0;
             slider.max = 20;
             if (parseInt(slider.value) < 0) {
@@ -1033,13 +1062,14 @@ const Trading = {
             const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
             triggerPrice = cashPrice * deviationMultiplier;
             
+            // FIX: Remove alert, just enforce constraint
             if (side === 'buy' && triggerPrice > cashPrice) {
-                alert('Error: Buy trigger cannot exceed current price. Setting to current price.');
+                Logger.log('Buy trigger exceeds current price, setting to current price', 'warning');
                 triggerPrice = cashPrice;
                 State.autoTradeConfig.deviation = 0;
                 this.updateAutoTradeDisplay();
             } else if (side === 'sell' && triggerPrice < cashPrice) {
-                alert('Error: Sell trigger cannot be below current price. Setting to current price.');
+                Logger.log('Sell trigger below current price, setting to current price', 'warning');
                 triggerPrice = cashPrice;
                 State.autoTradeConfig.deviation = 0;
                 this.updateAutoTradeDisplay();
@@ -1060,11 +1090,7 @@ const Trading = {
             if (State.orderType === 'trigger') {
                 const offsetMultiplier = 1 + (State.triggerOffset / 100);
                 effectivePrice = cashPrice * offsetMultiplier;
-                
-                if (effectivePrice > cashPrice) {
-                    alert('Error: Buy trigger cannot exceed current price. Please set to 0% or below.');
-                    return;
-                }
+                // No alert here - slider constraints prevent invalid values
             }
             
             receiveAmount = effectivePrice > 0 ? amount / effectivePrice : 0;
@@ -1077,11 +1103,7 @@ const Trading = {
             if (State.orderType === 'trigger') {
                 const offsetMultiplier = 1 + (State.triggerOffset / 100);
                 effectivePrice = cashPrice * offsetMultiplier;
-                
-                if (effectivePrice < cashPrice) {
-                    alert('Error: Sell trigger cannot be below current price. Please set to 0% or above.');
-                    return;
-                }
+                // No alert here - slider constraints prevent invalid values
             }
             
             receiveAmount = sellQuantity * effectivePrice;
@@ -1155,11 +1177,12 @@ const Trading = {
                 const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
                 triggerPrice = parseFloat((cashPrice * deviationMultiplier).toFixed(2));
                 
+                // FIX: Proper validation with correct error messages
                 if (side === 'buy' && triggerPrice > cashPrice) {
-                    throw new Error('Buy trigger cannot exceed current market rate');
+                    throw new Error('Limit buy trigger cannot exceed the current market rate');
                 }
                 if (side === 'sell' && triggerPrice < cashPrice) {
-                    throw new Error('Sell trigger cannot be below current market rate');
+                    throw new Error('Limit sell trigger cannot be below the current market rate');
                 }
                 
                 if (side === 'buy') {
@@ -1199,8 +1222,9 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
                     
+                    // FIX: Proper validation
                     if (triggerPrice > cashPrice) {
-                        throw new Error('Buy trigger cannot exceed current market rate');
+                        throw new Error('Limit buy trigger cannot exceed the current market rate');
                     }
                     
                     quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
@@ -1229,8 +1253,9 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = parseFloat((cashPrice * offsetMultiplier).toFixed(2));
                     
+                    // FIX: Proper validation
                     if (triggerPrice < cashPrice) {
-                        throw new Error('Sell trigger cannot be below current market rate');
+                        throw new Error('Limit sell trigger cannot be below the current market rate');
                     }
                     
                     orderData = {
