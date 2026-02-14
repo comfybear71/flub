@@ -75,9 +75,9 @@ body {
     padding: 16px;
 }
 
-/* Chart Section - NO BACKGROUND */
+/* Chart Section */
 .chart-section {
-    margin-bottom: 12px;
+    margin-bottom: 20px;
     overflow: hidden;
     border-radius: 16px;
 }
@@ -92,17 +92,18 @@ body {
     transform: translateX(-50%);
 }
 
-/* REMOVED BACKGROUND - clean doughnut only */
 .portfolio-view {
     width: 50%;
-    padding: 10px 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    border-radius: 16px;
     text-align: center;
 }
 
 .doughnut-container {
     position: relative;
-    width: 180px;
-    height: 180px;
+    width: 200px;
+    height: 200px;
     margin: 0 auto;
 }
 
@@ -271,7 +272,7 @@ body {
     color: white;
 }
 
-/* Amount Section - COMPACT, no big USDC button */
+/* Amount Section */
 .amount-compact {
     background: rgba(0,0,0,0.2);
     border-radius: 12px;
@@ -280,6 +281,57 @@ body {
 
 .amount-compact.hidden {
     display: none;
+}
+
+.cash-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.cash-toggle.streamlined {
+    margin-bottom: 12px;
+}
+
+.cash-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cash-option.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.cash-option .icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.cash-option span {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.cash-option .balance {
+    font-size: 11px;
+    color: #64748b;
 }
 
 .amount-display {
@@ -548,7 +600,7 @@ input[type="range"] {
 
 /* Holdings Header with Cash Balances */
 .holdings-container {
-    margin-top: 12px;
+    margin-top: 20px;
 }
 
 .holdings-header {
@@ -566,39 +618,41 @@ input[type="range"] {
     color: white;
 }
 
-/* Cash balances in header - compact */
+/* NEW: Cash balances in header */
 .cash-balances-header {
     display: flex;
-    gap: 12px;
+    gap: 16px;
     align-items: center;
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(30, 41, 59, 0.8);
-    padding: 6px 12px;
-    border-radius: 20px;
+    padding: 8px 16px;
+    border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.1);
 }
 
 .cash-balance-item {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: 6px;
+    font-size: 13px;
 }
 
 .cash-dot {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
 }
 
 .usdc-dot {
     background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
 }
 
 .aud-dot {
     background: #f59e0b;
+    box-shadow: 0 0 8px #f59e0b;
 }
 
 .cash-label {
@@ -959,3 +1013,43 @@ input[type="range"] {
 .pb-20 { padding-bottom: 80px; }
 .gap-3 { gap: 12px; }
 .gap-4 { gap: 16px; }
+
+/* Coin Icon Centering Fix */
+.coin-icon-wrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    flex-shrink: 0;
+}
+
+.coin-icon-letter {
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+/* Also fix the tiny icon in trading view */
+.coin-icon-tiny {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+}
