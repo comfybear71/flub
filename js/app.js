@@ -414,6 +414,8 @@ const UI = {
         document.getElementById('autoDevSlider').value = 0;
         document.getElementById('autoAllocSlider').value = 0;
         
+        Trading.updateTriggerButtonBalances();
+        
         this.updateAmountDisplay();
         Trading.updateTriggerDisplay();
         Trading.updateAutoTradeDisplay();
@@ -600,13 +602,45 @@ const UI = {
 // TRADING - Trading Logic & Order Management
 // ==========================================
 const Trading = {
+    getTriggerCashBalance(currency) {
+        const asset = State.portfolioData.assets.find(a => a.code === currency);
+        return asset ? (asset.aud_value || 0) : 0;
+    },
+
+    updateTriggerButtonBalances() {
+        const audBalance = this.getTriggerCashBalance('AUD');
+        const usdcBalance = this.getTriggerCashBalance('USDC');
+        
+        const audBtn = document.getElementById('triggerOptAUD');
+        if (audBtn) {
+            audBtn.querySelector('.balance').textContent = Assets.formatCurrency(audBalance);
+        }
+        
+        const usdcBtn = document.getElementById('triggerOptUSDC');
+        if (usdcBtn) {
+            usdcBtn.querySelector('.balance').textContent = Assets.formatCurrency(usdcBalance);
+        }
+        
+        document.getElementById('amountSliderLabel').textContent = `Amount (${State.selectedTriggerCash})`;
+    },
+
     setTriggerCash(currency) {
         State.selectedTriggerCash = currency;
+        
         document.getElementById('triggerOptAUD').classList.toggle('active', currency === 'AUD');
         document.getElementById('triggerOptUSDC').classList.toggle('active', currency === 'USDC');
+        
+        const balance = this.getTriggerCashBalance(currency);
         document.getElementById('amountSliderLabel').textContent = `Amount (${currency})`;
+        
+        const balanceText = document.querySelector(`#triggerOpt${currency} .balance`);
+        if (balanceText) {
+            balanceText.textContent = Assets.formatCurrency(balance);
+        }
+        
         this.updateTriggerAmountSlider(0);
-        Logger.log(`Selected ${currency} for limit order`, 'info');
+        
+        Logger.log(`Selected ${currency} for limit order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
     },
 
     selectLimitType(type) {
@@ -643,8 +677,9 @@ const Trading = {
 
     updateTriggerAmountSlider(value) {
         State.triggerAmountPercent = parseInt(value);
-        const balance = State.selectedTriggerCash === 'AUD' ? 379.00 : 478.00;
+        const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
         const amount = (balance * State.triggerAmountPercent / 100).toFixed(2);
+        
         document.getElementById('triggerAmountDisplay').textContent = `$${amount}`;
         document.getElementById('triggerAmountPercent').textContent = State.triggerAmountPercent + '%';
         document.getElementById('triggerAmountFill').style.width = State.triggerAmountPercent + '%';
@@ -700,6 +735,30 @@ const Trading = {
         Logger.log('Reset trigger settings', 'info');
     },
 
+    resetTriggerForm() {
+        State.selectedLimitType = null;
+        State.triggerOffset = 0;
+        State.triggerAmountPercent = 0;
+        State.pendingTradeSide = null;
+        
+        document.getElementById('limitButtons').classList.remove('hidden');
+        document.getElementById('confirmLimitBtn').classList.add('hidden');
+        document.getElementById('triggerSliderSection').classList.add('hidden');
+        document.getElementById('amountSliderSection').classList.add('hidden');
+        
+        document.getElementById('triggerSlider').value = 0;
+        document.getElementById('triggerAmountSlider').value = 0;
+        this.updateTriggerDisplay();
+        this.updateTriggerAmountSlider(0);
+        
+        const confirmBtn = document.getElementById('confirmLimitBtn');
+        confirmBtn.style.background = '#3b82f6';
+        confirmBtn.onmouseenter = null;
+        confirmBtn.onmouseleave = null;
+        
+        API.refreshData();
+    },
+
     showConfirmModal() {
         const btn = document.getElementById('confirmLimitBtn');
         const spinner = document.getElementById('confirmSpinner');
@@ -713,7 +772,7 @@ const Trading = {
             const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
             const multiplier = 1 + (State.triggerOffset / 100);
             const triggerPrice = currentPrice * multiplier;
-            const balance = State.selectedTriggerCash === 'AUD' ? 379.00 : 478.00;
+            const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
             const amount = (balance * State.triggerAmountPercent / 100);
             
             document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Limit' : 'Sell Limit';
@@ -745,15 +804,16 @@ const Trading = {
         setTimeout(() => {
             document.getElementById('limitConfirmModal').classList.remove('show');
             document.getElementById('successModal').classList.add('show');
+            
             btn.disabled = false;
             btn.textContent = 'Execute';
-            this.resetTrigger();
+            
+            this.resetTriggerForm();
         }, 800);
     },
 
     closeSuccessModal() {
         document.getElementById('successModal').classList.remove('show');
-        UI.closeTradingView();
     },
 
     setTriggerConstraints(side) {
@@ -1142,17 +1202,17 @@ const Trading = {
                 
             Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
             
-            State.amountSliderValue = 0;
-            document.getElementById('amountSlider').value = 0;
-            UI.updateAmountSlider(0);
-            
-            if (State.orderType === 'auto') {
-                this.resetAutoTrade();
+            if (State.orderType === 'instant') {
+                State.amountSliderValue = 0;
+                document.getElementById('amountSlider').value = 0;
+                UI.updateAmountSlider(0);
             }
             
-            setTimeout(() => {
-                API.refreshData();
-            }, 2000);
+            await API.refreshData();
+            
+            if (State.orderType === 'trigger') {
+                this.updateTriggerButtonBalances();
+            }
             
         } catch (error) {
             Logger.log(`❌ Trade failed: ${error.message}`, 'error');
@@ -1160,7 +1220,9 @@ const Trading = {
         } finally {
             btn.disabled = false;
             btn.classList.remove('spinning');
-            State.pendingTradeSide = null;
+            if (State.orderType !== 'trigger') {
+                State.pendingTradeSide = null;
+            }
         }
     }
 };
