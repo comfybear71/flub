@@ -2,7 +2,7 @@
 // CONFIG - Constants & Configuration
 // ==========================================
 const CONFIG = {
-    API_URL: '/api/portfolio',
+    API_URL: 'https://portfolio-api-sooty-three.vercel.app/api/portfolio',
     TRADE_PIN: '', // Set via PIN modal
     ASSET_STYLES: {
         'BTC': { color: '#f97316', icon: '₿', name: 'Bitcoin' },
