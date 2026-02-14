@@ -65,8 +65,7 @@ const State = {
     },
     selectedTriggerCash: 'AUD',
     selectedLimitType: null,
-    triggerAmountPercent: 0,
-    liveRates: {} // Cache for live rates
+    triggerAmountPercent: 0
 };
 
 // ==========================================
@@ -133,9 +132,6 @@ const API = {
                 }))
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
             
-            // Fetch live rates for accurate pricing
-            await this.fetchLiveRates();
-            
             Assets.sort(State.currentSort);
             
             UI.renderPortfolio();
@@ -148,40 +144,6 @@ const API = {
         } finally {
             btn.classList.remove('spinning');
         }
-    },
-
-    async fetchLiveRates() {
-        try {
-            const res = await fetch('/api/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: '/markets/live/rates/AUD/',
-                    method: 'GET',
-                    authToken: State.jwtToken
-                })
-            });
-            
-            if (res.ok) {
-                const rates = await res.json();
-                State.liveRates = {};
-                rates.forEach(rate => {
-                    State.liveRates[rate.asset] = parseFloat(rate.rate);
-                });
-                Logger.log('Live rates fetched', 'info');
-            }
-        } catch (error) {
-            Logger.log('Failed to fetch live rates: ' + error.message, 'warning');
-        }
-    },
-
-    getRealtimePrice(assetCode) {
-        // Use live rate if available, otherwise fall back to portfolio price
-        if (State.liveRates[assetCode]) {
-            return State.liveRates[assetCode];
-        }
-        const asset = State.portfolioData.assets.find(a => a.code === assetCode);
-        return asset ? asset.price : 0;
     },
 
     async placeOrder(orderData) {
@@ -813,7 +775,7 @@ const Trading = {
         API.refreshData();
     },
 
-    async showConfirmModal() {
+    showConfirmModal() {
         if (!State.selectedAsset) {
             alert('No asset selected');
             return;
@@ -824,27 +786,15 @@ const Trading = {
             return;
         }
         
-        // Fetch latest live rate before showing modal
-        await API.fetchLiveRates();
-        
-        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
+        const currentPrice = State.selectedAsset.price || 0;
         const multiplier = 1 + (State.triggerOffset / 100);
-        let triggerPrice = realtimePrice * multiplier;
+        let triggerPrice = currentPrice * multiplier;
         
-        // Determine correct order type based on trigger vs market price
-        let orderType;
-        if (State.selectedLimitType === 'buy') {
-            if (triggerPrice > realtimePrice) {
-                orderType = 'STOP_LIMIT_BUY'; // Buy when price rises above trigger
-            } else {
-                orderType = 'LIMIT_BUY'; // Buy when price drops to trigger
-            }
-        } else {
-            if (triggerPrice < realtimePrice) {
-                orderType = 'STOP_LIMIT_SELL'; // Sell when price drops below trigger
-            } else {
-                orderType = 'LIMIT_SELL'; // Sell when price rises to trigger
-            }
+        // FIX: Ensure buy trigger is ABOVE market, sell trigger is BELOW market
+        if (State.selectedLimitType === 'buy' && triggerPrice <= currentPrice) {
+            triggerPrice = currentPrice * 1.0001;
+        } else if (State.selectedLimitType === 'sell' && triggerPrice >= currentPrice) {
+            triggerPrice = currentPrice * 0.9999;
         }
         
         const btn = document.getElementById('confirmLimitBtn');
@@ -858,7 +808,7 @@ const Trading = {
         const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
         const amount = (balance * State.triggerAmountPercent / 100);
         
-        document.getElementById('limitModalType').textContent = orderType.replace(/_/g, ' ');
+        document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Trigger' : 'Sell Trigger';
         document.getElementById('limitModalType').style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
         document.getElementById('limitModalAsset').textContent = State.selectedAsset.code;
         document.getElementById('limitModalTrigger').textContent = Assets.formatCurrency(triggerPrice);
@@ -866,10 +816,6 @@ const Trading = {
         
         const receiveAmount = amount / triggerPrice;
         document.getElementById('limitModalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
-        
-        // Store order type for execution
-        State.pendingOrderType = orderType;
-        State.pendingTriggerPrice = triggerPrice;
         
         document.getElementById('limitConfirmModal').classList.add('show');
         
@@ -890,9 +836,21 @@ const Trading = {
         btn.textContent = 'Submitting...';
         
         try {
+            const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
+            const multiplier = 1 + (State.triggerOffset / 100);
+            let triggerPrice = currentPrice * multiplier;
+            
+            // FIX: Ensure buy trigger is strictly ABOVE market, sell strictly BELOW
+            if (State.selectedLimitType === 'buy' && triggerPrice <= currentPrice) {
+                triggerPrice = currentPrice * 1.0001;
+            } else if (State.selectedLimitType === 'sell' && triggerPrice >= currentPrice) {
+                triggerPrice = currentPrice * 0.9999;
+            }
+            
+            triggerPrice = parseFloat(triggerPrice.toFixed(2));
+            
             const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
             const amount = (balance * State.triggerAmountPercent / 100);
-            const triggerPrice = parseFloat(State.pendingTriggerPrice.toFixed(2));
             const quantity = parseFloat((amount / triggerPrice).toFixed(8));
             
             const orderData = {
@@ -900,11 +858,11 @@ const Trading = {
                 secondary: State.selectedTriggerCash,
                 quantity: quantity,
                 assetQuantity: State.selectedAsset.code,
-                orderType: State.pendingOrderType,
+                orderType: State.selectedLimitType === 'buy' ? 'STOP_BUY' : 'STOP_SELL',
                 trigger: triggerPrice
             };
             
-            Logger.log(`Sending ${State.pendingOrderType} order:`, 'info');
+            Logger.log(`Sending TRIGGER ${State.selectedLimitType.toUpperCase()} order:`, 'info');
             Logger.log(`Asset: ${orderData.primary}, Quantity: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
             
             const res = await API.placeOrder(orderData);
@@ -916,7 +874,7 @@ const Trading = {
             
             const data = await res.json();
             
-            Logger.log(`✅ Order placed! Order ID: ${data.id || data.orderId || 'N/A'}`, 'success');
+            Logger.log(`✅ Trigger order placed! Order ID: ${data.id || data.orderId || 'N/A'}`, 'success');
             Logger.log(`Response: ${JSON.stringify(data).substring(0, 200)}`, 'info');
             
             document.getElementById('limitConfirmModal').classList.remove('show');
@@ -926,7 +884,7 @@ const Trading = {
             this.updateTriggerButtonBalances();
             
         } catch (error) {
-            Logger.log(`❌ Order failed: ${error.message}`, 'error');
+            Logger.log(`❌ Trigger order failed: ${error.message}`, 'error');
             alert('Order failed: ' + error.message);
             document.getElementById('limitConfirmModal').classList.remove('show');
         } finally {
@@ -945,16 +903,23 @@ const Trading = {
         const labels = document.getElementById('triggerLabels');
         
         if (side === 'buy') {
-            // For buy orders: allow both above (stop) and below (limit) market
-            // Default to -20% to +20% range, user chooses
-            slider.min = -20;
+            // Buy STOP: trigger ABOVE current price (0% to +20%)
+            slider.min = 0;
             slider.max = 20;
-            labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
+            if (parseInt(slider.value) < 0) {
+                slider.value = 0;
+                State.triggerOffset = 0;
+            }
+            labels.innerHTML = '<span>Current</span><span>+10%</span><span>+20%</span>';
         } else {
-            // For sell orders: allow both above (limit) and below (stop) market
+            // Sell STOP: trigger BELOW current price (-20% to 0%)
             slider.min = -20;
-            slider.max = 20;
-            labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
+            slider.max = 0;
+            if (parseInt(slider.value) > 0) {
+                slider.value = 0;
+                State.triggerOffset = 0;
+            }
+            labels.innerHTML = '<span>-20%</span><span>-10%</span><span>Current</span>';
         }
         
         this.updateTriggerDisplay();
@@ -966,15 +931,25 @@ const Trading = {
         const guideText = document.getElementById('autoGuideText');
         
         if (side === 'buy') {
-            slider.min = -20;
+            // Buy: deviation must be positive (buy when price rises above trigger)
+            slider.min = 0;
             slider.max = 20;
-            labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
-            guideText.innerHTML = 'Set <span style="color: #22c55e;">positive %</span> for stop-buy, <span style="color: #ef4444;">negative %</span> for limit-buy';
+            if (parseInt(slider.value) < 0) {
+                slider.value = 0;
+                State.autoTradeConfig.deviation = 0;
+            }
+            labels.innerHTML = '<span>Current</span><span>+10%</span><span>+20%</span>';
+            guideText.innerHTML = 'Set <span style="color: #22c55e;">positive %</span> to buy when price rises';
         } else {
+            // Sell: deviation must be negative (sell when price drops below trigger)
             slider.min = -20;
-            slider.max = 20;
-            labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
-            guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> for stop-sell, <span style="color: #22c55e;">positive %</span> for limit-sell';
+            slider.max = 0;
+            if (parseInt(slider.value) > 0) {
+                slider.value = 0;
+                State.autoTradeConfig.deviation = 0;
+            }
+            labels.innerHTML = '<span>-20%</span><span>-10%</span><span>Current</span>';
+            guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> to sell when price drops';
         }
         
         this.updateAutoTradeDisplay();
@@ -1085,6 +1060,17 @@ const Trading = {
             const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
             triggerPrice = cashPrice * deviationMultiplier;
             
+            // FIX: Ensure auto-trade triggers respect stop order constraints
+            if (side === 'buy' && triggerPrice <= cashPrice) {
+                triggerPrice = cashPrice * 1.0001;
+                State.autoTradeConfig.deviation = 0.01;
+                this.updateAutoTradeDisplay();
+            } else if (side === 'sell' && triggerPrice >= cashPrice) {
+                triggerPrice = cashPrice * 0.9999;
+                State.autoTradeConfig.deviation = -0.01;
+                this.updateAutoTradeDisplay();
+            }
+            
             if (side === 'buy') {
                 amount = allocationAmount;
                 receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
@@ -1123,7 +1109,7 @@ const Trading = {
         modalTitle.className = `trade-modal-title ${side}`;
         
         const orderTypeDisplay = State.orderType === 'instant' ? 'Instant (Market)' : 
-                               State.orderType === 'trigger' ? 'Trigger Order' : 
+                               State.orderType === 'trigger' ? 'Trigger (Stop)' : 
                                `Auto Trade (${State.autoTradeConfig.deviation >= 0 ? '+' : ''}${State.autoTradeConfig.deviation}%)`;
         document.getElementById('modalOrderType').textContent = orderTypeDisplay;
         document.getElementById('modalAsset').textContent = State.selectedAsset.code;
@@ -1172,13 +1158,10 @@ const Trading = {
         btn.classList.add('spinning');
         
         try {
-            // Fetch live rates before placing order
-            await API.fetchLiveRates();
-            const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
-            
             const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
             const assetBalance = State.selectedAsset.balance || 0;
-            const cashPrice = Assets.getPriceInCurrency(realtimePrice, State.cashAsset);
+            const currentAudPrice = State.selectedAsset.price;
+            const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
             
             let orderData;
             let quantity, triggerPrice;
@@ -1188,30 +1171,36 @@ const Trading = {
                 const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
                 triggerPrice = cashPrice * deviationMultiplier;
                 
-                // Determine order type based on trigger vs market
-                let orderType;
-                if (side === 'buy') {
-                    orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
-                } else {
-                    orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+                // FIX: Ensure strict inequality for stop orders
+                if (side === 'buy' && triggerPrice <= cashPrice) {
+                    triggerPrice = cashPrice * 1.0001;
+                } else if (side === 'sell' && triggerPrice >= cashPrice) {
+                    triggerPrice = cashPrice * 0.9999;
                 }
                 
                 triggerPrice = parseFloat(triggerPrice.toFixed(2));
                 
                 if (side === 'buy') {
                     quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'STOP_BUY',
+                        trigger: triggerPrice
+                    };
                 } else {
                     quantity = parseFloat((allocationAmount / cashPrice).toFixed(8));
+                    orderData = {
+                        primary: State.selectedAsset.code,
+                        secondary: State.cashAsset,
+                        quantity: quantity,
+                        assetQuantity: State.selectedAsset.code,
+                        orderType: 'STOP_SELL',
+                        trigger: triggerPrice
+                    };
                 }
-                
-                orderData = {
-                    primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
-                    quantity: quantity,
-                    assetQuantity: State.selectedAsset.code,
-                    orderType: orderType,
-                    trigger: triggerPrice
-                };
             } else if (side === 'buy') {
                 const cashAmount = (State.amountSliderValue / 100) * cashBalance;
                 
@@ -1228,10 +1217,12 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = cashPrice * offsetMultiplier;
                     
-                    // Determine correct order type
-                    const orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
-                    triggerPrice = parseFloat(triggerPrice.toFixed(2));
+                    // FIX: Ensure buy trigger is strictly ABOVE market for stop orders
+                    if (triggerPrice <= cashPrice) {
+                        triggerPrice = cashPrice * 1.0001;
+                    }
                     
+                    triggerPrice = parseFloat(triggerPrice.toFixed(2));
                     quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
                     
                     orderData = {
@@ -1239,7 +1230,7 @@ const Trading = {
                         secondary: State.cashAsset,
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
-                        orderType: orderType,
+                        orderType: 'STOP_BUY',
                         trigger: triggerPrice
                     };
                 }
@@ -1259,8 +1250,11 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = cashPrice * offsetMultiplier;
                     
-                    // Determine correct order type
-                    const orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+                    // FIX: Ensure sell trigger is strictly BELOW market for stop orders
+                    if (triggerPrice >= cashPrice) {
+                        triggerPrice = cashPrice * 0.9999;
+                    }
+                    
                     triggerPrice = parseFloat(triggerPrice.toFixed(2));
                     
                     orderData = {
@@ -1268,7 +1262,7 @@ const Trading = {
                         secondary: State.cashAsset,
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
-                        orderType: orderType,
+                        orderType: 'STOP_SELL',
                         trigger: triggerPrice
                     };
                 }
@@ -1285,6 +1279,10 @@ const Trading = {
             
             const data = await res.json();
             
+            const totalCash = side === 'buy' 
+                ? (State.orderType === 'auto' ? (State.autoTradeConfig.allocation / 100) * cashBalance : (State.amountSliderValue / 100) * cashBalance)
+                : orderData.quantity * cashPrice;
+                
             Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
             
             if (State.orderType === 'instant') {
