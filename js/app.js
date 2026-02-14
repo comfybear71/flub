@@ -48,7 +48,7 @@ const CONFIG = {
 const State = {
     portfolioData: { assets: [] },
     selectedAsset: null,
-    cashAsset: 'AUD',
+    cashAsset: 'USDC', // Changed to USDC only
     orderType: 'instant',
     amountSliderValue: 0,
     triggerOffset: 0,
@@ -63,7 +63,7 @@ const State = {
         deviation: 0,
         allocation: 0
     },
-    selectedTriggerCash: 'AUD',
+    selectedTriggerCash: 'USDC', // Changed to USDC only
     selectedLimitType: null,
     triggerAmountPercent: 0,
     liveRates: {},
@@ -124,7 +124,6 @@ const API = {
             
             Logger.log('Portfolio data received: ' + JSON.stringify(data).substring(0, 200), 'info');
             
-            // Handle different possible response structures
             let assets = [];
             if (data && Array.isArray(data.assets)) {
                 assets = data.assets;
@@ -149,13 +148,6 @@ const API = {
                 }))
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
             
-            // Fetch live rates for accurate pricing (optional)
-            try {
-                await this.fetchLiveRates();
-            } catch (e) {
-                Logger.log('Live rates optional fetch failed', 'info');
-            }
-            
             Assets.sort(State.currentSort);
             
             UI.renderPortfolio();
@@ -176,41 +168,7 @@ const API = {
         }
     },
 
-    async fetchLiveRates() {
-        try {
-            const res = await fetch('/api/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: '/markets/live/rates/AUD/',
-                    method: 'GET',
-                    authToken: State.jwtToken
-                })
-            });
-            
-            if (res.ok) {
-                const rates = await res.json();
-                State.liveRates = {};
-                if (Array.isArray(rates)) {
-                    rates.forEach(rate => {
-                        if (rate.asset && rate.rate) {
-                            State.liveRates[rate.asset] = parseFloat(rate.rate);
-                        }
-                    });
-                    Logger.log(`Live rates fetched for ${rates.length} assets`, 'info');
-                }
-            } else {
-                Logger.log('Live rates fetch failed: ' + res.status, 'warning');
-            }
-        } catch (error) {
-            Logger.log('Failed to fetch live rates: ' + error.message, 'warning');
-        }
-    },
-
     getRealtimePrice(assetCode) {
-        if (State.liveRates[assetCode]) {
-            return State.liveRates[assetCode];
-        }
         const asset = State.portfolioData.assets.find(a => a.code === assetCode);
         return asset ? asset.price : 0;
     },
@@ -299,24 +257,6 @@ const Assets = {
         } else if (sortType === 'balance') {
             State.portfolioData.assets.sort((a, b) => (b.balance || 0) - (a.balance || 0));
         }
-    },
-
-    getUsdcToAudRate() {
-        const usdcAsset = State.portfolioData.assets.find(a => a.code === 'USDC');
-        if (usdcAsset && usdcAsset.balance > 0) {
-            return usdcAsset.aud_value / usdcAsset.balance;
-        }
-        return 1.5;
-    },
-
-    getPriceInCurrency(audPrice, targetCurrency) {
-        if (targetCurrency === 'AUD') {
-            return audPrice;
-        } else if (targetCurrency === 'USDC') {
-            const usdcRate = this.getUsdcToAudRate();
-            return audPrice / usdcRate;
-        }
-        return audPrice;
     },
 
     formatCurrency(value) {
@@ -408,12 +348,22 @@ const UI = {
         
         if (State.portfolioChart) State.portfolioChart.destroy();
         
+        // Get cash balances
+        const usdcAsset = State.portfolioData.assets.find(a => a.code === 'USDC');
+        const audAsset = State.portfolioData.assets.find(a => a.code === 'AUD');
+        const usdcBalance = usdcAsset ? usdcAsset.aud_value : 0;
+        const audBalance = audAsset ? audAsset.aud_value : 0;
+        
+        // Crypto assets only (exclude cash)
         const cryptoAssets = State.portfolioData.assets.filter(a => 
             a.code !== 'AUD' && a.code !== 'USDC' && a.aud_value > 10
         );
         
         const colors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color || '#666');
-        const total = cryptoAssets.reduce((sum, a) => sum + (a.aud_value || 0), 0);
+        const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.aud_value || 0), 0);
+        
+        // Total including cash
+        const totalValue = cryptoTotal + usdcBalance + audBalance;
         
         State.portfolioChart = new Chart(ctx.getContext('2d'), {
             type: 'doughnut',
@@ -426,15 +376,47 @@ const UI = {
             },
             options: {
                 cutout: '70%',
-                plugins: { legend: { display: false } },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const asset = cryptoAssets[context.dataIndex];
+                                return `${asset.code}: ${Assets.formatCurrency(asset.aud_value)}`;
+                            }
+                        }
+                    }
+                },
                 maintainAspectRatio: false
             }
         });
         
+        // Update header with cash balances on left, Holdings centered
+        const headerEl = document.getElementById('portfolioHeader');
+        if (headerEl) {
+            headerEl.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                        <div style="font-size: 12px; color: #22c55e; font-weight: 600;">
+                            USDC: ${Assets.formatCurrency(usdcBalance)}
+                        </div>
+                        <div style="font-size: 12px; color: #f59e0b; font-weight: 600;">
+                            AUD: ${Assets.formatCurrency(audBalance)}
+                        </div>
+                    </div>
+                    <div style="font-size: 18px; font-weight: bold; color: white; position: absolute; left: 50%; transform: translateX(-50%);">
+                        Holdings
+                    </div>
+                    <div style="width: 80px;"></div>
+                </div>
+            `;
+        }
+        
+        // Update total value in center
         const totalEl = document.getElementById('total-value');
         const countEl = document.getElementById('asset-count');
-        if (totalEl) totalEl.textContent = Assets.formatCurrency(total);
-        if (countEl) countEl.textContent = cryptoAssets.length + ' assets';
+        if (totalEl) totalEl.textContent = Assets.formatCurrency(totalValue);
+        if (countEl) countEl.textContent = `${cryptoAssets.length} assets + cash`;
     },
 
     renderHoldings() {
@@ -660,19 +642,6 @@ const UI = {
         UI.updateAmountDisplay();
     },
 
-    setCash(cash) {
-        State.cashAsset = cash;
-        
-        const optAUD = document.getElementById('optAUD');
-        const optUSDC = document.getElementById('optUSDC');
-        if (optAUD) optAUD.classList.toggle('active', cash === 'AUD');
-        if (optUSDC) optUSDC.classList.toggle('active', cash === 'USDC');
-        
-        UI.updateAmountDisplay();
-        Trading.updateAutoTradeDisplay();
-        Trading.updateTriggerDisplay();
-    },
-
     updateAmountSlider(value) {
         State.amountSliderValue = parseInt(value);
         
@@ -693,15 +662,13 @@ const UI = {
         
         if (State.pendingTradeSide === 'sell') {
             const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
-            const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
-            const cashValue = sellQuantity * cashPrice;
+            const cashValue = sellQuantity * currentPrice;
             displayAmount = cashValue;
             conversionText = `${sellQuantity.toFixed(8)} ${State.selectedAsset?.code || ''}`;
         } else {
             const cashAmount = (State.amountSliderValue / 100) * cashBalance;
             displayAmount = cashAmount;
-            const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
-            const receiveAmount = cashPrice > 0 ? cashAmount / cashPrice : 0;
+            const receiveAmount = currentPrice > 0 ? cashAmount / currentPrice : 0;
             conversionText = `≈ ${receiveAmount.toFixed(8)} ${State.selectedAsset?.code || ''}`;
         }
         
@@ -742,44 +709,34 @@ const Trading = {
     },
 
     updateTriggerButtonBalances() {
-        const audBalance = this.getTriggerCashBalance('AUD');
         const usdcBalance = this.getTriggerCashBalance('USDC');
         
-        const audBtn = document.getElementById('triggerOptAUD');
         const usdcBtn = document.getElementById('triggerOptUSDC');
-        
-        if (audBtn) {
-            const balanceEl = audBtn.querySelector('.balance');
-            if (balanceEl) balanceEl.textContent = Assets.formatCurrency(audBalance);
-        }
-        
         if (usdcBtn) {
             const balanceEl = usdcBtn.querySelector('.balance');
             if (balanceEl) balanceEl.textContent = Assets.formatCurrency(usdcBalance);
         }
         
         const amountSliderLabel = document.getElementById('amountSliderLabel');
-        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (${State.selectedTriggerCash})`;
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (USDC)`;
     },
 
     setTriggerCash(currency) {
         State.selectedTriggerCash = currency;
         
-        const triggerOptAUD = document.getElementById('triggerOptAUD');
         const triggerOptUSDC = document.getElementById('triggerOptUSDC');
-        if (triggerOptAUD) triggerOptAUD.classList.toggle('active', currency === 'AUD');
-        if (triggerOptUSDC) triggerOptUSDC.classList.toggle('active', currency === 'USDC');
+        if (triggerOptUSDC) triggerOptUSDC.classList.add('active');
         
-        const balance = this.getTriggerCashBalance(currency);
+        const balance = this.getTriggerCashBalance('USDC');
         const amountSliderLabel = document.getElementById('amountSliderLabel');
-        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (${currency})`;
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (USDC)`;
         
-        const balanceText = document.querySelector(`#triggerOpt${currency} .balance`);
+        const balanceText = document.querySelector(`#triggerOptUSDC .balance`);
         if (balanceText) balanceText.textContent = Assets.formatCurrency(balance);
         
         this.updateTriggerAmountSlider(0);
         
-        Logger.log(`Selected ${currency} for trigger order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
+        Logger.log(`Selected USDC for trigger order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
     },
 
     selectLimitType(type) {
@@ -824,7 +781,7 @@ const Trading = {
 
     updateTriggerAmountSlider(value) {
         State.triggerAmountPercent = parseInt(value);
-        const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
+        const balance = this.getTriggerCashBalance('USDC');
         const amount = (balance * State.triggerAmountPercent / 100).toFixed(2);
         
         const triggerAmountDisplay = document.getElementById('triggerAmountDisplay');
@@ -924,9 +881,6 @@ const Trading = {
             return;
         }
         
-        // Fetch latest live rate before showing modal
-        await API.fetchLiveRates();
-        
         const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
         const multiplier = 1 + (State.triggerOffset / 100);
         let triggerPrice = realtimePrice * multiplier;
@@ -955,7 +909,7 @@ const Trading = {
         if (spinner) spinner.classList.remove('hidden');
         if (text) text.textContent = 'Loading...';
         
-        const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
+        const balance = this.getTriggerCashBalance('USDC');
         const amount = (balance * State.triggerAmountPercent / 100);
         
         const limitModalType = document.getElementById('limitModalType');
@@ -970,7 +924,7 @@ const Trading = {
         }
         if (limitModalAsset) limitModalAsset.textContent = State.selectedAsset.code;
         if (limitModalTrigger) limitModalTrigger.textContent = Assets.formatCurrency(triggerPrice);
-        if (limitModalAmount) limitModalAmount.textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
+        if (limitModalAmount) limitModalAmount.textContent = `$${amount.toFixed(2)} USDC`;
         
         const receiveAmount = amount / triggerPrice;
         if (limitModalReceive) limitModalReceive.textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
@@ -1001,14 +955,14 @@ const Trading = {
         btn.textContent = 'Submitting...';
         
         try {
-            const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
+            const balance = this.getTriggerCashBalance('USDC');
             const amount = (balance * State.triggerAmountPercent / 100);
             const triggerPrice = parseFloat(State.pendingTriggerPrice.toFixed(2));
             const quantity = parseFloat((amount / triggerPrice).toFixed(8));
             
             const orderData = {
                 primary: State.selectedAsset.code,
-                secondary: State.selectedTriggerCash,
+                secondary: 'USDC',
                 quantity: quantity,
                 assetQuantity: State.selectedAsset.code,
                 orderType: State.pendingOrderType,
@@ -1061,7 +1015,6 @@ const Trading = {
         
         if (!slider) return;
         
-        // Allow full range -20% to +20%, system will determine correct order type
         slider.min = -20;
         slider.max = 20;
         
@@ -1107,9 +1060,8 @@ const Trading = {
         if (!State.selectedAsset) return;
         
         const currentPrice = State.selectedAsset.price || 0;
-        const cashPrice = Assets.getPriceInCurrency(currentPrice, State.cashAsset);
         const multiplier = 1 + (State.autoTradeConfig.deviation / 100);
-        const triggerPrice = cashPrice * multiplier;
+        const triggerPrice = currentPrice * multiplier;
         
         const slider = document.getElementById('autoDevSlider');
         if (!slider) return;
@@ -1142,7 +1094,7 @@ const Trading = {
             }
         }
         
-        const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
+        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
         const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
         
         const autoAllocFill = document.getElementById('autoAllocFill');
@@ -1152,7 +1104,7 @@ const Trading = {
         if (autoAllocFill) autoAllocFill.style.width = State.autoTradeConfig.allocation + '%';
         if (autoAllocPercent) autoAllocPercent.textContent = State.autoTradeConfig.allocation + '%';
         if (autoAllocationValue) autoAllocationValue.textContent = 
-            `${State.autoTradeConfig.allocation}% of ${Assets.formatCurrency(cashBalance)} ${State.cashAsset}`;
+            `${State.autoTradeConfig.allocation}% of ${Assets.formatCurrency(cashBalance)} USDC`;
     },
 
     resetAutoTrade() {
@@ -1200,35 +1152,34 @@ const Trading = {
         
         UI.updateAmountDisplay();
         
-        const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
+        const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
         const assetBalance = State.selectedAsset.balance || 0;
-        const currentAudPrice = State.selectedAsset.price;
-        const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
+        const currentPrice = State.selectedAsset.price;
         
-        Logger.log(`Preparing ${side.toUpperCase()} order - Type: ${State.orderType}, Cash: ${State.cashAsset}`, 'info');
+        Logger.log(`Preparing ${side.toUpperCase()} order - Type: ${State.orderType}, Cash: USDC`, 'info');
         
         let amount, receiveAmount, triggerPrice;
         
         if (State.orderType === 'auto') {
             const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
             const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
-            triggerPrice = cashPrice * deviationMultiplier;
+            triggerPrice = currentPrice * deviationMultiplier;
             
             if (side === 'buy') {
                 amount = allocationAmount;
                 receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
             } else {
                 const sellValue = allocationAmount;
-                amount = sellValue / cashPrice;
+                amount = sellValue / currentPrice;
                 receiveAmount = sellValue;
             }
         } else if (side === 'buy') {
             amount = (State.amountSliderValue / 100) * cashBalance;
-            let effectivePrice = cashPrice;
+            let effectivePrice = currentPrice;
             
             if (State.orderType === 'trigger') {
                 const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                effectivePrice = cashPrice * offsetMultiplier;
+                effectivePrice = currentPrice * offsetMultiplier;
             }
             
             receiveAmount = effectivePrice > 0 ? amount / effectivePrice : 0;
@@ -1236,11 +1187,11 @@ const Trading = {
         } else {
             const sellQuantity = (State.amountSliderValue / 100) * assetBalance;
             amount = sellQuantity;
-            let effectivePrice = cashPrice;
+            let effectivePrice = currentPrice;
             
             if (State.orderType === 'trigger') {
                 const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                effectivePrice = cashPrice * offsetMultiplier;
+                effectivePrice = currentPrice * offsetMultiplier;
             }
             
             receiveAmount = sellQuantity * effectivePrice;
@@ -1266,11 +1217,11 @@ const Trading = {
         const modalReceive = document.getElementById('modalReceive');
         
         if (side === 'buy') {
-            if (modalAmount) modalAmount.textContent = `${Assets.formatCurrency(amount)} ${State.cashAsset}`;
+            if (modalAmount) modalAmount.textContent = `${Assets.formatCurrency(amount)} USDC`;
             if (modalReceive) modalReceive.textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
         } else {
             if (modalAmount) modalAmount.textContent = `${amount.toFixed(8)} ${State.selectedAsset.code}`;
-            if (modalReceive) modalReceive.textContent = `${Assets.formatCurrency(receiveAmount)} ${State.cashAsset}`;
+            if (modalReceive) modalReceive.textContent = `${Assets.formatCurrency(receiveAmount)} USDC`;
         }
         
         const triggerRow = document.getElementById('modalTriggerRow');
@@ -1317,13 +1268,10 @@ const Trading = {
         }
         
         try {
-            // Fetch live rates before placing order
-            await API.fetchLiveRates();
             const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
             
-            const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
+            const cashBalance = State.portfolioData.assets.find(a => a.code === 'USDC')?.aud_value || 0;
             const assetBalance = State.selectedAsset.balance || 0;
-            const cashPrice = Assets.getPriceInCurrency(realtimePrice, State.cashAsset);
             
             let orderData;
             let quantity, triggerPrice;
@@ -1331,14 +1279,13 @@ const Trading = {
             if (State.orderType === 'auto') {
                 const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
                 const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
-                triggerPrice = cashPrice * deviationMultiplier;
+                triggerPrice = realtimePrice * deviationMultiplier;
                 
-                // Determine order type based on trigger vs market
                 let orderType;
                 if (side === 'buy') {
-                    orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+                    orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
                 } else {
-                    orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+                    orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
                 }
                 
                 triggerPrice = parseFloat(triggerPrice.toFixed(2));
@@ -1346,12 +1293,12 @@ const Trading = {
                 if (side === 'buy') {
                     quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
                 } else {
-                    quantity = parseFloat((allocationAmount / cashPrice).toFixed(8));
+                    quantity = parseFloat((allocationAmount / realtimePrice).toFixed(8));
                 }
                 
                 orderData = {
                     primary: State.selectedAsset.code,
-                    secondary: State.cashAsset,
+                    secondary: 'USDC',
                     quantity: quantity,
                     assetQuantity: State.selectedAsset.code,
                     orderType: orderType,
@@ -1361,27 +1308,26 @@ const Trading = {
                 const cashAmount = (State.amountSliderValue / 100) * cashBalance;
                 
                 if (State.orderType === 'instant') {
-                    quantity = parseFloat((cashAmount / cashPrice).toFixed(8));
+                    quantity = parseFloat((cashAmount / realtimePrice).toFixed(8));
                     orderData = {
                         primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
+                        secondary: 'USDC',
                         quantity: quantity,
                         orderType: 'MARKET_BUY',
                         assetQuantity: State.selectedAsset.code
                     };
                 } else {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                    triggerPrice = cashPrice * offsetMultiplier;
+                    triggerPrice = realtimePrice * offsetMultiplier;
                     
-                    // Determine correct order type
-                    const orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+                    const orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
                     triggerPrice = parseFloat(triggerPrice.toFixed(2));
                     
                     quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
                     
                     orderData = {
                         primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
+                        secondary: 'USDC',
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
                         orderType: orderType,
@@ -1395,22 +1341,21 @@ const Trading = {
                 if (State.orderType === 'instant') {
                     orderData = {
                         primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
+                        secondary: 'USDC',
                         quantity: quantity,
                         orderType: 'MARKET_SELL',
                         assetQuantity: State.selectedAsset.code
                     };
                 } else {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
-                    triggerPrice = cashPrice * offsetMultiplier;
+                    triggerPrice = realtimePrice * offsetMultiplier;
                     
-                    // Determine correct order type
-                    const orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+                    const orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
                     triggerPrice = parseFloat(triggerPrice.toFixed(2));
                     
                     orderData = {
                         primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
+                        secondary: 'USDC',
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
                         orderType: orderType,
