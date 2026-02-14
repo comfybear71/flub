@@ -110,7 +110,6 @@
                     </button>
                 </div>
                 
-                <!-- INSTANT AMOUNT SECTION -->
                 <div class="amount-compact" id="amountSection">
                     <div class="cash-toggle">
                         <button class="cash-option active" id="optAUD" onclick="UI.setCash('AUD')">
@@ -142,14 +141,12 @@
                     </div>
                 </div>
                 
-                <!-- TRIGGER SECTION -->
                 <div class="trigger-compact" id="triggerSection">
                     <div class="trigger-header">
                         <span class="trigger-title" id="triggerTitle">Trigger Price</span>
                         <span class="trigger-reset" onclick="Trading.resetTrigger()">Reset</span>
                     </div>
                     
-                    <!-- Cash Selection -->
                     <div class="cash-toggle streamlined">
                         <button class="cash-option active" id="triggerOptAUD" onclick="Trading.setTriggerCash('AUD')">
                             <div class="icon" style="background: #f59e0b20; color: #f59e0b;">A$</div>
@@ -163,7 +160,6 @@
                         </button>
                     </div>
                     
-                    <!-- Limit Buttons -->
                     <div class="limit-toggle" id="limitButtons">
                         <button class="limit-btn buy-limit" id="btnBuyLimit" onclick="Trading.selectLimitType('buy')">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -179,7 +175,6 @@
                         </button>
                     </div>
                     
-                    <!-- Confirmation Button (hidden initially) -->
                     <button class="confirm-limit-btn hidden" id="confirmLimitBtn" onclick="Trading.showConfirmModal()">
                         <span id="confirmBtnText">Confirm Buy Limit</span>
                         <svg class="spinner hidden" id="confirmSpinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -187,14 +182,12 @@
                         </svg>
                     </button>
                     
-                    <!-- Trigger Price Display -->
                     <div class="trigger-price-row" id="triggerPriceRow">
                         <div class="trigger-price" id="triggerPrice">$0.00</div>
                         <div class="trigger-offset" id="triggerOffset">+0%</div>
                     </div>
                     
-                    <!-- Trigger Price Slider -->
-                    <div class="slider-section" id="triggerSliderSection">
+                    <div class="slider-section hidden" id="triggerSliderSection">
                         <div class="slider-label">Set trigger price</div>
                         <div class="slider-box">
                             <div class="slider-track"></div>
@@ -208,8 +201,7 @@
                         </div>
                     </div>
                     
-                    <!-- Amount Slider -->
-                    <div class="slider-section" id="amountSliderSection">
+                    <div class="slider-section hidden" id="amountSliderSection">
                         <div class="slider-label" id="amountSliderLabel">Amount (AUD)</div>
                         <div class="amount-display-small" id="triggerAmountDisplay">$0.00</div>
                         <div class="slider-box">
@@ -227,7 +219,6 @@
                     <div id="triggerError" class="error-message" style="display: none; margin-top: 8px;"></div>
                 </div>
                 
-                <!-- AUTO SECTION -->
                 <div class="auto-compact" id="autoSection">
                     <div class="auto-header">
                         <span class="auto-title">Auto Trade Settings</span>
@@ -314,7 +305,6 @@
 
 </div>
 
-<!-- PIN Modal -->
 <div id="pinModal" class="pin-modal-overlay">
     <div class="pin-modal-content">
         <div class="pin-title">Trading PIN Required</div>
@@ -325,7 +315,6 @@
     </div>
 </div>
 
-<!-- Limit Order Confirmation Modal -->
 <div id="limitConfirmModal" class="trade-modal-overlay">
     <div class="trade-modal-content">
         <div class="trade-modal-title" id="limitModalTitle">Confirm Limit Order</div>
@@ -358,7 +347,6 @@
     </div>
 </div>
 
-<!-- Success Modal -->
 <div id="successModal" class="trade-modal-overlay">
     <div class="trade-modal-content" style="text-align: center;">
         <div style="width: 60px; height: 60px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
@@ -372,7 +360,6 @@
     </div>
 </div>
 
-<!-- Trade Confirmation Modal -->
 <div id="tradeModal" class="trade-modal-overlay">
     <div class="trade-modal-content">
         <div class="trade-modal-title" id="tradeModalTitle">Confirm Trade</div>
