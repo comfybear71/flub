@@ -249,6 +249,7 @@ body {
     display: none;
 }
 
+/* Default cash toggle for instant section */
 .cash-toggle {
     display: flex;
     gap: 4px;
@@ -297,16 +298,30 @@ body {
     font-weight: 500;
 }
 
-/* Streamlined cash toggle for trigger section */
-.trigger-compact .cash-toggle.streamlined {
+/* TRIGGER SECTION - Streamlined styles */
+.trigger-compact {
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 10px;
+    display: none;
+}
+
+.trigger-compact.show {
+    display: block;
+}
+
+.trigger-compact .cash-toggle {
     display: flex;
     gap: 4px;
     margin-bottom: 8px;
 }
 
-.trigger-compact .cash-toggle.streamlined .cash-option {
+/* Streamlined cash buttons - single line, 28px height */
+.trigger-compact .cash-option {
     flex: 1;
-    height: 28px;
+    height: 28px !important;
+    min-height: 28px;
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 23, 42, 0.3);
@@ -315,21 +330,22 @@ body {
     font-weight: 600;
     cursor: pointer;
     display: flex;
-    flex-direction: row;
+    flex-direction: row !important;
     align-items: center;
     justify-content: center;
     gap: 4px;
     transition: all 0.15s;
     padding: 0 8px;
+    line-height: 1;
 }
 
-.trigger-compact .cash-toggle.streamlined .cash-option.active {
+.trigger-compact .cash-option.active {
     background: #3b82f6;
     color: white;
     border-color: #3b82f6;
 }
 
-.trigger-compact .cash-toggle.streamlined .cash-option .icon {
+.trigger-compact .cash-option .icon {
     width: 14px;
     height: 14px;
     border-radius: 50%;
@@ -338,15 +354,16 @@ body {
     justify-content: center;
     font-size: 8px;
     font-weight: bold;
+    flex-shrink: 0;
 }
 
-.trigger-compact .cash-toggle.streamlined .cash-option .balance {
+.trigger-compact .cash-option .balance {
     font-size: 10px;
     opacity: 0.9;
     font-weight: 500;
 }
 
-/* Limit toggle buttons */
+/* Limit toggle - same height as order buttons */
 .limit-toggle {
     display: flex;
     gap: 4px;
@@ -356,6 +373,7 @@ body {
 .limit-btn {
     flex: 1;
     height: 28px;
+    min-height: 28px;
     border-radius: 6px;
     border: none;
     background: rgba(15, 23, 42, 0.4);
@@ -368,6 +386,7 @@ body {
     justify-content: center;
     gap: 4px;
     transition: all 0.2s;
+    line-height: 1;
 }
 
 .limit-btn.buy-limit {
@@ -400,10 +419,11 @@ body {
     border-color: #ef4444;
 }
 
-/* Confirmation button */
+/* Confirmation button - full width, same height */
 .confirm-limit-btn {
     width: 100%;
     height: 28px;
+    min-height: 28px;
     border-radius: 6px;
     border: none;
     background: #3b82f6;
@@ -417,6 +437,7 @@ body {
     gap: 6px;
     transition: all 0.2s;
     margin-bottom: 8px;
+    line-height: 1;
 }
 
 .confirm-limit-btn:hover {
@@ -538,19 +559,6 @@ input[type=range]::-webkit-slider-runnable-track {
     font-weight: 700;
     color: white;
     margin-bottom: 6px;
-}
-
-/* TRIGGER SECTION */
-.trigger-compact {
-    background: rgba(30, 41, 59, 0.4);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 10px;
-    display: none;
-}
-
-.trigger-compact.show {
-    display: block;
 }
 
 .trigger-header {
