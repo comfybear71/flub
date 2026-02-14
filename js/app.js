@@ -2,7 +2,7 @@
 // CONFIG - Constants & Configuration
 // ==========================================
 const CONFIG = {
-    API_URL: 'https://portfolio-api-jade-delta.vercel.app',
+    API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '', // Set via PIN modal
     ASSET_STYLES: {
         'BTC': { color: '#f97316', icon: '₿', name: 'Bitcoin' },
