@@ -111,14 +111,6 @@
                 </div>
                 
                 <div class="amount-compact" id="amountSection">
-                    <div class="cash-toggle">
-                        <button class="cash-option active" id="optUSDC" onclick="UI.setCash('USDC')">
-                            <div class="icon" style="background: #22c55e20; color: #22c55e;">$</div>
-                            <span>USDC</span>
-                            <span class="balance" id="instantUsdcBalance">$0.00</span>
-                        </button>
-                    </div>
-                    
                     <div class="amount-display">
                         <div class="amount-value" id="amountValue">$0.00</div>
                         <div class="amount-conversion" id="conversionText">≈ 0 BTC</div>
@@ -140,14 +132,6 @@
                     <div class="trigger-header">
                         <span class="trigger-title" id="triggerTitle">Trigger Price</span>
                         <span class="trigger-reset" onclick="Trading.resetTrigger()">Reset</span>
-                    </div>
-                    
-                    <div class="cash-toggle streamlined">
-                        <button class="cash-option active" id="triggerOptUSDC" onclick="Trading.setTriggerCash('USDC')">
-                            <div class="icon" style="background: #22c55e20; color: #22c55e;">$</div>
-                            <span>USDC</span>
-                            <span class="balance" id="triggerUsdcBalance">$0.00</span>
-                        </button>
                     </div>
                     
                     <div class="limit-toggle" id="limitButtons">
@@ -267,7 +251,7 @@
         <div class="holdings-header">
             <h2 class="text-lg font-bold holdings-title">Holdings</h2>
             
-            <!-- AUD/USDC Balances in the red rectangle area -->
+            <!-- AUD/USDC Balances in the center -->
             <div class="cash-balances-header">
                 <div class="cash-balance-item usdc">
                     <span class="cash-dot usdc-dot"></span>
