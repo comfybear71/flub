@@ -147,6 +147,9 @@ const API = {
     },
 
     async placeOrder(orderData) {
+        Logger.log('API Request: POST /orders/', 'info');
+        Logger.log('Order data: ' + JSON.stringify(orderData), 'info');
+        
         const res = await fetch('/api/proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -158,6 +161,14 @@ const API = {
                 pin: CONFIG.TRADE_PIN
             })
         });
+        
+        Logger.log(`API Response: ${res.status} ${res.statusText}`, res.ok ? 'success' : 'error');
+        
+        if (!res.ok) {
+            const errorBody = await res.text();
+            Logger.log('Error response: ' + errorBody, 'error');
+        }
+        
         return res;
     }
 };
@@ -760,56 +771,104 @@ const Trading = {
     },
 
     showConfirmModal() {
+        if (!State.selectedAsset) {
+            alert('No asset selected');
+            return;
+        }
+        
+        if (State.triggerAmountPercent === 0) {
+            alert('Please select an amount');
+            return;
+        }
+        
         const btn = document.getElementById('confirmLimitBtn');
         const spinner = document.getElementById('confirmSpinner');
         const text = document.getElementById('confirmBtnText');
         
         btn.disabled = true;
         spinner.classList.remove('hidden');
-        text.textContent = 'Processing...';
+        text.textContent = 'Loading...';
         
-        setTimeout(() => {
-            const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
-            const multiplier = 1 + (State.triggerOffset / 100);
-            const triggerPrice = currentPrice * multiplier;
-            const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
-            const amount = (balance * State.triggerAmountPercent / 100);
-            
-            document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Limit' : 'Sell Limit';
-            document.getElementById('limitModalType').style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
-            document.getElementById('limitModalAsset').textContent = State.selectedAsset ? State.selectedAsset.code : 'BTC';
-            document.getElementById('limitModalTrigger').textContent = Assets.formatCurrency(triggerPrice);
-            document.getElementById('limitModalAmount').textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
-            
-            const receiveAmount = amount / triggerPrice;
-            document.getElementById('limitModalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset ? State.selectedAsset.code : 'BTC'}`;
-            
-            document.getElementById('limitConfirmModal').classList.add('show');
-            
-            btn.disabled = false;
-            spinner.classList.add('hidden');
-            text.textContent = State.selectedLimitType === 'buy' ? 'Confirm Buy Limit' : 'Confirm Sell Limit';
-        }, 500);
+        const currentPrice = State.selectedAsset.price || 0;
+        const multiplier = 1 + (State.triggerOffset / 100);
+        const triggerPrice = currentPrice * multiplier;
+        const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
+        const amount = (balance * State.triggerAmountPercent / 100);
+        
+        document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Limit' : 'Sell Limit';
+        document.getElementById('limitModalType').style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+        document.getElementById('limitModalAsset').textContent = State.selectedAsset.code;
+        document.getElementById('limitModalTrigger').textContent = Assets.formatCurrency(triggerPrice);
+        document.getElementById('limitModalAmount').textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
+        
+        const receiveAmount = amount / triggerPrice;
+        document.getElementById('limitModalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
+        
+        document.getElementById('limitConfirmModal').classList.add('show');
+        
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+        text.textContent = State.selectedLimitType === 'buy' ? 'Confirm Buy Limit' : 'Confirm Sell Limit';
     },
 
     closeLimitModal() {
         document.getElementById('limitConfirmModal').classList.remove('show');
     },
 
-    executeLimitOrder() {
+    executeLimitOrder: async function() {
         const btn = document.getElementById('limitModalExecuteBtn');
+        const originalText = btn.textContent;
+        
         btn.disabled = true;
         btn.textContent = 'Submitting...';
         
-        setTimeout(() => {
+        try {
+            const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
+            const multiplier = 1 + (State.triggerOffset / 100);
+            const triggerPrice = parseFloat((currentPrice * multiplier).toFixed(2));
+            const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
+            const amount = (balance * State.triggerAmountPercent / 100);
+            const quantity = parseFloat((amount / triggerPrice).toFixed(8));
+            
+            const orderData = {
+                primary: State.selectedAsset.code,
+                secondary: State.selectedTriggerCash,
+                quantity: quantity,
+                assetQuantity: State.selectedAsset.code,
+                orderType: State.selectedLimitType === 'buy' ? 'LIMIT_BUY' : 'LIMIT_SELL',
+                trigger: triggerPrice
+            };
+            
+            Logger.log(`Sending LIMIT ${State.selectedLimitType.toUpperCase()} order:`, 'info');
+            Logger.log(`Asset: ${orderData.primary}, Quantity: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
+            
+            const res = await API.placeOrder(orderData);
+            
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(errorText || `HTTP ${res.status}`);
+            }
+            
+            const data = await res.json();
+            
+            Logger.log(`✅ Limit order placed! Order ID: ${data.id || data.orderId || 'N/A'}`, 'success');
+            Logger.log(`Response: ${JSON.stringify(data).substring(0, 200)}`, 'info');
+            
             document.getElementById('limitConfirmModal').classList.remove('show');
             document.getElementById('successModal').classList.add('show');
             
-            btn.disabled = false;
-            btn.textContent = 'Execute';
+            await API.refreshData();
+            this.updateTriggerButtonBalances();
             
+        } catch (error) {
+            Logger.log(`❌ Limit order failed: ${error.message}`, 'error');
+            alert('Order failed: ' + error.message);
+            document.getElementById('limitConfirmModal').classList.remove('show');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
             this.resetTriggerForm();
-        }, 800);
+        }
     },
 
     closeSuccessModal() {
