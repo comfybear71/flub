@@ -65,7 +65,10 @@ const State = {
     },
     selectedTriggerCash: 'AUD',
     selectedLimitType: null,
-    triggerAmountPercent: 0
+    triggerAmountPercent: 0,
+    liveRates: {},
+    pendingOrderType: null,
+    pendingTriggerPrice: 0
 };
 
 // ==========================================
@@ -111,7 +114,7 @@ const API = {
 
     async refreshData() {
         const btn = document.getElementById('refreshBtn');
-        btn.classList.add('spinning');
+        if (btn) btn.classList.add('spinning');
         
         try {
             Logger.log('Fetching portfolio data...', 'info');
@@ -119,18 +122,39 @@ const API = {
             const response = await fetch(CONFIG.API_URL);
             const data = await response.json();
             
-            State.portfolioData.assets = data.assets
-                .filter(asset => asset.code !== 'USD')
+            Logger.log('Portfolio data received: ' + JSON.stringify(data).substring(0, 200), 'info');
+            
+            // Handle different possible response structures
+            let assets = [];
+            if (data && Array.isArray(data.assets)) {
+                assets = data.assets;
+            } else if (data && Array.isArray(data)) {
+                assets = data;
+            } else if (data && data.data && Array.isArray(data.data.assets)) {
+                assets = data.data.assets;
+            } else {
+                throw new Error('Unexpected data structure: ' + typeof data);
+            }
+            
+            State.portfolioData.assets = assets
+                .filter(asset => asset && asset.code !== 'USD')
                 .map(asset => ({
-                    code: asset.code,
-                    name: asset.name,
+                    code: asset.code || 'UNKNOWN',
+                    name: asset.name || asset.code || 'Unknown',
                     balance: parseFloat(asset.balance || 0),
-                    aud_value: parseFloat(asset.aud_value || 0),
-                    price: parseFloat(asset.aud_value || 0) / parseFloat(asset.balance || 1),
-                    change_24h: parseFloat(asset.change_24h || 0),
-                    asset_id: asset.asset_id
+                    aud_value: parseFloat(asset.aud_value || asset.value || 0),
+                    price: parseFloat(asset.aud_value || asset.value || 0) / parseFloat(asset.balance || 1),
+                    change_24h: parseFloat(asset.change_24h || asset.change || 0),
+                    asset_id: asset.asset_id || asset.id
                 }))
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
+            
+            // Fetch live rates for accurate pricing (optional)
+            try {
+                await this.fetchLiveRates();
+            } catch (e) {
+                Logger.log('Live rates optional fetch failed', 'info');
+            }
             
             Assets.sort(State.currentSort);
             
@@ -141,9 +165,54 @@ const API = {
             
         } catch (error) {
             Logger.log('Refresh error: ' + error.message, 'error');
+            document.getElementById('holdings-list').innerHTML = `
+                <div style="text-align: center; color: #ef4444; padding: 40px;">
+                    Error loading portfolio: ${error.message}<br>
+                    <button onclick="App.refreshData()" style="margin-top: 20px; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Retry</button>
+                </div>
+            `;
         } finally {
-            btn.classList.remove('spinning');
+            if (btn) btn.classList.remove('spinning');
         }
+    },
+
+    async fetchLiveRates() {
+        try {
+            const res = await fetch('/api/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: '/markets/live/rates/AUD/',
+                    method: 'GET',
+                    authToken: State.jwtToken
+                })
+            });
+            
+            if (res.ok) {
+                const rates = await res.json();
+                State.liveRates = {};
+                if (Array.isArray(rates)) {
+                    rates.forEach(rate => {
+                        if (rate.asset && rate.rate) {
+                            State.liveRates[rate.asset] = parseFloat(rate.rate);
+                        }
+                    });
+                    Logger.log(`Live rates fetched for ${rates.length} assets`, 'info');
+                }
+            } else {
+                Logger.log('Live rates fetch failed: ' + res.status, 'warning');
+            }
+        } catch (error) {
+            Logger.log('Failed to fetch live rates: ' + error.message, 'warning');
+        }
+    },
+
+    getRealtimePrice(assetCode) {
+        if (State.liveRates[assetCode]) {
+            return State.liveRates[assetCode];
+        }
+        const asset = State.portfolioData.assets.find(a => a.code === assetCode);
+        return asset ? asset.price : 0;
     },
 
     async placeOrder(orderData) {
@@ -179,6 +248,8 @@ const API = {
 const Logger = {
     log(message, type = 'info') {
         const container = document.getElementById('log-container');
+        if (!container) return;
+        
         const time = new Date().toLocaleTimeString('en-US', { hour12: false });
         const entry = document.createElement('div');
         entry.className = 'log-entry';
@@ -207,7 +278,8 @@ const Assets = {
         State.currentSort = sortType;
         
         document.querySelectorAll('[id^="check-"]').forEach(el => el.classList.add('hidden'));
-        document.getElementById(`check-${sortType}`).classList.remove('hidden');
+        const checkEl = document.getElementById(`check-${sortType}`);
+        if (checkEl) checkEl.classList.remove('hidden');
         
         const labels = {
             'value': 'Sort: Value',
@@ -215,7 +287,8 @@ const Assets = {
             'name': 'Sort: Name',
             'balance': 'Sort: Balance'
         };
-        document.getElementById('currentSortLabel').textContent = labels[sortType];
+        const sortLabel = document.getElementById('currentSortLabel');
+        if (sortLabel) sortLabel.textContent = labels[sortType];
         
         if (sortType === 'value') {
             State.portfolioData.assets.sort((a, b) => (b.aud_value || 0) - (a.aud_value || 0));
@@ -272,27 +345,31 @@ const UI = {
     checkPin() {
         const savedPin = localStorage.getItem('tradePin');
         if (!savedPin) {
-            document.getElementById('pinModal').classList.add('show');
+            const pinModal = document.getElementById('pinModal');
+            if (pinModal) pinModal.classList.add('show');
         } else {
             CONFIG.TRADE_PIN = savedPin;
         }
     },
 
     unlockTrading() {
-        const pinInput = document.getElementById('pinInput').value;
+        const pinInput = document.getElementById('pinInput');
         const pinError = document.getElementById('pinError');
         const pinBtn = document.getElementById('pinBtn');
+        
+        if (!pinInput || !pinBtn) return;
         
         pinBtn.disabled = true;
         pinBtn.textContent = 'Verifying...';
         
-        if (pinInput.length >= 4) {
-            CONFIG.TRADE_PIN = pinInput;
-            localStorage.setItem('tradePin', pinInput);
-            document.getElementById('pinModal').classList.remove('show');
+        if (pinInput.value.length >= 4) {
+            CONFIG.TRADE_PIN = pinInput.value;
+            localStorage.setItem('tradePin', pinInput.value);
+            const pinModal = document.getElementById('pinModal');
+            if (pinModal) pinModal.classList.remove('show');
             Logger.log('Trading unlocked', 'success');
         } else {
-            pinError.classList.add('show');
+            if (pinError) pinError.classList.add('show');
             pinBtn.disabled = false;
             pinBtn.textContent = 'Unlock';
         }
@@ -300,6 +377,8 @@ const UI = {
 
     updateStatus(status) {
         const el = document.getElementById('api-status');
+        if (!el) return;
+        
         if (status === 'connected') {
             el.className = 'api-status api-connected';
             el.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-400"></span> Connected';
@@ -315,9 +394,12 @@ const UI = {
     },
 
     updateLastUpdated() {
+        const el = document.getElementById('last-updated');
+        if (!el) return;
+        
         const now = new Date();
         const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        document.getElementById('last-updated').textContent = `Last updated: ${time}`;
+        el.textContent = `Last updated: ${time}`;
     },
 
     renderPortfolio() {
@@ -349,8 +431,10 @@ const UI = {
             }
         });
         
-        document.getElementById('total-value').textContent = Assets.formatCurrency(total);
-        document.getElementById('asset-count').textContent = cryptoAssets.length + ' assets';
+        const totalEl = document.getElementById('total-value');
+        const countEl = document.getElementById('asset-count');
+        if (totalEl) totalEl.textContent = Assets.formatCurrency(total);
+        if (countEl) countEl.textContent = cryptoAssets.length + ' assets';
     },
 
     renderHoldings() {
@@ -416,14 +500,22 @@ const UI = {
         State.amountSliderValue = 0;
         State.triggerOffset = 0;
         State.isMiniChartVisible = false;
-        document.getElementById('amountSlider').value = 0;
-        document.getElementById('triggerSlider').value = 0;
-        document.getElementById('miniChartContainer').classList.remove('show');
-        document.getElementById('chartToggleBtn').classList.remove('active');
+        
+        const amountSlider = document.getElementById('amountSlider');
+        const triggerSlider = document.getElementById('triggerSlider');
+        if (amountSlider) amountSlider.value = 0;
+        if (triggerSlider) triggerSlider.value = 0;
+        
+        const miniChartContainer = document.getElementById('miniChartContainer');
+        const chartToggleBtn = document.getElementById('chartToggleBtn');
+        if (miniChartContainer) miniChartContainer.classList.remove('show');
+        if (chartToggleBtn) chartToggleBtn.classList.remove('active');
         
         State.autoTradeConfig = { deviation: 0, allocation: 0 };
-        document.getElementById('autoDevSlider').value = 0;
-        document.getElementById('autoAllocSlider').value = 0;
+        const autoDevSlider = document.getElementById('autoDevSlider');
+        const autoAllocSlider = document.getElementById('autoAllocSlider');
+        if (autoDevSlider) autoDevSlider.value = 0;
+        if (autoAllocSlider) autoAllocSlider.value = 0;
         
         Trading.updateTriggerButtonBalances();
         
@@ -431,21 +523,28 @@ const UI = {
         Trading.updateTriggerDisplay();
         Trading.updateAutoTradeDisplay();
         
-        document.getElementById('chartSection').classList.add('trading-open');
-        document.getElementById('chartSlider').classList.add('slide-left');
+        const chartSection = document.getElementById('chartSection');
+        const chartSlider = document.getElementById('chartSlider');
+        if (chartSection) chartSection.classList.add('trading-open');
+        if (chartSlider) chartSlider.classList.add('slide-left');
         
         document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
-        event.currentTarget.classList.add('selected');
+        if (event && event.currentTarget) event.currentTarget.classList.add('selected');
     },
 
     closeTradingView() {
-        document.getElementById('chartSection').classList.remove('trading-open');
-        document.getElementById('chartSlider').classList.remove('slide-left');
+        const chartSection = document.getElementById('chartSection');
+        const chartSlider = document.getElementById('chartSlider');
+        if (chartSection) chartSection.classList.remove('trading-open');
+        if (chartSlider) chartSlider.classList.remove('slide-left');
+        
         document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
         
         State.isMiniChartVisible = false;
-        document.getElementById('miniChartContainer').classList.remove('show');
-        document.getElementById('chartToggleBtn').classList.remove('active');
+        const miniChartContainer = document.getElementById('miniChartContainer');
+        const chartToggleBtn = document.getElementById('chartToggleBtn');
+        if (miniChartContainer) miniChartContainer.classList.remove('show');
+        if (chartToggleBtn) chartToggleBtn.classList.remove('active');
     },
 
     toggleMiniChart() {
@@ -454,14 +553,14 @@ const UI = {
         const btn = document.getElementById('chartToggleBtn');
         
         if (State.isMiniChartVisible) {
-            container.classList.add('show');
-            btn.classList.add('active');
+            if (container) container.classList.add('show');
+            if (btn) btn.classList.add('active');
             if (State.selectedAsset) {
                 this.renderMiniChart(CONFIG.ASSET_STYLES[State.selectedAsset.code].color);
             }
         } else {
-            container.classList.remove('show');
-            btn.classList.remove('active');
+            if (container) container.classList.remove('show');
+            if (btn) btn.classList.remove('active');
         }
     },
 
@@ -515,36 +614,46 @@ const UI = {
 
     setOrderType(type) {
         State.orderType = type;
-        document.getElementById('btnInstant').classList.toggle('active', type === 'instant');
-        document.getElementById('btnTrigger').classList.toggle('active', type === 'trigger');
-        document.getElementById('btnAuto').classList.toggle('active', type === 'auto');
+        
+        const btnInstant = document.getElementById('btnInstant');
+        const btnTrigger = document.getElementById('btnTrigger');
+        const btnAuto = document.getElementById('btnAuto');
+        
+        if (btnInstant) btnInstant.classList.toggle('active', type === 'instant');
+        if (btnTrigger) btnTrigger.classList.toggle('active', type === 'trigger');
+        if (btnAuto) btnAuto.classList.toggle('active', type === 'auto');
         
         const amountSection = document.getElementById('amountSection');
         const triggerSection = document.getElementById('triggerSection');
         const autoSection = document.getElementById('autoSection');
         
         if (type === 'instant') {
-            amountSection.classList.remove('hidden');
-            triggerSection.classList.remove('show');
-            autoSection.classList.remove('show');
+            if (amountSection) amountSection.classList.remove('hidden');
+            if (triggerSection) triggerSection.classList.remove('show');
+            if (autoSection) autoSection.classList.remove('show');
         } else if (type === 'trigger') {
-            amountSection.classList.add('hidden');
-            triggerSection.classList.add('show');
-            autoSection.classList.remove('show');
+            if (amountSection) amountSection.classList.add('hidden');
+            if (triggerSection) triggerSection.classList.add('show');
+            if (autoSection) autoSection.classList.remove('show');
             Trading.resetTrigger();
         } else if (type === 'auto') {
-            amountSection.classList.add('hidden');
-            triggerSection.classList.remove('show');
-            autoSection.classList.add('show');
+            if (amountSection) amountSection.classList.add('hidden');
+            if (triggerSection) triggerSection.classList.remove('show');
+            if (autoSection) autoSection.classList.add('show');
         }
         
         State.triggerOffset = 0;
         State.autoTradeConfig.deviation = 0;
-        document.getElementById('triggerSlider').value = 0;
-        document.getElementById('autoDevSlider').value = 0;
         
-        document.getElementById('triggerError').style.display = 'none';
-        document.getElementById('autoError').style.display = 'none';
+        const triggerSlider = document.getElementById('triggerSlider');
+        const autoDevSlider = document.getElementById('autoDevSlider');
+        if (triggerSlider) triggerSlider.value = 0;
+        if (autoDevSlider) autoDevSlider.value = 0;
+        
+        const triggerError = document.getElementById('triggerError');
+        const autoError = document.getElementById('autoError');
+        if (triggerError) triggerError.style.display = 'none';
+        if (autoError) autoError.style.display = 'none';
         
         Trading.updateTriggerDisplay();
         Trading.updateAutoTradeDisplay();
@@ -553,8 +662,12 @@ const UI = {
 
     setCash(cash) {
         State.cashAsset = cash;
-        document.getElementById('optAUD').classList.toggle('active', cash === 'AUD');
-        document.getElementById('optUSDC').classList.toggle('active', cash === 'USDC');
+        
+        const optAUD = document.getElementById('optAUD');
+        const optUSDC = document.getElementById('optUSDC');
+        if (optAUD) optAUD.classList.toggle('active', cash === 'AUD');
+        if (optUSDC) optUSDC.classList.toggle('active', cash === 'USDC');
+        
         UI.updateAmountDisplay();
         Trading.updateAutoTradeDisplay();
         Trading.updateTriggerDisplay();
@@ -562,8 +675,12 @@ const UI = {
 
     updateAmountSlider(value) {
         State.amountSliderValue = parseInt(value);
-        document.getElementById('amountFill').style.width = State.amountSliderValue + '%';
-        document.getElementById('amountPercent').textContent = State.amountSliderValue + '%';
+        
+        const amountFill = document.getElementById('amountFill');
+        const amountPercent = document.getElementById('amountPercent');
+        if (amountFill) amountFill.style.width = State.amountSliderValue + '%';
+        if (amountPercent) amountPercent.textContent = State.amountSliderValue + '%';
+        
         UI.updateAmountDisplay();
     },
 
@@ -588,18 +705,24 @@ const UI = {
             conversionText = `≈ ${receiveAmount.toFixed(8)} ${State.selectedAsset?.code || ''}`;
         }
         
-        document.getElementById('amountValue').textContent = Assets.formatCurrency(displayAmount);
-        document.getElementById('conversionText').textContent = conversionText;
+        const amountValue = document.getElementById('amountValue');
+        const conversionTextEl = document.getElementById('conversionText');
+        if (amountValue) amountValue.textContent = Assets.formatCurrency(displayAmount);
+        if (conversionTextEl) conversionTextEl.textContent = conversionText;
     },
 
     toggleSort() {
-        document.getElementById('sortModal').classList.add('show');
-        document.getElementById('modalOverlay').classList.add('show');
+        const sortModal = document.getElementById('sortModal');
+        const modalOverlay = document.getElementById('modalOverlay');
+        if (sortModal) sortModal.classList.add('show');
+        if (modalOverlay) modalOverlay.classList.add('show');
     },
 
     closeSort() {
-        document.getElementById('sortModal').classList.remove('show');
-        document.getElementById('modalOverlay').classList.remove('show');
+        const sortModal = document.getElementById('sortModal');
+        const modalOverlay = document.getElementById('modalOverlay');
+        if (sortModal) sortModal.classList.remove('show');
+        if (modalOverlay) modalOverlay.classList.remove('show');
     },
 
     selectSort(type) {
@@ -623,31 +746,36 @@ const Trading = {
         const usdcBalance = this.getTriggerCashBalance('USDC');
         
         const audBtn = document.getElementById('triggerOptAUD');
-        if (audBtn) {
-            audBtn.querySelector('.balance').textContent = Assets.formatCurrency(audBalance);
-        }
-        
         const usdcBtn = document.getElementById('triggerOptUSDC');
-        if (usdcBtn) {
-            usdcBtn.querySelector('.balance').textContent = Assets.formatCurrency(usdcBalance);
+        
+        if (audBtn) {
+            const balanceEl = audBtn.querySelector('.balance');
+            if (balanceEl) balanceEl.textContent = Assets.formatCurrency(audBalance);
         }
         
-        document.getElementById('amountSliderLabel').textContent = `Amount (${State.selectedTriggerCash})`;
+        if (usdcBtn) {
+            const balanceEl = usdcBtn.querySelector('.balance');
+            if (balanceEl) balanceEl.textContent = Assets.formatCurrency(usdcBalance);
+        }
+        
+        const amountSliderLabel = document.getElementById('amountSliderLabel');
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (${State.selectedTriggerCash})`;
     },
 
     setTriggerCash(currency) {
         State.selectedTriggerCash = currency;
         
-        document.getElementById('triggerOptAUD').classList.toggle('active', currency === 'AUD');
-        document.getElementById('triggerOptUSDC').classList.toggle('active', currency === 'USDC');
+        const triggerOptAUD = document.getElementById('triggerOptAUD');
+        const triggerOptUSDC = document.getElementById('triggerOptUSDC');
+        if (triggerOptAUD) triggerOptAUD.classList.toggle('active', currency === 'AUD');
+        if (triggerOptUSDC) triggerOptUSDC.classList.toggle('active', currency === 'USDC');
         
         const balance = this.getTriggerCashBalance(currency);
-        document.getElementById('amountSliderLabel').textContent = `Amount (${currency})`;
+        const amountSliderLabel = document.getElementById('amountSliderLabel');
+        if (amountSliderLabel) amountSliderLabel.textContent = `Amount (${currency})`;
         
         const balanceText = document.querySelector(`#triggerOpt${currency} .balance`);
-        if (balanceText) {
-            balanceText.textContent = Assets.formatCurrency(balance);
-        }
+        if (balanceText) balanceText.textContent = Assets.formatCurrency(balance);
         
         this.updateTriggerAmountSlider(0);
         
@@ -658,25 +786,33 @@ const Trading = {
         State.selectedLimitType = type;
         State.pendingTradeSide = type;
         
-        document.getElementById('limitButtons').classList.add('hidden');
-        document.getElementById('confirmLimitBtn').classList.remove('hidden');
-        document.getElementById('confirmBtnText').textContent = type === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
+        const limitButtons = document.getElementById('limitButtons');
+        const confirmLimitBtn = document.getElementById('confirmLimitBtn');
+        const confirmBtnText = document.getElementById('confirmBtnText');
         
-        document.getElementById('triggerSliderSection').classList.remove('hidden');
-        document.getElementById('amountSliderSection').classList.remove('hidden');
+        if (limitButtons) limitButtons.classList.add('hidden');
+        if (confirmLimitBtn) confirmLimitBtn.classList.remove('hidden');
+        if (confirmBtnText) confirmBtnText.textContent = type === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
+        
+        const triggerSliderSection = document.getElementById('triggerSliderSection');
+        const amountSliderSection = document.getElementById('amountSliderSection');
+        if (triggerSliderSection) triggerSliderSection.classList.remove('hidden');
+        if (amountSliderSection) amountSliderSection.classList.remove('hidden');
         
         const confirmBtn = document.getElementById('confirmLimitBtn');
-        if (type === 'buy') {
-            confirmBtn.style.background = '#22c55e';
-            confirmBtn.onmouseenter = () => confirmBtn.style.background = '#16a34a';
-            confirmBtn.onmouseleave = () => confirmBtn.style.background = '#22c55e';
-            this.setTriggerConstraints('buy');
-        } else {
-            confirmBtn.style.background = '#ef4444';
-            confirmBtn.onmouseenter = () => confirmBtn.style.background = '#dc2626';
-            confirmBtn.onmouseleave = () => confirmBtn.style.background = '#ef4444';
-            this.setTriggerConstraints('sell');
+        if (confirmBtn) {
+            if (type === 'buy') {
+                confirmBtn.style.background = '#22c55e';
+                confirmBtn.onmouseenter = () => confirmBtn.style.background = '#16a34a';
+                confirmBtn.onmouseleave = () => confirmBtn.style.background = '#22c55e';
+            } else {
+                confirmBtn.style.background = '#ef4444';
+                confirmBtn.onmouseenter = () => confirmBtn.style.background = '#dc2626';
+                confirmBtn.onmouseleave = () => confirmBtn.style.background = '#ef4444';
+            }
         }
+        
+        this.setTriggerConstraints(type);
         
         Logger.log(`Selected ${type} trigger`, 'info');
     },
@@ -691,9 +827,13 @@ const Trading = {
         const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
         const amount = (balance * State.triggerAmountPercent / 100).toFixed(2);
         
-        document.getElementById('triggerAmountDisplay').textContent = `$${amount}`;
-        document.getElementById('triggerAmountPercent').textContent = State.triggerAmountPercent + '%';
-        document.getElementById('triggerAmountFill').style.width = State.triggerAmountPercent + '%';
+        const triggerAmountDisplay = document.getElementById('triggerAmountDisplay');
+        const triggerAmountPercent = document.getElementById('triggerAmountPercent');
+        const triggerAmountFill = document.getElementById('triggerAmountFill');
+        
+        if (triggerAmountDisplay) triggerAmountDisplay.textContent = `$${amount}`;
+        if (triggerAmountPercent) triggerAmountPercent.textContent = State.triggerAmountPercent + '%';
+        if (triggerAmountFill) triggerAmountFill.style.width = State.triggerAmountPercent + '%';
     },
 
     updateTriggerDisplay() {
@@ -704,26 +844,33 @@ const Trading = {
         const triggerPrice = currentPrice * multiplier;
         
         const slider = document.getElementById('triggerSlider');
+        if (!slider) return;
+        
         const min = parseInt(slider.min);
         const max = parseInt(slider.max);
         const range = max - min;
         const percent = ((State.triggerOffset - min) / range) * 100;
         
-        document.getElementById('triggerFill').style.width = percent + '%';
-        document.getElementById('triggerPrice').textContent = Assets.formatCurrency(triggerPrice);
+        const triggerFill = document.getElementById('triggerFill');
+        const triggerPriceEl = document.getElementById('triggerPrice');
+        const triggerOffset = document.getElementById('triggerOffset');
         
-        const offsetEl = document.getElementById('triggerOffset');
-        offsetEl.textContent = (State.triggerOffset >= 0 ? '+' : '') + State.triggerOffset + '%';
+        if (triggerFill) triggerFill.style.width = percent + '%';
+        if (triggerPriceEl) triggerPriceEl.textContent = Assets.formatCurrency(triggerPrice);
         
-        if (State.triggerOffset > 0) {
-            offsetEl.style.color = '#22c55e';
-            offsetEl.style.background = 'rgba(34, 197, 94, 0.15)';
-        } else if (State.triggerOffset < 0) {
-            offsetEl.style.color = '#ef4444';
-            offsetEl.style.background = 'rgba(239, 68, 68, 0.15)';
-        } else {
-            offsetEl.style.color = '#94a3b8';
-            offsetEl.style.background = 'rgba(148, 163, 184, 0.15)';
+        if (triggerOffset) {
+            triggerOffset.textContent = (State.triggerOffset >= 0 ? '+' : '') + State.triggerOffset + '%';
+            
+            if (State.triggerOffset > 0) {
+                triggerOffset.style.color = '#22c55e';
+                triggerOffset.style.background = 'rgba(34, 197, 94, 0.15)';
+            } else if (State.triggerOffset < 0) {
+                triggerOffset.style.color = '#ef4444';
+                triggerOffset.style.background = 'rgba(239, 68, 68, 0.15)';
+            } else {
+                triggerOffset.style.color = '#94a3b8';
+                triggerOffset.style.background = 'rgba(148, 163, 184, 0.15)';
+            }
         }
     },
 
@@ -733,49 +880,40 @@ const Trading = {
         State.triggerAmountPercent = 0;
         State.pendingTradeSide = null;
         
-        document.getElementById('limitButtons').classList.remove('hidden');
-        document.getElementById('confirmLimitBtn').classList.add('hidden');
-        document.getElementById('triggerSliderSection').classList.add('hidden');
-        document.getElementById('amountSliderSection').classList.add('hidden');
+        const limitButtons = document.getElementById('limitButtons');
+        const confirmLimitBtn = document.getElementById('confirmLimitBtn');
+        const triggerSliderSection = document.getElementById('triggerSliderSection');
+        const amountSliderSection = document.getElementById('amountSliderSection');
         
-        document.getElementById('triggerSlider').value = 0;
-        document.getElementById('triggerAmountSlider').value = 0;
+        if (limitButtons) limitButtons.classList.remove('hidden');
+        if (confirmLimitBtn) confirmLimitBtn.classList.add('hidden');
+        if (triggerSliderSection) triggerSliderSection.classList.add('hidden');
+        if (amountSliderSection) amountSliderSection.classList.add('hidden');
+        
+        const triggerSlider = document.getElementById('triggerSlider');
+        const triggerAmountSlider = document.getElementById('triggerAmountSlider');
+        if (triggerSlider) triggerSlider.value = 0;
+        if (triggerAmountSlider) triggerAmountSlider.value = 0;
+        
         this.updateTriggerDisplay();
         this.updateTriggerAmountSlider(0);
         
         const confirmBtn = document.getElementById('confirmLimitBtn');
-        confirmBtn.style.background = '#3b82f6';
-        confirmBtn.onmouseenter = null;
-        confirmBtn.onmouseleave = null;
+        if (confirmBtn) {
+            confirmBtn.style.background = '#3b82f6';
+            confirmBtn.onmouseenter = null;
+            confirmBtn.onmouseleave = null;
+        }
         
         Logger.log('Reset trigger settings', 'info');
     },
 
     resetTriggerForm() {
-        State.selectedLimitType = null;
-        State.triggerOffset = 0;
-        State.triggerAmountPercent = 0;
-        State.pendingTradeSide = null;
-        
-        document.getElementById('limitButtons').classList.remove('hidden');
-        document.getElementById('confirmLimitBtn').classList.add('hidden');
-        document.getElementById('triggerSliderSection').classList.add('hidden');
-        document.getElementById('amountSliderSection').classList.add('hidden');
-        
-        document.getElementById('triggerSlider').value = 0;
-        document.getElementById('triggerAmountSlider').value = 0;
-        this.updateTriggerDisplay();
-        this.updateTriggerAmountSlider(0);
-        
-        const confirmBtn = document.getElementById('confirmLimitBtn');
-        confirmBtn.style.background = '#3b82f6';
-        confirmBtn.onmouseenter = null;
-        confirmBtn.onmouseleave = null;
-        
+        this.resetTrigger();
         API.refreshData();
     },
 
-    showConfirmModal() {
+    async showConfirmModal() {
         if (!State.selectedAsset) {
             alert('No asset selected');
             return;
@@ -786,71 +924,86 @@ const Trading = {
             return;
         }
         
-        const currentPrice = State.selectedAsset.price || 0;
-        const multiplier = 1 + (State.triggerOffset / 100);
-        let triggerPrice = currentPrice * multiplier;
+        // Fetch latest live rate before showing modal
+        await API.fetchLiveRates();
         
-        // FIX: Ensure buy trigger is ABOVE market, sell trigger is BELOW market
-        if (State.selectedLimitType === 'buy' && triggerPrice <= currentPrice) {
-            triggerPrice = currentPrice * 1.0001;
-        } else if (State.selectedLimitType === 'sell' && triggerPrice >= currentPrice) {
-            triggerPrice = currentPrice * 0.9999;
+        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
+        const multiplier = 1 + (State.triggerOffset / 100);
+        let triggerPrice = realtimePrice * multiplier;
+        
+        // Determine correct order type based on trigger vs market price
+        let orderType;
+        if (State.selectedLimitType === 'buy') {
+            if (triggerPrice > realtimePrice) {
+                orderType = 'STOP_LIMIT_BUY';
+            } else {
+                orderType = 'LIMIT_BUY';
+            }
+        } else {
+            if (triggerPrice < realtimePrice) {
+                orderType = 'STOP_LIMIT_SELL';
+            } else {
+                orderType = 'LIMIT_SELL';
+            }
         }
         
         const btn = document.getElementById('confirmLimitBtn');
         const spinner = document.getElementById('confirmSpinner');
         const text = document.getElementById('confirmBtnText');
         
-        btn.disabled = true;
-        spinner.classList.remove('hidden');
-        text.textContent = 'Loading...';
+        if (btn) btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+        if (text) text.textContent = 'Loading...';
         
         const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
         const amount = (balance * State.triggerAmountPercent / 100);
         
-        document.getElementById('limitModalType').textContent = State.selectedLimitType === 'buy' ? 'Buy Trigger' : 'Sell Trigger';
-        document.getElementById('limitModalType').style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
-        document.getElementById('limitModalAsset').textContent = State.selectedAsset.code;
-        document.getElementById('limitModalTrigger').textContent = Assets.formatCurrency(triggerPrice);
-        document.getElementById('limitModalAmount').textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
+        const limitModalType = document.getElementById('limitModalType');
+        const limitModalAsset = document.getElementById('limitModalAsset');
+        const limitModalTrigger = document.getElementById('limitModalTrigger');
+        const limitModalAmount = document.getElementById('limitModalAmount');
+        const limitModalReceive = document.getElementById('limitModalReceive');
+        
+        if (limitModalType) {
+            limitModalType.textContent = orderType.replace(/_/g, ' ');
+            limitModalType.style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+        }
+        if (limitModalAsset) limitModalAsset.textContent = State.selectedAsset.code;
+        if (limitModalTrigger) limitModalTrigger.textContent = Assets.formatCurrency(triggerPrice);
+        if (limitModalAmount) limitModalAmount.textContent = `$${amount.toFixed(2)} ${State.selectedTriggerCash}`;
         
         const receiveAmount = amount / triggerPrice;
-        document.getElementById('limitModalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
+        if (limitModalReceive) limitModalReceive.textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
         
-        document.getElementById('limitConfirmModal').classList.add('show');
+        State.pendingOrderType = orderType;
+        State.pendingTriggerPrice = triggerPrice;
         
-        btn.disabled = false;
-        spinner.classList.add('hidden');
-        text.textContent = State.selectedLimitType === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
+        const limitConfirmModal = document.getElementById('limitConfirmModal');
+        if (limitConfirmModal) limitConfirmModal.classList.add('show');
+        
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('hidden');
+        if (text) text.textContent = State.selectedLimitType === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
     },
 
     closeLimitModal() {
-        document.getElementById('limitConfirmModal').classList.remove('show');
+        const limitConfirmModal = document.getElementById('limitConfirmModal');
+        if (limitConfirmModal) limitConfirmModal.classList.remove('show');
     },
 
     executeLimitOrder: async function() {
         const btn = document.getElementById('limitModalExecuteBtn');
+        if (!btn) return;
+        
         const originalText = btn.textContent;
         
         btn.disabled = true;
         btn.textContent = 'Submitting...';
         
         try {
-            const currentPrice = State.selectedAsset ? State.selectedAsset.price : 0;
-            const multiplier = 1 + (State.triggerOffset / 100);
-            let triggerPrice = currentPrice * multiplier;
-            
-            // FIX: Ensure buy trigger is strictly ABOVE market, sell strictly BELOW
-            if (State.selectedLimitType === 'buy' && triggerPrice <= currentPrice) {
-                triggerPrice = currentPrice * 1.0001;
-            } else if (State.selectedLimitType === 'sell' && triggerPrice >= currentPrice) {
-                triggerPrice = currentPrice * 0.9999;
-            }
-            
-            triggerPrice = parseFloat(triggerPrice.toFixed(2));
-            
             const balance = this.getTriggerCashBalance(State.selectedTriggerCash);
             const amount = (balance * State.triggerAmountPercent / 100);
+            const triggerPrice = parseFloat(State.pendingTriggerPrice.toFixed(2));
             const quantity = parseFloat((amount / triggerPrice).toFixed(8));
             
             const orderData = {
@@ -858,11 +1011,11 @@ const Trading = {
                 secondary: State.selectedTriggerCash,
                 quantity: quantity,
                 assetQuantity: State.selectedAsset.code,
-                orderType: State.selectedLimitType === 'buy' ? 'STOP_BUY' : 'STOP_SELL',
+                orderType: State.pendingOrderType,
                 trigger: triggerPrice
             };
             
-            Logger.log(`Sending TRIGGER ${State.selectedLimitType.toUpperCase()} order:`, 'info');
+            Logger.log(`Sending ${State.pendingOrderType} order:`, 'info');
             Logger.log(`Asset: ${orderData.primary}, Quantity: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
             
             const res = await API.placeOrder(orderData);
@@ -874,19 +1027,22 @@ const Trading = {
             
             const data = await res.json();
             
-            Logger.log(`✅ Trigger order placed! Order ID: ${data.id || data.orderId || 'N/A'}`, 'success');
+            Logger.log(`✅ Order placed! Order ID: ${data.id || data.orderId || 'N/A'}`, 'success');
             Logger.log(`Response: ${JSON.stringify(data).substring(0, 200)}`, 'info');
             
-            document.getElementById('limitConfirmModal').classList.remove('show');
-            document.getElementById('successModal').classList.add('show');
+            const limitConfirmModal = document.getElementById('limitConfirmModal');
+            const successModal = document.getElementById('successModal');
+            if (limitConfirmModal) limitConfirmModal.classList.remove('show');
+            if (successModal) successModal.classList.add('show');
             
             await API.refreshData();
             this.updateTriggerButtonBalances();
             
         } catch (error) {
-            Logger.log(`❌ Trigger order failed: ${error.message}`, 'error');
+            Logger.log(`❌ Order failed: ${error.message}`, 'error');
             alert('Order failed: ' + error.message);
-            document.getElementById('limitConfirmModal').classList.remove('show');
+            const limitConfirmModal = document.getElementById('limitConfirmModal');
+            if (limitConfirmModal) limitConfirmModal.classList.remove('show');
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
@@ -895,32 +1051,21 @@ const Trading = {
     },
 
     closeSuccessModal() {
-        document.getElementById('successModal').classList.remove('show');
+        const successModal = document.getElementById('successModal');
+        if (successModal) successModal.classList.remove('show');
     },
 
     setTriggerConstraints(side) {
         const slider = document.getElementById('triggerSlider');
         const labels = document.getElementById('triggerLabels');
         
-        if (side === 'buy') {
-            // Buy STOP: trigger ABOVE current price (0% to +20%)
-            slider.min = 0;
-            slider.max = 20;
-            if (parseInt(slider.value) < 0) {
-                slider.value = 0;
-                State.triggerOffset = 0;
-            }
-            labels.innerHTML = '<span>Current</span><span>+10%</span><span>+20%</span>';
-        } else {
-            // Sell STOP: trigger BELOW current price (-20% to 0%)
-            slider.min = -20;
-            slider.max = 0;
-            if (parseInt(slider.value) > 0) {
-                slider.value = 0;
-                State.triggerOffset = 0;
-            }
-            labels.innerHTML = '<span>-20%</span><span>-10%</span><span>Current</span>';
-        }
+        if (!slider) return;
+        
+        // Allow full range -20% to +20%, system will determine correct order type
+        slider.min = -20;
+        slider.max = 20;
+        
+        if (labels) labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
         
         this.updateTriggerDisplay();
     },
@@ -930,26 +1075,19 @@ const Trading = {
         const labels = document.getElementById('autoDevLabels');
         const guideText = document.getElementById('autoGuideText');
         
-        if (side === 'buy') {
-            // Buy: deviation must be positive (buy when price rises above trigger)
-            slider.min = 0;
-            slider.max = 20;
-            if (parseInt(slider.value) < 0) {
-                slider.value = 0;
-                State.autoTradeConfig.deviation = 0;
+        if (!slider) return;
+        
+        slider.min = -20;
+        slider.max = 20;
+        
+        if (labels) labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
+        
+        if (guideText) {
+            if (side === 'buy') {
+                guideText.innerHTML = 'Set <span style="color: #22c55e;">positive %</span> for stop-buy, <span style="color: #ef4444;">negative %</span> for limit-buy';
+            } else {
+                guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> for stop-sell, <span style="color: #22c55e;">positive %</span> for limit-sell';
             }
-            labels.innerHTML = '<span>Current</span><span>+10%</span><span>+20%</span>';
-            guideText.innerHTML = 'Set <span style="color: #22c55e;">positive %</span> to buy when price rises';
-        } else {
-            // Sell: deviation must be negative (sell when price drops below trigger)
-            slider.min = -20;
-            slider.max = 0;
-            if (parseInt(slider.value) > 0) {
-                slider.value = 0;
-                State.autoTradeConfig.deviation = 0;
-            }
-            labels.innerHTML = '<span>-20%</span><span>-10%</span><span>Current</span>';
-            guideText.innerHTML = 'Set <span style="color: #ef4444;">negative %</span> to sell when price drops';
         }
         
         this.updateAutoTradeDisplay();
@@ -974,42 +1112,57 @@ const Trading = {
         const triggerPrice = cashPrice * multiplier;
         
         const slider = document.getElementById('autoDevSlider');
+        if (!slider) return;
+        
         const min = parseInt(slider.min);
         const max = parseInt(slider.max);
         const range = max - min;
         const percent = ((State.autoTradeConfig.deviation - min) / range) * 100;
         
-        document.getElementById('autoDevFill').style.width = percent + '%';
-        document.getElementById('autoPrice').textContent = Assets.formatCurrency(triggerPrice);
+        const autoDevFill = document.getElementById('autoDevFill');
+        const autoPrice = document.getElementById('autoPrice');
+        const autoDeviation = document.getElementById('autoDeviation');
         
-        const devEl = document.getElementById('autoDeviation');
-        const devSign = State.autoTradeConfig.deviation >= 0 ? '+' : '';
-        devEl.textContent = `${devSign}${State.autoTradeConfig.deviation}%`;
+        if (autoDevFill) autoDevFill.style.width = percent + '%';
+        if (autoPrice) autoPrice.textContent = Assets.formatCurrency(triggerPrice);
         
-        if (State.autoTradeConfig.deviation > 0) {
-            devEl.style.color = '#22c55e';
-            devEl.style.background = 'rgba(34, 197, 94, 0.15)';
-        } else if (State.autoTradeConfig.deviation < 0) {
-            devEl.style.color = '#ef4444';
-            devEl.style.background = 'rgba(239, 68, 68, 0.15)';
-        } else {
-            devEl.style.color = '#94a3b8';
-            devEl.style.background = 'rgba(148, 163, 184, 0.15)';
+        if (autoDeviation) {
+            const devSign = State.autoTradeConfig.deviation >= 0 ? '+' : '';
+            autoDeviation.textContent = `${devSign}${State.autoTradeConfig.deviation}%`;
+            
+            if (State.autoTradeConfig.deviation > 0) {
+                autoDeviation.style.color = '#22c55e';
+                autoDeviation.style.background = 'rgba(34, 197, 94, 0.15)';
+            } else if (State.autoTradeConfig.deviation < 0) {
+                autoDeviation.style.color = '#ef4444';
+                autoDeviation.style.background = 'rgba(239, 68, 68, 0.15)';
+            } else {
+                autoDeviation.style.color = '#94a3b8';
+                autoDeviation.style.background = 'rgba(148, 163, 184, 0.15)';
+            }
         }
         
         const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
         const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
         
-        document.getElementById('autoAllocFill').style.width = State.autoTradeConfig.allocation + '%';
-        document.getElementById('autoAllocPercent').textContent = State.autoTradeConfig.allocation + '%';
-        document.getElementById('autoAllocationValue').textContent = 
+        const autoAllocFill = document.getElementById('autoAllocFill');
+        const autoAllocPercent = document.getElementById('autoAllocPercent');
+        const autoAllocationValue = document.getElementById('autoAllocationValue');
+        
+        if (autoAllocFill) autoAllocFill.style.width = State.autoTradeConfig.allocation + '%';
+        if (autoAllocPercent) autoAllocPercent.textContent = State.autoTradeConfig.allocation + '%';
+        if (autoAllocationValue) autoAllocationValue.textContent = 
             `${State.autoTradeConfig.allocation}% of ${Assets.formatCurrency(cashBalance)} ${State.cashAsset}`;
     },
 
     resetAutoTrade() {
         State.autoTradeConfig = { deviation: 0, allocation: 0 };
-        document.getElementById('autoDevSlider').value = 0;
-        document.getElementById('autoAllocSlider').value = 0;
+        
+        const autoDevSlider = document.getElementById('autoDevSlider');
+        const autoAllocSlider = document.getElementById('autoAllocSlider');
+        if (autoDevSlider) autoDevSlider.value = 0;
+        if (autoAllocSlider) autoAllocSlider.value = 0;
+        
         this.updateAutoTradeDisplay();
     },
 
@@ -1018,7 +1171,8 @@ const Trading = {
         
         if (!CONFIG.TRADE_PIN) {
             alert('Please set trading PIN in settings');
-            document.getElementById('pinModal').classList.add('show');
+            const pinModal = document.getElementById('pinModal');
+            if (pinModal) pinModal.classList.add('show');
             return;
         }
         
@@ -1060,17 +1214,6 @@ const Trading = {
             const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
             triggerPrice = cashPrice * deviationMultiplier;
             
-            // FIX: Ensure auto-trade triggers respect stop order constraints
-            if (side === 'buy' && triggerPrice <= cashPrice) {
-                triggerPrice = cashPrice * 1.0001;
-                State.autoTradeConfig.deviation = 0.01;
-                this.updateAutoTradeDisplay();
-            } else if (side === 'sell' && triggerPrice >= cashPrice) {
-                triggerPrice = cashPrice * 0.9999;
-                State.autoTradeConfig.deviation = -0.01;
-                this.updateAutoTradeDisplay();
-            }
-            
             if (side === 'buy') {
                 amount = allocationAmount;
                 receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
@@ -1105,39 +1248,52 @@ const Trading = {
         }
         
         const modalTitle = document.getElementById('tradeModalTitle');
-        modalTitle.textContent = `Confirm ${side === 'buy' ? 'Buy' : 'Sell'}`;
-        modalTitle.className = `trade-modal-title ${side}`;
+        if (modalTitle) {
+            modalTitle.textContent = `Confirm ${side === 'buy' ? 'Buy' : 'Sell'}`;
+            modalTitle.className = `trade-modal-title ${side}`;
+        }
         
         const orderTypeDisplay = State.orderType === 'instant' ? 'Instant (Market)' : 
-                               State.orderType === 'trigger' ? 'Trigger (Stop)' : 
+                               State.orderType === 'trigger' ? 'Trigger Order' : 
                                `Auto Trade (${State.autoTradeConfig.deviation >= 0 ? '+' : ''}${State.autoTradeConfig.deviation}%)`;
-        document.getElementById('modalOrderType').textContent = orderTypeDisplay;
-        document.getElementById('modalAsset').textContent = State.selectedAsset.code;
+        
+        const modalOrderType = document.getElementById('modalOrderType');
+        const modalAsset = document.getElementById('modalAsset');
+        if (modalOrderType) modalOrderType.textContent = orderTypeDisplay;
+        if (modalAsset) modalAsset.textContent = State.selectedAsset.code;
+        
+        const modalAmount = document.getElementById('modalAmount');
+        const modalReceive = document.getElementById('modalReceive');
         
         if (side === 'buy') {
-            document.getElementById('modalAmount').textContent = `${Assets.formatCurrency(amount)} ${State.cashAsset}`;
-            document.getElementById('modalReceive').textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
+            if (modalAmount) modalAmount.textContent = `${Assets.formatCurrency(amount)} ${State.cashAsset}`;
+            if (modalReceive) modalReceive.textContent = `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`;
         } else {
-            document.getElementById('modalAmount').textContent = `${amount.toFixed(8)} ${State.selectedAsset.code}`;
-            document.getElementById('modalReceive').textContent = `${Assets.formatCurrency(receiveAmount)} ${State.cashAsset}`;
+            if (modalAmount) modalAmount.textContent = `${amount.toFixed(8)} ${State.selectedAsset.code}`;
+            if (modalReceive) modalReceive.textContent = `${Assets.formatCurrency(receiveAmount)} ${State.cashAsset}`;
         }
         
         const triggerRow = document.getElementById('modalTriggerRow');
-        if ((State.orderType === 'trigger' || State.orderType === 'auto') && triggerPrice) {
-            triggerRow.style.display = 'flex';
-            document.getElementById('modalTrigger').textContent = Assets.formatCurrency(triggerPrice);
-        } else {
-            triggerRow.style.display = 'none';
+        if (triggerRow) {
+            if ((State.orderType === 'trigger' || State.orderType === 'auto') && triggerPrice) {
+                triggerRow.style.display = 'flex';
+                const modalTrigger = document.getElementById('modalTrigger');
+                if (modalTrigger) modalTrigger.textContent = Assets.formatCurrency(triggerPrice);
+            } else {
+                triggerRow.style.display = 'none';
+            }
         }
         
         const confirmBtn = document.getElementById('modalConfirmBtn');
-        confirmBtn.className = `trade-modal-btn confirm ${side}`;
+        if (confirmBtn) confirmBtn.className = `trade-modal-btn confirm ${side}`;
         
-        document.getElementById('tradeModal').classList.add('show');
+        const tradeModal = document.getElementById('tradeModal');
+        if (tradeModal) tradeModal.classList.add('show');
     },
 
     cancelTrade() {
-        document.getElementById('tradeModal').classList.remove('show');
+        const tradeModal = document.getElementById('tradeModal');
+        if (tradeModal) tradeModal.classList.remove('show');
         State.pendingTradeSide = null;
     },
 
@@ -1145,23 +1301,29 @@ const Trading = {
         const side = State.pendingTradeSide;
         
         if (!side || !State.selectedAsset) {
-            document.getElementById('tradeModal').classList.remove('show');
+            const tradeModal = document.getElementById('tradeModal');
+            if (tradeModal) tradeModal.classList.remove('show');
             State.pendingTradeSide = null;
             return;
         }
         
-        document.getElementById('tradeModal').classList.remove('show');
+        const tradeModal = document.getElementById('tradeModal');
+        if (tradeModal) tradeModal.classList.remove('show');
         
         const btn = side === 'buy' ? document.getElementById('buyBtn') : document.getElementById('sellBtn');
-        
-        btn.disabled = true;
-        btn.classList.add('spinning');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('spinning');
+        }
         
         try {
+            // Fetch live rates before placing order
+            await API.fetchLiveRates();
+            const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
+            
             const cashBalance = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.aud_value || 0;
             const assetBalance = State.selectedAsset.balance || 0;
-            const currentAudPrice = State.selectedAsset.price;
-            const cashPrice = Assets.getPriceInCurrency(currentAudPrice, State.cashAsset);
+            const cashPrice = Assets.getPriceInCurrency(realtimePrice, State.cashAsset);
             
             let orderData;
             let quantity, triggerPrice;
@@ -1171,36 +1333,30 @@ const Trading = {
                 const deviationMultiplier = 1 + (State.autoTradeConfig.deviation / 100);
                 triggerPrice = cashPrice * deviationMultiplier;
                 
-                // FIX: Ensure strict inequality for stop orders
-                if (side === 'buy' && triggerPrice <= cashPrice) {
-                    triggerPrice = cashPrice * 1.0001;
-                } else if (side === 'sell' && triggerPrice >= cashPrice) {
-                    triggerPrice = cashPrice * 0.9999;
+                // Determine order type based on trigger vs market
+                let orderType;
+                if (side === 'buy') {
+                    orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+                } else {
+                    orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
                 }
                 
                 triggerPrice = parseFloat(triggerPrice.toFixed(2));
                 
                 if (side === 'buy') {
                     quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
-                    orderData = {
-                        primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
-                        quantity: quantity,
-                        assetQuantity: State.selectedAsset.code,
-                        orderType: 'STOP_BUY',
-                        trigger: triggerPrice
-                    };
                 } else {
                     quantity = parseFloat((allocationAmount / cashPrice).toFixed(8));
-                    orderData = {
-                        primary: State.selectedAsset.code,
-                        secondary: State.cashAsset,
-                        quantity: quantity,
-                        assetQuantity: State.selectedAsset.code,
-                        orderType: 'STOP_SELL',
-                        trigger: triggerPrice
-                    };
                 }
+                
+                orderData = {
+                    primary: State.selectedAsset.code,
+                    secondary: State.cashAsset,
+                    quantity: quantity,
+                    assetQuantity: State.selectedAsset.code,
+                    orderType: orderType,
+                    trigger: triggerPrice
+                };
             } else if (side === 'buy') {
                 const cashAmount = (State.amountSliderValue / 100) * cashBalance;
                 
@@ -1217,12 +1373,10 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = cashPrice * offsetMultiplier;
                     
-                    // FIX: Ensure buy trigger is strictly ABOVE market for stop orders
-                    if (triggerPrice <= cashPrice) {
-                        triggerPrice = cashPrice * 1.0001;
-                    }
-                    
+                    // Determine correct order type
+                    const orderType = triggerPrice > cashPrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
                     triggerPrice = parseFloat(triggerPrice.toFixed(2));
+                    
                     quantity = parseFloat((cashAmount / triggerPrice).toFixed(8));
                     
                     orderData = {
@@ -1230,7 +1384,7 @@ const Trading = {
                         secondary: State.cashAsset,
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
-                        orderType: 'STOP_BUY',
+                        orderType: orderType,
                         trigger: triggerPrice
                     };
                 }
@@ -1250,11 +1404,8 @@ const Trading = {
                     const offsetMultiplier = 1 + (State.triggerOffset / 100);
                     triggerPrice = cashPrice * offsetMultiplier;
                     
-                    // FIX: Ensure sell trigger is strictly BELOW market for stop orders
-                    if (triggerPrice >= cashPrice) {
-                        triggerPrice = cashPrice * 0.9999;
-                    }
-                    
+                    // Determine correct order type
+                    const orderType = triggerPrice < cashPrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
                     triggerPrice = parseFloat(triggerPrice.toFixed(2));
                     
                     orderData = {
@@ -1262,7 +1413,7 @@ const Trading = {
                         secondary: State.cashAsset,
                         quantity: quantity,
                         assetQuantity: State.selectedAsset.code,
-                        orderType: 'STOP_SELL',
+                        orderType: orderType,
                         trigger: triggerPrice
                     };
                 }
@@ -1279,15 +1430,12 @@ const Trading = {
             
             const data = await res.json();
             
-            const totalCash = side === 'buy' 
-                ? (State.orderType === 'auto' ? (State.autoTradeConfig.allocation / 100) * cashBalance : (State.amountSliderValue / 100) * cashBalance)
-                : orderData.quantity * cashPrice;
-                
             Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
             
             if (State.orderType === 'instant') {
                 State.amountSliderValue = 0;
-                document.getElementById('amountSlider').value = 0;
+                const amountSlider = document.getElementById('amountSlider');
+                if (amountSlider) amountSlider.value = 0;
                 UI.updateAmountSlider(0);
             }
             
@@ -1301,8 +1449,10 @@ const Trading = {
             Logger.log(`❌ Trade failed: ${error.message}`, 'error');
             alert('Trade failed: ' + error.message);
         } finally {
-            btn.disabled = false;
-            btn.classList.remove('spinning');
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('spinning');
+            }
             if (State.orderType !== 'trigger') {
                 State.pendingTradeSide = null;
             }
