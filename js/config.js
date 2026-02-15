@@ -54,5 +54,6 @@ const State = {
     triggerAmountPercent: 0,
     liveRates: {},
     pendingOrderType: null,
-    pendingTriggerPrice: 0
+    pendingTriggerPrice: 0,
+    pendingQuantity: 0
 };

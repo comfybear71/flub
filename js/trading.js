@@ -3,78 +3,84 @@
 // ==========================================
 const Trading = {
 
-    // ── Trigger cash balance helpers ─────────────────────────────────────────
+    // ── Trigger balance helpers ───────────────────────────────────────────────
 
     getTriggerCashBalance(currency) {
         return State.portfolioData.assets.find(a => a.code === currency)?.usd_value ?? 0;
     },
 
     updateTriggerButtonBalances() {
-        const usdcBalance = this.getTriggerCashBalance('USDC');
-        const balanceEl   = document.querySelector('#triggerOptUSDC .balance');
-        if (balanceEl) balanceEl.textContent = Assets.formatCurrency(usdcBalance);
-
         const label = document.getElementById('amountSliderLabel');
-        if (label) label.textContent = 'Amount (USDC)';
-    },
-
-    setTriggerCash(currency) {
-        State.selectedTriggerCash = currency;
-        document.getElementById('triggerOptUSDC')?.classList.add('active');
-
-        const balance   = this.getTriggerCashBalance('USDC');
-        const label     = document.getElementById('amountSliderLabel');
-        const balanceEl = document.querySelector('#triggerOptUSDC .balance');
-        if (label)     label.textContent    = 'Amount (USDC)';
-        if (balanceEl) balanceEl.textContent = Assets.formatCurrency(balance);
-
-        this.updateTriggerAmountSlider(0);
-        Logger.log(`Selected USDC for trigger order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
+        if (!label) return;
+        if (State.selectedLimitType === 'buy') {
+            const usdcBal = this.getTriggerCashBalance('USDC');
+            label.textContent = `USDC to spend (${Assets.formatCurrency(usdcBal)} available)`;
+        } else if (State.selectedLimitType === 'sell' && State.selectedAsset) {
+            const assetBal = State.selectedAsset.balance || 0;
+            label.textContent = `${State.selectedAsset.code} to sell (${Assets.formatNumber(assetBal)} available)`;
+        }
     },
 
     // ── Limit type selection ─────────────────────────────────────────────────
 
+    /**
+     * Called when user taps "Buy Dip" or "Sell Rise".
+     * buy  → slider -30% to 0   (price below market only)
+     * sell → slider 0   to +30% (price above market only)
+     */
     selectLimitType(type) {
         State.selectedLimitType = type;
         State.pendingTradeSide  = type;
+        State.triggerOffset     = type === 'buy' ? -5 : 5;
 
         document.getElementById('limitButtons')?.classList.add('hidden');
-        document.getElementById('triggerSliderSection')?.classList.remove('hidden');
-        document.getElementById('amountSliderSection')?.classList.remove('hidden');
+        document.getElementById('triggerConfig')?.classList.remove('hidden');
 
-        const confirmLimitBtn = document.getElementById('confirmLimitBtn');
-        const confirmBtnText  = document.getElementById('confirmBtnText');
-
-        confirmLimitBtn?.classList.remove('hidden');
-        if (confirmBtnText) {
-            confirmBtnText.textContent = type === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
+        const badge = document.getElementById('triggerDirectionBadge');
+        if (badge) {
+            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Rise';
+            badge.style.color        = type === 'buy' ? '#22c55e' : '#ef4444';
+            badge.style.background   = type === 'buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
         }
 
-        if (confirmLimitBtn) {
+        const slider = document.getElementById('triggerSlider');
+        if (slider) {
+            slider.min   = type === 'buy' ? -30 : 0;
+            slider.max   = type === 'buy' ?   0 : 30;
+            slider.value = State.triggerOffset;
+        }
+
+        const hint = document.getElementById('triggerHint');
+        if (hint) hint.textContent = type === 'buy'
+            ? 'Drag left \u2192 lower buy price (triggers when price drops to this level)'
+            : 'Drag right \u2192 higher sell price (triggers when price rises to this level)';
+
+        const confirmBtn  = document.getElementById('confirmLimitBtn');
+        const confirmText = document.getElementById('confirmBtnText');
+        if (confirmBtn) {
             const bg      = type === 'buy' ? '#22c55e' : '#ef4444';
             const bgHover = type === 'buy' ? '#16a34a' : '#dc2626';
-            confirmLimitBtn.style.background = bg;
-            confirmLimitBtn.onmouseenter = () => { confirmLimitBtn.style.background = bgHover; };
-            confirmLimitBtn.onmouseleave = () => { confirmLimitBtn.style.background = bg; };
+            confirmBtn.style.background = bg;
+            confirmBtn.onmouseenter = () => { confirmBtn.style.background = bgHover; };
+            confirmBtn.onmouseleave = () => { confirmBtn.style.background = bg; };
+        }
+        if (confirmText) confirmText.textContent = type === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
+
+        const label = document.getElementById('amountSliderLabel');
+        if (type === 'buy') {
+            const usdcBal = this.getTriggerCashBalance('USDC');
+            if (label) label.textContent = `USDC to spend (${Assets.formatCurrency(usdcBal)} available)`;
+        } else {
+            const assetBal = State.selectedAsset?.balance || 0;
+            if (label) label.textContent = `${State.selectedAsset?.code} to sell (${Assets.formatNumber(assetBal)} available)`;
         }
 
-        this.setTriggerConstraints(type);
+        this.updateTriggerDisplay();
+        this.updateTriggerAmountSlider(0);
         Logger.log(`Selected ${type} trigger`, 'info');
     },
 
     // ── Trigger slider controls ───────────────────────────────────────────────
-
-    setTriggerConstraints(_side) {
-        const slider = document.getElementById('triggerSlider');
-        const labels = document.getElementById('triggerLabels');
-        if (!slider) return;
-
-        slider.min = -20;
-        slider.max = 20;
-        if (labels) labels.innerHTML = '<span>-20%</span><span>Market</span><span>+20%</span>';
-
-        this.updateTriggerDisplay();
-    },
 
     updateTriggerSlider(value) {
         State.triggerOffset = parseInt(value);
@@ -83,13 +89,24 @@ const Trading = {
 
     updateTriggerAmountSlider(value) {
         State.triggerAmountPercent = parseInt(value);
-        const balance = this.getTriggerCashBalance('USDC');
-        const amount  = (balance * State.triggerAmountPercent / 100).toFixed(2);
+
+        let displayText;
+        if (State.selectedLimitType === 'sell') {
+            const assetBal    = State.selectedAsset?.balance || 0;
+            const qty         = (assetBal * State.triggerAmountPercent / 100);
+            const currentPrice = State.selectedAsset?.usd_price || 0;
+            const triggerPrice = currentPrice * (1 + State.triggerOffset / 100);
+            const usdValue    = qty * triggerPrice;
+            displayText = `${Assets.formatNumber(qty)} ${State.selectedAsset?.code ?? ''} \u2248 ${Assets.formatCurrency(usdValue)}`;
+        } else {
+            const balance = this.getTriggerCashBalance('USDC');
+            displayText   = Assets.formatCurrency(balance * State.triggerAmountPercent / 100);
+        }
 
         const displayEl = document.getElementById('triggerAmountDisplay');
         const percentEl = document.getElementById('triggerAmountPercent');
         const fillEl    = document.getElementById('triggerAmountFill');
-        if (displayEl) displayEl.textContent = `$${amount}`;
+        if (displayEl) displayEl.textContent = displayText;
         if (percentEl) percentEl.textContent = State.triggerAmountPercent + '%';
         if (fillEl)    fillEl.style.width    = State.triggerAmountPercent + '%';
     },
@@ -105,18 +122,25 @@ const Trading = {
 
         const min     = parseInt(slider.min);
         const max     = parseInt(slider.max);
-        const percent = ((State.triggerOffset - min) / (max - min)) * 100;
+        const range   = max - min || 1;
+        const percent = ((State.triggerOffset - min) / range) * 100;
 
         const fillEl   = document.getElementById('triggerFill');
         const priceEl  = document.getElementById('triggerPrice');
         const offsetEl = document.getElementById('triggerOffset');
 
-        if (fillEl)  fillEl.style.width  = percent + '%';
+        if (fillEl) {
+            fillEl.style.width      = percent + '%';
+            fillEl.style.background = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+        }
         if (priceEl) priceEl.textContent = Assets.formatCurrency(triggerPrice);
-
         if (offsetEl) {
             offsetEl.textContent = (State.triggerOffset >= 0 ? '+' : '') + State.triggerOffset + '%';
             _applyOffsetStyle(offsetEl, State.triggerOffset);
+        }
+
+        if (State.triggerAmountPercent > 0) {
+            this.updateTriggerAmountSlider(State.triggerAmountPercent);
         }
     },
 
@@ -127,24 +151,20 @@ const Trading = {
         State.pendingTradeSide     = null;
 
         document.getElementById('limitButtons')?.classList.remove('hidden');
-        document.getElementById('confirmLimitBtn')?.classList.add('hidden');
-        document.getElementById('triggerSliderSection')?.classList.add('hidden');
-        document.getElementById('amountSliderSection')?.classList.add('hidden');
+        document.getElementById('triggerConfig')?.classList.add('hidden');
 
         const triggerSlider = document.getElementById('triggerSlider');
         const amountSlider  = document.getElementById('triggerAmountSlider');
-        if (triggerSlider) triggerSlider.value = 0;
-        if (amountSlider)  amountSlider.value  = 0;
+        if (triggerSlider) { triggerSlider.min = -30; triggerSlider.max = 0; triggerSlider.value = 0; }
+        if (amountSlider)  amountSlider.value = 0;
 
-        const confirmBtn = document.getElementById('confirmLimitBtn');
-        if (confirmBtn) {
-            confirmBtn.style.background = '#3b82f6';
-            confirmBtn.onmouseenter = null;
-            confirmBtn.onmouseleave = null;
-        }
+        const displayEl = document.getElementById('triggerAmountDisplay');
+        const percentEl = document.getElementById('triggerAmountPercent');
+        const fillEl    = document.getElementById('triggerAmountFill');
+        if (displayEl) displayEl.textContent = '$0.00';
+        if (percentEl) percentEl.textContent = '0%';
+        if (fillEl)    fillEl.style.width    = '0%';
 
-        this.updateTriggerDisplay();
-        this.updateTriggerAmountSlider(0);
         Logger.log('Reset trigger settings', 'info');
     },
 
@@ -394,18 +414,26 @@ const Trading = {
         if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
         const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
-        const triggerPrice  = realtimePrice * (1 + State.triggerOffset / 100);
+        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
 
-        let orderType;
+        // Sliders are constrained so buy is always below market, sell always above
+        const orderType = State.selectedLimitType === 'buy' ? 'LIMIT_BUY' : 'LIMIT_SELL';
+
+        let spendDisplay, receiveDisplay, quantity;
+
         if (State.selectedLimitType === 'buy') {
-            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+            const usdcBalance = this.getTriggerCashBalance('USDC');
+            const spendAmount = parseFloat((usdcBalance * State.triggerAmountPercent / 100).toFixed(2));
+            quantity          = parseFloat((spendAmount / triggerPrice).toFixed(8));
+            spendDisplay      = `${Assets.formatCurrency(spendAmount)} USDC`;
+            receiveDisplay    = `${quantity} ${State.selectedAsset.code}`;
         } else {
-            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+            const assetBalance = State.selectedAsset.balance || 0;
+            quantity           = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
+            const receiveUsdc  = parseFloat((quantity * triggerPrice).toFixed(2));
+            spendDisplay       = `${Assets.formatNumber(quantity)} ${State.selectedAsset.code}`;
+            receiveDisplay     = `${Assets.formatCurrency(receiveUsdc)} USDC`;
         }
-
-        const balance       = this.getTriggerCashBalance('USDC');
-        const amount        = balance * State.triggerAmountPercent / 100;
-        const receiveAmount = amount / triggerPrice;
 
         const typeEl = document.getElementById('limitModalType');
         if (typeEl) {
@@ -415,11 +443,12 @@ const Trading = {
 
         _setElText('limitModalAsset',   State.selectedAsset.code);
         _setElText('limitModalTrigger', Assets.formatCurrency(triggerPrice));
-        _setElText('limitModalAmount',  `$${amount.toFixed(2)} USDC`);
-        _setElText('limitModalReceive', `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`);
+        _setElText('limitModalAmount',  spendDisplay);
+        _setElText('limitModalReceive', receiveDisplay);
 
         State.pendingOrderType    = orderType;
         State.pendingTriggerPrice = triggerPrice;
+        State.pendingQuantity     = quantity;
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -437,10 +466,9 @@ const Trading = {
         btn.textContent = 'Submitting...';
 
         try {
-            const balance      = this.getTriggerCashBalance('USDC');
-            const amount       = balance * State.triggerAmountPercent / 100;
-            const triggerPrice = parseFloat(State.pendingTriggerPrice.toFixed(2));
-            const quantity     = parseFloat((amount / triggerPrice).toFixed(8));
+            // Use the quantity pre-calculated in showConfirmModal
+            const quantity     = State.pendingQuantity;
+            const triggerPrice = State.pendingTriggerPrice;
 
             const orderData = {
                 primary:       State.selectedAsset.code,
