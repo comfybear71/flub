@@ -103,6 +103,12 @@ body {
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
     border-radius: 16px;
     text-align: center;
+    transition: opacity 0.3s ease;
+}
+
+.chart-section.trading-open .portfolio-view {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .doughnut-container {
