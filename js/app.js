@@ -17,6 +17,15 @@ const App = {
 };
 
 // ==========================================
+// Expose to global scope for inline handlers
+// ==========================================
+window.App = App;
+window.UI = UI;
+window.Trading = Trading;
+window.API = API;
+window.Assets = Assets;
+
+// ==========================================
 // INITIALIZE
 // ==========================================
 window.addEventListener('load', () => {
