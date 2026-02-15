@@ -222,54 +222,83 @@
                 </div>
 
                 
+                               <!-- Auto Section -->
                 <div class="auto-compact" id="autoSection">
                     <div class="auto-header">
                         <span class="auto-title">Auto Trade Settings</span>
-                        <span class="auto-reset" onclick="Trading.resetAutoTrade()">Reset</span>
+                        <span class="auto-reset" onclick="AutoTrader.reset()">Reset</span>
                     </div>
                     
-                    <div style="margin-bottom: 10px;">
-                        <div class="auto-price-row">
-                            <div class="auto-price" id="autoPrice">$0.00</div>
-                            <div class="auto-deviation" id="autoDeviation">0%</div>
-                        </div>
+                    <!-- Current Price Display -->
+                    <div class="auto-price-row">
+                        <div class="auto-price" id="autoPrice">$0.00</div>
+                        <div class="auto-deviation" id="autoDeviation">±0%</div>
+                    </div>
+                    
+                    <!-- Status indicator -->
+                    <div id="autoStatus" style="text-align:center;margin:8px 0;padding:6px;border-radius:8px;font-size:12px;font-weight:600;display:none;">
+                        🤖 Auto-trading active
+                    </div>
+                    
+                    <!-- Two sliders side by side (compact like trigger) -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
                         
-                        <div id="autoGuide" style="text-align: center; margin-bottom: 6px; font-size: 11px; color: #64748b;">
-                            <span id="autoGuideText">Set price deviation</span>
+                        <!-- Deviation slider -->
+                        <div>
+                            <div style="font-size:11px;color:#64748b;margin-bottom:4px;text-align:center;">Deviation</div>
+                            <div class="slider-box" style="height:32px;">
+                                <div class="slider-track"></div>
+                                <div class="slider-fill" id="autoDevFill" style="width:30%;background:#a855f7;"></div>
+                                <input type="range" id="autoDevSlider" min="1" max="10" value="3" step="1" oninput="AutoTrader.updateDeviation(this.value)" style="height:32px;">
+                            </div>
+                            <div class="slider-labels" style="margin-top:2px;">
+                                <span>1%</span>
+                                <span id="autoDevPercent">3%</span>
+                                <span>10%</span>
+                            </div>
                         </div>
-                        
-                        <div id="autoError" class="error-message" style="display: none; margin-bottom: 6px;"></div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoDevFill" style="width: 50%; background: #a855f7;"></div>
-                            <input type="range" id="autoDevSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateAutoDevSlider(this.value)">
+
+                        <!-- Allocation slider -->
+                        <div>
+                            <div style="font-size:11px;color:#64748b;margin-bottom:4px;text-align:center;">Allocation</div>
+                            <div class="slider-box" style="height:32px;">
+                                <div class="slider-track"></div>
+                                <div class="slider-fill" id="autoAllocFill" style="width:30%;background:#22c55e;"></div>
+                                <input type="range" id="autoAllocSlider" min="1" max="10" value="3" step="1" oninput="AutoTrader.updateAllocation(this.value)" style="height:32px;">
+                            </div>
+                            <div class="slider-labels" style="margin-top:2px;">
+                                <span>1%</span>
+                                <span id="autoAllocPercent">3%</span>
+                                <span>10%</span>
+                            </div>
                         </div>
-                        <div class="slider-labels" id="autoDevLabels">
-                            <span>-20%</span>
-                            <span>Current</span>
-                            <span>+20%</span>
+
+                    </div>
+                    
+                    <!-- Info display -->
+                    <div style="text-align:center;margin-bottom:12px;font-size:12px;color:#94a3b8;">
+                        <div>Buy on <span style="color:#ef4444;">-<span id="autoBuyAt">3</span>%</span> dip</div>
+                        <div style="margin-top:4px;">Sell on <span style="color:#22c55e;">+<span id="autoSellAt">3</span>%</span> rise</div>
+                        <div style="margin-top:4px;font-size:11px;color:#64748b;">
+                            Using <span id="autoUsdcAmount">$0.00</span> USDC per trade
                         </div>
                     </div>
                     
-                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-                        <div class="auto-allocation-row">
-                            <span class="auto-allocation-label">Portfolio Allocation</span>
-                            <span class="auto-allocation-value" id="autoAllocationValue">0% of 0 USDC</span>
-                        </div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoAllocFill" style="width: 0%; background: #22c55e;"></div>
-                            <input type="range" id="autoAllocSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateAutoAllocSlider(this.value)">
-                        </div>
-                        <div class="slider-labels">
-                            <span>0%</span>
-                            <span id="autoAllocPercent">0%</span>
-                            <span>100%</span>
-                        </div>
+                    <!-- Start/Stop Button -->
+                    <button class="confirm-limit-btn" style="margin-top:0;padding:12px;background:#a855f7;" id="autoToggleBtn" onclick="AutoTrader.toggle()">
+                        <span id="autoToggleBtnText">Start Auto Trading</span>
+                    </button>
+                    
+                    <div id="autoError" class="error-message" style="display:none;margin-top:8px;"></div>
+                    
+                    <!-- Info about reserves and cooldown -->
+                    <div style="margin-top:12px;padding:8px;background:rgba(168,85,247,0.1);border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.4;">
+                        ℹ️ Keeps $100 USDC reserve<br>
+                        ⏱️ 24hr cooldown after each trade<br>
+                        📊 Sells 2.5% when buying 3% (accumulation mode)
                     </div>
                 </div>
+
                 
             </div>
             
