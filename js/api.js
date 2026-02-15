@@ -38,7 +38,7 @@ const API = {
         }
 
         Logger.log('Fetching new auth token...', 'info');
-        const res = await fetch('/api/proxy', {
+        const res = await _fetchWithRetry('/api/proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ endpoint: '/auth/refresh/', method: 'POST' })
@@ -60,7 +60,7 @@ const API = {
         try {
             Logger.log('Fetching portfolio data...', 'info');
 
-            const response = await fetch(CONFIG.API_URL);
+            const response = await _fetchWithRetry(CONFIG.API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
             const data = await response.json();
@@ -106,7 +106,7 @@ const API = {
         Logger.log('API Request: POST /orders/', 'info');
         Logger.log('Order data: ' + JSON.stringify(orderData), 'info');
 
-        const res = await fetch('/api/proxy', {
+        const res = await _fetchWithRetry('/api/proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -128,6 +128,19 @@ const API = {
 };
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Thin fetch wrapper — just a named alias so all API calls go through
+ * one place. Does NOT retry on 429; retrying rate-limited requests only
+ * makes the problem worse.
+ */
+async function _fetchWithRetry(url, options = {}) {
+    const res = await fetch(url, options);
+    if (res.status === 429) {
+        Logger.log('Rate limited (429) — wait a few seconds then tap refresh.', 'error');
+    }
+    return res;
+}
 
 function _extractAssets(data) {
     if (!data || typeof data !== 'object') return [];
