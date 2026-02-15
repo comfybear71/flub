@@ -82,6 +82,11 @@ body {
     border-radius: 16px;
 }
 
+/* When trading panel is open, allow it to grow so content is never clipped */
+.chart-section.trading-open {
+    overflow: visible;
+}
+
 .chart-slider {
     display: flex;
     transition: transform 0.3s ease;
@@ -92,19 +97,12 @@ body {
     transform: translateX(-50%);
 }
 
-/* Portfolio view — hide when trading panel is open */
 .portfolio-view {
     width: 50%;
     padding: 20px;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
     border-radius: 16px;
     text-align: center;
-    transition: opacity 0.3s ease;
-}
-
-.chart-section.trading-open .portfolio-view {
-    opacity: 0;
-    pointer-events: none;
 }
 
 .doughnut-container {
@@ -122,17 +120,16 @@ body {
     text-align: center;
 }
 
-/* Trading View — scrollable so trigger panel is never clipped */
+/* Trading View */
 .trading-view {
     width: 50%;
     padding: 16px;
-    padding-bottom: 32px;
+    padding-bottom: 24px;
     background: rgba(30, 41, 59, 0.5);
     border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.05);
-    overflow-y: scroll;
-    max-height: 75vh;
-    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+    max-height: 80vh;
 }
 
 .trade-header-compact {
