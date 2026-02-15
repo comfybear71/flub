@@ -130,67 +130,75 @@
                 
                 <div class="trigger-compact" id="triggerSection">
                     <div class="trigger-header">
-                        <span class="trigger-title" id="triggerTitle">Trigger Price</span>
+                        <span class="trigger-title">Trigger Order</span>
                         <span class="trigger-reset" onclick="Trading.resetTrigger()">Reset</span>
                     </div>
-                    
+
+                    <!-- Step 1: Choose direction -->
                     <div class="limit-toggle" id="limitButtons">
                         <button class="limit-btn buy-limit" id="btnBuyLimit" onclick="Trading.selectLimitType('buy')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12h14"/>
-                            </svg>
-                            Buy Limit
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                            Buy Dip
                         </button>
                         <button class="limit-btn sell-limit" id="btnSellLimit" onclick="Trading.selectLimitType('sell')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M5 12h14"/>
-                            </svg>
-                            Sell Limit
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+                            Sell Rise
                         </button>
                     </div>
-                    
-                    <button class="confirm-limit-btn hidden" id="confirmLimitBtn" onclick="Trading.showConfirmModal()">
-                        <span id="confirmBtnText">Confirm Buy Trigger</span>
-                        <svg class="spinner hidden" id="confirmSpinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    
-                    <div class="trigger-price-row" id="triggerPriceRow">
-                        <div class="trigger-price" id="triggerPrice">$0.00</div>
-                        <div class="trigger-offset" id="triggerOffset">+0%</div>
+
+                    <!-- Step 2: Configure (shown after direction chosen) -->
+                    <div class="hidden" id="triggerConfig">
+
+                        <!-- Direction badge -->
+                        <div class="trigger-direction-badge" id="triggerDirectionBadge">Buy Dip</div>
+
+                        <!-- Live price display -->
+                        <div class="trigger-price-row">
+                            <div class="trigger-price" id="triggerPrice">$0.00</div>
+                            <div class="trigger-offset" id="triggerOffset">+0%</div>
+                        </div>
+                        <div class="trigger-hint" id="triggerHint">Drag left to set a lower buy price</div>
+
+                        <!-- Price slider -->
+                        <div class="slider-section">
+                            <div class="slider-box">
+                                <div class="slider-track"></div>
+                                <div class="slider-fill" id="triggerFill" style="width:50%;background:#64748b;"></div>
+                                <input type="range" id="triggerSlider" min="-30" max="0" value="0" step="1" oninput="Trading.updateTriggerSlider(this.value)">
+                            </div>
+                            <div class="slider-labels" id="triggerLabels">
+                                <span id="triggerLabelMin">-30%</span>
+                                <span>Market</span>
+                                <span id="triggerLabelMax">0%</span>
+                            </div>
+                        </div>
+
+                        <!-- Amount slider -->
+                        <div class="slider-section" style="margin-top:14px;">
+                            <div class="trigger-amount-header">
+                                <span class="slider-label" id="amountSliderLabel">Amount (USDC)</span>
+                                <span class="amount-display-small" id="triggerAmountDisplay">$0.00</span>
+                            </div>
+                            <div class="slider-box">
+                                <div class="slider-track"></div>
+                                <div class="slider-fill" id="triggerAmountFill" style="width:0%;background:#3b82f6;"></div>
+                                <input type="range" id="triggerAmountSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateTriggerAmountSlider(this.value)">
+                            </div>
+                            <div class="slider-labels">
+                                <span>0%</span>
+                                <span id="triggerAmountPercent">0%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+
+                        <!-- Confirm button -->
+                        <button class="confirm-limit-btn" id="confirmLimitBtn" onclick="Trading.showConfirmModal()">
+                            <span id="confirmBtnText">Confirm Buy Trigger</span>
+                        </button>
+
                     </div>
-                    
-                    <div class="slider-section hidden" id="triggerSliderSection">
-                        <div class="slider-label" id="triggerSliderLabel">Set trigger price</div>
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="triggerFill" style="width: 50%; background: #64748b;"></div>
-                            <input type="range" id="triggerSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateTriggerSlider(this.value)">
-                        </div>
-                        <div class="slider-labels" id="triggerLabels">
-                            <span>-20%</span>
-                            <span>Current</span>
-                            <span>+20%</span>
-                        </div>
-                    </div>
-                    
-                    <div class="slider-section hidden" id="amountSliderSection">
-                        <div class="slider-label" id="amountSliderLabel">Amount (USDC)</div>
-                        <div class="amount-display-small" id="triggerAmountDisplay">$0.00</div>
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="triggerAmountFill" style="width: 0%; background: #3b82f6;"></div>
-                            <input type="range" id="triggerAmountSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateTriggerAmountSlider(this.value)">
-                        </div>
-                        <div class="slider-labels">
-                            <span>0%</span>
-                            <span id="triggerAmountPercent">0%</span>
-                            <span>100%</span>
-                        </div>
-                    </div>
-                    
-                    <div id="triggerError" class="error-message" style="display: none; margin-top: 8px;"></div>
+
+                    <div id="triggerError" class="error-message" style="display:none;margin-top:8px;"></div>
                 </div>
                 
                 <div class="auto-compact" id="autoSection">
