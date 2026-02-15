@@ -24,7 +24,7 @@ window.UI = UI;
 window.Trading = Trading;
 window.API = API;
 window.Assets = Assets;
-//window.AutoTrader = AutoTrader;
+window.AutoTrader = AutoTrader;
 
 // ==========================================
 // INITIALIZE
