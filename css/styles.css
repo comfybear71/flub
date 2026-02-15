@@ -82,6 +82,11 @@ body {
     border-radius: 16px;
 }
 
+/* When trading panel is open, allow it to grow so content is never clipped */
+.chart-section.trading-open {
+    overflow: visible;
+}
+
 .chart-slider {
     display: flex;
     transition: transform 0.3s ease;
@@ -119,9 +124,12 @@ body {
 .trading-view {
     width: 50%;
     padding: 16px;
+    padding-bottom: 24px;
     background: rgba(30, 41, 59, 0.5);
     border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.05);
+    overflow-y: auto;
+    max-height: 80vh;
 }
 
 .trade-header-compact {
@@ -481,7 +489,7 @@ input[type="range"] {
 
 .confirm-limit-btn {
     width: 100%;
-    padding: 12px;
+    padding: 14px;
     border-radius: 8px;
     border: none;
     background: #3b82f6;
@@ -493,7 +501,8 @@ input[type="range"] {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-top: 14px;
+    margin-top: 16px;
+    margin-bottom: 4px;
     transition: background 0.2s;
 }
 
