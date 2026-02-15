@@ -415,7 +415,8 @@ const Trading = {
 
         const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
         const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-
+      
+      
         // Determine order type based on trigger vs market price
         // Buy below market = STOP_LIMIT_BUY (triggers when price drops TO this level)
         // Sell above market = STOP_LIMIT_SELL (triggers when price rises TO this level)
@@ -425,6 +426,10 @@ const Trading = {
         } else {
             orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
         }
+      
+        // Sliders are constrained so buy is always below market, sell always above
+        const orderType = State.selectedLimitType === 'buy' ? 'LIMIT_BUY' : 'LIMIT_SELL';
+
 
         let spendDisplay, receiveDisplay, quantity;
 
