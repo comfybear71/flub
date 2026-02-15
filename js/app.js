@@ -24,7 +24,10 @@ window.UI = UI;
 window.Trading = Trading;
 window.API = API;
 window.Assets = Assets;
-//window.AutoTrader = AutoTrader;
+/// Only expose AutoTrader if it loaded successfully
+if (typeof AutoTrader !== 'undefined') {
+    window.AutoTrader = AutoTrader;
+}
 
 // ==========================================
 // INITIALIZE
