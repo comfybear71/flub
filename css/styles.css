@@ -456,6 +456,29 @@ input[type="range"] {
     color: #ef4444;
 }
 
+.trigger-direction-badge {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+}
+
+.trigger-hint {
+    font-size: 11px;
+    color: #64748b;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.trigger-amount-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
 .confirm-limit-btn {
     width: 100%;
     padding: 12px;
@@ -470,12 +493,8 @@ input[type="range"] {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-top: 14px;
     transition: background 0.2s;
-}
-
-.confirm-limit-btn.hidden {
-    display: none;
 }
 
 .trigger-price-row {
@@ -483,7 +502,7 @@ input[type="range"] {
     justify-content: center;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .trigger-price {
@@ -505,23 +524,16 @@ input[type="range"] {
     margin-top: 12px;
 }
 
-.slider-section.hidden {
-    display: none;
-}
-
 .slider-label {
     font-size: 12px;
     color: #64748b;
     margin-bottom: 8px;
-    text-align: center;
 }
 
 .amount-display-small {
-    text-align: center;
-    font-size: 20px;
+    font-size: 16px;
     font-weight: bold;
     color: white;
-    margin-bottom: 8px;
 }
 
 /* Auto Section */
