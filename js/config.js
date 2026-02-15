@@ -1,10 +1,10 @@
 // ==========================================
 // CONFIG - Constants & Configuration
 // ==========================================
-export const CONFIG = {
+const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
-    AUD_TO_USD_RATE: 0.65, // Conversion rate 0.63-0.7
+    AUD_TO_USD_RATE: 0.65,
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
@@ -24,29 +24,17 @@ export const CONFIG = {
         'AUD':  { color: '#f59e0b', icon: 'A$', name: 'Australian Dollar' }
     },
     CODE_TO_ID: {
-        'AUD':  1,
-        'BTC':  2,
-        'ETH':  3,
-        'XRP':  5,
-        'ADA':  12,
-        'USD':  36,
-        'USDC': 53,
-        'DOGE': 73,
-        'SOL':  130,
-        'LUNA': 405,
-        'LUNC': 406,
-        'NEXO': 407,
-        'SUI':  438,
-        'ENA':  496,
-        'POL':  569,
-        'XAUT': 635
+        'AUD':  1,  'BTC':  2,  'ETH':  3,  'XRP':  5,
+        'ADA':  12, 'USD':  36, 'USDC': 53, 'DOGE': 73,
+        'SOL':  130,'LUNA': 405,'LUNC': 406,'NEXO': 407,
+        'SUI':  438,'ENA':  496,'POL':  569,'XAUT': 635
     }
 };
 
 // ==========================================
 // STATE - Global Application State
 // ==========================================
-export const State = {
+const State = {
     portfolioData: { assets: [] },
     selectedAsset: null,
     cashAsset: 'USDC',
@@ -60,10 +48,7 @@ export const State = {
     isConnected: false,
     portfolioChart: null,
     miniChart: null,
-    autoTradeConfig: {
-        deviation: 0,
-        allocation: 0
-    },
+    autoTradeConfig: { deviation: 0, allocation: 0 },
     selectedTriggerCash: 'USDC',
     selectedLimitType: null,
     triggerAmountPercent: 0,

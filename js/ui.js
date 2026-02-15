@@ -1,12 +1,7 @@
 // ==========================================
 // UI - User Interface & DOM Manipulation
 // ==========================================
-import { CONFIG, State } from './config.js';
-import { Logger } from './logger.js';
-import { Assets } from './assets.js';
-import { Trading } from './trading.js';
-
-export const UI = {
+const UI = {
     init() {
         this.checkPin();
     },
@@ -26,7 +21,6 @@ export const UI = {
         const pinInput = document.getElementById('pinInput');
         const pinError = document.getElementById('pinError');
         const pinBtn   = document.getElementById('pinBtn');
-
         if (!pinInput || !pinBtn) return;
 
         pinBtn.disabled    = true;
@@ -55,7 +49,6 @@ export const UI = {
             connecting:   { cls: 'api-status api-connecting',   dot: 'bg-yellow-400', text: 'Connecting...' },
             disconnected: { cls: 'api-status api-disconnected', dot: 'bg-red-400',    text: 'Disconnected' }
         };
-
         const cfg = statusMap[status] ?? statusMap.disconnected;
         el.className = cfg.cls;
         el.innerHTML = `<span class="w-2 h-2 rounded-full ${cfg.dot}"></span> ${cfg.text}`;
@@ -77,21 +70,21 @@ export const UI = {
 
         State.portfolioChart?.destroy();
 
-        const usdcAsset = State.portfolioData.assets.find(a => a.code === 'USDC');
-        const audAsset  = State.portfolioData.assets.find(a => a.code === 'AUD');
+        const usdcAsset   = State.portfolioData.assets.find(a => a.code === 'USDC');
+        const audAsset    = State.portfolioData.assets.find(a => a.code === 'AUD');
         const usdcBalance = usdcAsset?.usd_value ?? 0;
         const audBalance  = audAsset?.usd_value  ?? 0;
 
-        const headerUsdcBalance = document.getElementById('headerUsdcBalance');
-        const headerAudBalance  = document.getElementById('headerAudBalance');
-        if (headerUsdcBalance) headerUsdcBalance.textContent = Assets.formatCurrency(usdcBalance);
-        if (headerAudBalance)  headerAudBalance.textContent  = Assets.formatCurrency(audBalance);
+        const headerUsdc = document.getElementById('headerUsdcBalance');
+        const headerAud  = document.getElementById('headerAudBalance');
+        if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
+        if (headerAud)  headerAud.textContent  = Assets.formatCurrency(audBalance);
 
         const cryptoAssets = State.portfolioData.assets.filter(
             a => a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
         );
 
-        const colors     = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+        const colors      = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
         const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
         const totalValue  = cryptoTotal + usdcBalance + audBalance;
 
@@ -147,7 +140,6 @@ export const UI = {
             const change     = asset.change_24h || 0;
             const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
             const changeSign  = change >= 0 ? '+' : '';
-
             return `
             <div class="card" onclick="UI.openTrade('${asset.code}')">
                 <div class="flex justify-between items-center">
@@ -176,27 +168,30 @@ export const UI = {
         State.selectedAsset = State.portfolioData.assets.find(a => a.code === code);
         if (!State.selectedAsset) return;
 
-        const style = CONFIG.ASSET_STYLES[code];
-
+        const style  = CONFIG.ASSET_STYLES[code];
         const iconEl = document.getElementById('tradeIcon');
         const nameEl = document.getElementById('tradeName');
         if (iconEl) {
-            iconEl.textContent   = style.icon;
+            iconEl.textContent      = style.icon;
             iconEl.style.background = style.color + '33';
             iconEl.style.color      = style.color;
         }
         if (nameEl) nameEl.textContent = code;
 
-        // Reset sliders and state
-        State.amountSliderValue = 0;
-        State.triggerOffset     = 0;
+        // Reset all state and sliders
+        State.amountSliderValue  = 0;
+        State.triggerOffset      = 0;
         State.isMiniChartVisible = false;
-        State.autoTradeConfig   = { deviation: 0, allocation: 0 };
+        State.autoTradeConfig    = { deviation: 0, allocation: 0 };
 
-        document.getElementById('amountSlider')?.setAttribute('value', '0');
-        document.getElementById('triggerSlider')?.setAttribute('value', '0');
-        document.getElementById('autoDevSlider')?.setAttribute('value', '0');
-        document.getElementById('autoAllocSlider')?.setAttribute('value', '0');
+        const amountSlider = document.getElementById('amountSlider');
+        const triggerSlider = document.getElementById('triggerSlider');
+        const autoDevSlider = document.getElementById('autoDevSlider');
+        const autoAllocSlider = document.getElementById('autoAllocSlider');
+        if (amountSlider)   amountSlider.value   = 0;
+        if (triggerSlider)  triggerSlider.value  = 0;
+        if (autoDevSlider)  autoDevSlider.value  = 0;
+        if (autoAllocSlider) autoAllocSlider.value = 0;
 
         document.getElementById('miniChartContainer')?.classList.remove('show');
         document.getElementById('chartToggleBtn')?.classList.remove('active');
@@ -248,7 +243,6 @@ export const UI = {
 
         State.miniChart?.destroy();
 
-        // Simulate a price path ending at the current price
         const change     = State.selectedAsset.change_24h || 0;
         const volatility = Math.abs(change) / 20 || 0.01;
         let price = State.selectedAsset.usd_price * (1 - change / 100);
@@ -270,7 +264,7 @@ export const UI = {
                 labels: data.map((_, i) => i),
                 datasets: [{
                     data,
-                    borderColor:     color,
+                    borderColor: color,
                     backgroundColor: gradient,
                     borderWidth: 2,
                     fill: true,
@@ -292,26 +286,36 @@ export const UI = {
     setOrderType(type) {
         State.orderType = type;
 
-        ['instant', 'trigger', 'auto'].forEach(t => {
-            document.getElementById(`btn${t.charAt(0).toUpperCase() + t.slice(1)}`)
-                ?.classList.toggle('active', t === type);
-        });
+        document.getElementById('btnInstant')?.classList.toggle('active', type === 'instant');
+        document.getElementById('btnTrigger')?.classList.toggle('active', type === 'trigger');
+        document.getElementById('btnAuto')?.classList.toggle('active',   type === 'auto');
 
         const amountSection  = document.getElementById('amountSection');
         const triggerSection = document.getElementById('triggerSection');
         const autoSection    = document.getElementById('autoSection');
 
-        amountSection?.classList.toggle('hidden',  type !== 'instant');
-        triggerSection?.classList.toggle('show',   type === 'trigger');
-        autoSection?.classList.toggle('show',      type === 'auto');
+        if (type === 'instant') {
+            amountSection?.classList.remove('hidden');
+            triggerSection?.classList.remove('show');
+            autoSection?.classList.remove('show');
+        } else if (type === 'trigger') {
+            amountSection?.classList.add('hidden');
+            triggerSection?.classList.add('show');
+            autoSection?.classList.remove('show');
+            Trading.resetTrigger();
+        } else if (type === 'auto') {
+            amountSection?.classList.add('hidden');
+            triggerSection?.classList.remove('show');
+            autoSection?.classList.add('show');
+        }
 
-        if (type === 'trigger') Trading.resetTrigger();
-
-        // Reset offsets and sliders
         State.triggerOffset = 0;
         State.autoTradeConfig.deviation = 0;
-        document.getElementById('triggerSlider')?.setAttribute('value', '0');
-        document.getElementById('autoDevSlider')?.setAttribute('value', '0');
+
+        const triggerSlider = document.getElementById('triggerSlider');
+        const autoDevSlider = document.getElementById('autoDevSlider');
+        if (triggerSlider) triggerSlider.value = 0;
+        if (autoDevSlider) autoDevSlider.value = 0;
 
         document.getElementById('triggerError')?.removeAttribute('style');
         document.getElementById('autoError')?.removeAttribute('style');
@@ -325,23 +329,24 @@ export const UI = {
 
     updateAmountSlider(value) {
         State.amountSliderValue = parseInt(value);
-        document.getElementById('amountFill')?.setAttribute('style', `width:${State.amountSliderValue}%`);
+        const amountFill    = document.getElementById('amountFill');
         const amountPercent = document.getElementById('amountPercent');
-        if (amountPercent) amountPercent.textContent = State.amountSliderValue + '%';
+        if (amountFill)    amountFill.style.width      = State.amountSliderValue + '%';
+        if (amountPercent) amountPercent.textContent   = State.amountSliderValue + '%';
         this.updateAmountDisplay();
     },
 
     updateAmountDisplay() {
-        const cashBalance   = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.usd_value ?? 0;
-        const assetBalance  = State.selectedAsset?.balance ?? 0;
-        const currentPrice  = State.selectedAsset?.usd_price ?? 0;
+        const cashBalance  = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.usd_value ?? 0;
+        const assetBalance = State.selectedAsset?.balance   ?? 0;
+        const currentPrice = State.selectedAsset?.usd_price ?? 0;
 
         let displayAmount, conversionText;
 
         if (State.pendingTradeSide === 'sell') {
-            const sellQty   = (State.amountSliderValue / 100) * assetBalance;
-            displayAmount   = sellQty * currentPrice;
-            conversionText  = `${sellQty.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
+            const sellQty  = (State.amountSliderValue / 100) * assetBalance;
+            displayAmount  = sellQty * currentPrice;
+            conversionText = `${sellQty.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
         } else {
             const cashAmount  = (State.amountSliderValue / 100) * cashBalance;
             displayAmount     = cashAmount;
@@ -349,9 +354,9 @@ export const UI = {
             conversionText    = `≈ ${receiveAmt.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
         }
 
-        const amountValue    = document.getElementById('amountValue');
+        const amountValueEl    = document.getElementById('amountValue');
         const conversionTextEl = document.getElementById('conversionText');
-        if (amountValue)    amountValue.textContent    = Assets.formatCurrency(displayAmount);
+        if (amountValueEl)    amountValueEl.textContent    = Assets.formatCurrency(displayAmount);
         if (conversionTextEl) conversionTextEl.textContent = conversionText;
     },
 

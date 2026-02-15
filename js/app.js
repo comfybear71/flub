@@ -1,24 +1,24 @@
 // ==========================================
-// APP - Entry Point
+// APP - Main Application Controller
 // ==========================================
-import { API } from './api.js';
-import { UI } from './ui.js';
-import { Trading } from './trading.js';
-import { Assets } from './assets.js';
+const App = {
+    init() {
+        UI.init();
+        API.connect();
+    },
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
+    refreshData() {
+        API.refreshData();
+    },
 
+    unlockTrading() {
+        UI.unlockTrading();
+    }
+};
+
+// ==========================================
+// INITIALIZE
+// ==========================================
 window.addEventListener('load', () => {
-    UI.init();
-    API.connect();
+    App.init();
 });
-
-// ── Global bindings (called from inline HTML event handlers) ─────────────────
-//
-// ES modules are scoped — inline onclick="..." handlers need globals.
-// Expose only what the HTML actually calls.
-
-window.App      = { refreshData: () => API.refreshData() };
-window.UI       = UI;
-window.Trading  = Trading;
-window.Assets   = Assets;

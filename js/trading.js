@@ -1,27 +1,7 @@
 // ==========================================
 // TRADING - Trading Logic & Order Management
 // ==========================================
-import { State } from './config.js';
-import { Logger } from './logger.js';
-import { Assets } from './assets.js';
-import { API } from './api.js';
-
-// ── Colour helpers ────────────────────────────────────────────────────────────
-
-const POSITIVE_STYLE = { color: '#22c55e', background: 'rgba(34,197,94,0.15)' };
-const NEGATIVE_STYLE = { color: '#ef4444', background: 'rgba(239,68,68,0.15)' };
-const NEUTRAL_STYLE  = { color: '#94a3b8', background: 'rgba(148,163,184,0.15)' };
-
-function applyOffsetStyle(el, value) {
-    if (!el) return;
-    const s = value > 0 ? POSITIVE_STYLE : value < 0 ? NEGATIVE_STYLE : NEUTRAL_STYLE;
-    el.style.color      = s.color;
-    el.style.background = s.background;
-}
-
-// ── Exported Trading object ───────────────────────────────────────────────────
-
-export const Trading = {
+const Trading = {
 
     // ── Trigger cash balance helpers ─────────────────────────────────────────
 
@@ -45,8 +25,8 @@ export const Trading = {
         const balance   = this.getTriggerCashBalance('USDC');
         const label     = document.getElementById('amountSliderLabel');
         const balanceEl = document.querySelector('#triggerOptUSDC .balance');
-        if (label)     label.textContent     = 'Amount (USDC)';
-        if (balanceEl) balanceEl.textContent  = Assets.formatCurrency(balance);
+        if (label)     label.textContent    = 'Amount (USDC)';
+        if (balanceEl) balanceEl.textContent = Assets.formatCurrency(balance);
 
         this.updateTriggerAmountSlider(0);
         Logger.log(`Selected USDC for trigger order. Balance: ${Assets.formatCurrency(balance)}`, 'info');
@@ -70,7 +50,6 @@ export const Trading = {
             confirmBtnText.textContent = type === 'buy' ? 'Confirm Buy Trigger' : 'Confirm Sell Trigger';
         }
 
-        // Style confirm button by side
         if (confirmLimitBtn) {
             const bg      = type === 'buy' ? '#22c55e' : '#ef4444';
             const bgHover = type === 'buy' ? '#16a34a' : '#dc2626';
@@ -110,7 +89,6 @@ export const Trading = {
         const displayEl = document.getElementById('triggerAmountDisplay');
         const percentEl = document.getElementById('triggerAmountPercent');
         const fillEl    = document.getElementById('triggerAmountFill');
-
         if (displayEl) displayEl.textContent = `$${amount}`;
         if (percentEl) percentEl.textContent = State.triggerAmountPercent + '%';
         if (fillEl)    fillEl.style.width    = State.triggerAmountPercent + '%';
@@ -122,23 +100,23 @@ export const Trading = {
         const slider = document.getElementById('triggerSlider');
         if (!slider) return;
 
-        const currentPrice  = State.selectedAsset.usd_price || 0;
-        const triggerPrice  = currentPrice * (1 + State.triggerOffset / 100);
+        const currentPrice = State.selectedAsset.usd_price || 0;
+        const triggerPrice = currentPrice * (1 + State.triggerOffset / 100);
 
         const min     = parseInt(slider.min);
         const max     = parseInt(slider.max);
         const percent = ((State.triggerOffset - min) / (max - min)) * 100;
 
-        const fillEl    = document.getElementById('triggerFill');
-        const priceEl   = document.getElementById('triggerPrice');
-        const offsetEl  = document.getElementById('triggerOffset');
+        const fillEl   = document.getElementById('triggerFill');
+        const priceEl  = document.getElementById('triggerPrice');
+        const offsetEl = document.getElementById('triggerOffset');
 
         if (fillEl)  fillEl.style.width  = percent + '%';
         if (priceEl) priceEl.textContent = Assets.formatCurrency(triggerPrice);
 
         if (offsetEl) {
             offsetEl.textContent = (State.triggerOffset >= 0 ? '+' : '') + State.triggerOffset + '%';
-            applyOffsetStyle(offsetEl, State.triggerOffset);
+            _applyOffsetStyle(offsetEl, State.triggerOffset);
         }
     },
 
@@ -158,7 +136,6 @@ export const Trading = {
         if (triggerSlider) triggerSlider.value = 0;
         if (amountSlider)  amountSlider.value  = 0;
 
-        // Reset confirm button to default blue
         const confirmBtn = document.getElementById('confirmLimitBtn');
         if (confirmBtn) {
             confirmBtn.style.background = '#3b82f6';
@@ -179,9 +156,9 @@ export const Trading = {
     // ── Auto-trade controls ───────────────────────────────────────────────────
 
     updateAutoTradeConstraints(side) {
-        const slider  = document.getElementById('autoDevSlider');
-        const labels  = document.getElementById('autoDevLabels');
-        const guide   = document.getElementById('autoGuideText');
+        const slider = document.getElementById('autoDevSlider');
+        const labels = document.getElementById('autoDevLabels');
+        const guide  = document.getElementById('autoGuideText');
         if (!slider) return;
 
         slider.min = -20;
@@ -213,36 +190,34 @@ export const Trading = {
         const slider = document.getElementById('autoDevSlider');
         if (!slider) return;
 
-        const currentPrice = State.selectedAsset.usd_price || 0;
         const deviation    = State.autoTradeConfig.deviation;
+        const currentPrice = State.selectedAsset.usd_price || 0;
         const triggerPrice = currentPrice * (1 + deviation / 100);
 
         const min     = parseInt(slider.min);
         const max     = parseInt(slider.max);
         const percent = ((deviation - min) / (max - min)) * 100;
 
-        const fillEl      = document.getElementById('autoDevFill');
-        const priceEl     = document.getElementById('autoPrice');
-        const devEl       = document.getElementById('autoDeviation');
+        const fillEl  = document.getElementById('autoDevFill');
+        const priceEl = document.getElementById('autoPrice');
+        const devEl   = document.getElementById('autoDeviation');
 
         if (fillEl)  fillEl.style.width  = percent + '%';
         if (priceEl) priceEl.textContent = Assets.formatCurrency(triggerPrice);
 
         if (devEl) {
             devEl.textContent = `${deviation >= 0 ? '+' : ''}${deviation}%`;
-            applyOffsetStyle(devEl, deviation);
+            _applyOffsetStyle(devEl, deviation);
         }
 
-        const cashBalance      = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
-        const allocationAmount = (State.autoTradeConfig.allocation / 100) * cashBalance;
+        const cashBalance     = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
+        const allocFillEl     = document.getElementById('autoAllocFill');
+        const allocPctEl      = document.getElementById('autoAllocPercent');
+        const allocValueEl    = document.getElementById('autoAllocationValue');
 
-        const allocFillEl   = document.getElementById('autoAllocFill');
-        const allocPctEl    = document.getElementById('autoAllocPercent');
-        const allocValueEl  = document.getElementById('autoAllocationValue');
-
-        if (allocFillEl)  allocFillEl.style.width   = State.autoTradeConfig.allocation + '%';
-        if (allocPctEl)   allocPctEl.textContent     = State.autoTradeConfig.allocation + '%';
-        if (allocValueEl) allocValueEl.textContent   =
+        if (allocFillEl)  allocFillEl.style.width  = State.autoTradeConfig.allocation + '%';
+        if (allocPctEl)   allocPctEl.textContent   = State.autoTradeConfig.allocation + '%';
+        if (allocValueEl) allocValueEl.textContent =
             `${State.autoTradeConfig.allocation}% of ${Assets.formatCurrency(cashBalance)} USDC`;
     },
 
@@ -255,26 +230,21 @@ export const Trading = {
         this.updateAutoTradeDisplay();
     },
 
-    // ── Order preparation & confirmation (instant / auto) ────────────────────
+    // ── Order preparation & confirmation ─────────────────────────────────────
 
     prepareTrade(side) {
         State.pendingTradeSide = side;
 
         if (!State.selectedAsset) return;
 
-        if (!State.CONFIG?.TRADE_PIN) {
-            // CONFIG imported at the top of this file's sibling; get it via the shared import
-            import('./config.js').then(({ CONFIG }) => {
-                if (!CONFIG.TRADE_PIN) {
-                    alert('Please set trading PIN in settings');
-                    document.getElementById('pinModal')?.classList.add('show');
-                }
-            });
+        if (!CONFIG.TRADE_PIN) {
+            alert('Please set trading PIN in settings');
+            document.getElementById('pinModal')?.classList.add('show');
             return;
         }
 
         if (State.orderType === 'trigger') {
-            // Nothing to do here — user selects buy/sell via selectLimitType
+            this.setTriggerConstraints(side);
             if (State.selectedLimitType === null) return;
         } else if (State.orderType === 'auto') {
             this.updateAutoTradeConstraints(side);
@@ -289,20 +259,21 @@ export const Trading = {
             }
         }
 
+        UI.updateAmountDisplay();
         this._showInstantConfirmModal(side);
     },
 
     _showInstantConfirmModal(side) {
         const cashBalance  = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
-        const assetBalance = State.selectedAsset.balance ?? 0;
-        const currentPrice = State.selectedAsset.usd_price;
+        const assetBalance = State.selectedAsset.balance    ?? 0;
+        const currentPrice = State.selectedAsset.usd_price  ?? 0;
 
         let amount, receiveAmount, triggerPrice;
 
         if (State.orderType === 'auto') {
-            const allocationAmount   = (State.autoTradeConfig.allocation / 100) * cashBalance;
+            const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
             const deviationMultiplier = 1 + State.autoTradeConfig.deviation / 100;
-            triggerPrice = currentPrice * deviationMultiplier;
+            triggerPrice  = currentPrice * deviationMultiplier;
             if (side === 'buy') {
                 amount        = allocationAmount;
                 receiveAmount = triggerPrice > 0 ? amount / triggerPrice : 0;
@@ -327,33 +298,32 @@ export const Trading = {
             if (State.orderType === 'trigger') triggerPrice = effectivePrice;
         }
 
-        // Populate modal fields
         const modalTitle = document.getElementById('tradeModalTitle');
         if (modalTitle) {
             modalTitle.textContent = `Confirm ${side === 'buy' ? 'Buy' : 'Sell'}`;
             modalTitle.className   = `trade-modal-title ${side}`;
         }
 
-        const orderTypeLabel = State.orderType === 'instant'  ? 'Instant (Market)'
-            : State.orderType === 'trigger' ? 'Trigger Order'
+        const orderTypeLabel = State.orderType === 'instant' ? 'Instant (Market)'
+            : State.orderType === 'trigger'                  ? 'Trigger Order'
             : `Auto Trade (${State.autoTradeConfig.deviation >= 0 ? '+' : ''}${State.autoTradeConfig.deviation}%)`;
 
-        setElText('modalOrderType', orderTypeLabel);
-        setElText('modalAsset',     State.selectedAsset.code);
+        _setElText('modalOrderType', orderTypeLabel);
+        _setElText('modalAsset',     State.selectedAsset.code);
 
         if (side === 'buy') {
-            setElText('modalAmount',  `${Assets.formatCurrency(amount)} USDC`);
-            setElText('modalReceive', `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`);
+            _setElText('modalAmount',  `${Assets.formatCurrency(amount)} USDC`);
+            _setElText('modalReceive', `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`);
         } else {
-            setElText('modalAmount',  `${amount.toFixed(8)} ${State.selectedAsset.code}`);
-            setElText('modalReceive', `${Assets.formatCurrency(receiveAmount)} USDC`);
+            _setElText('modalAmount',  `${amount.toFixed(8)} ${State.selectedAsset.code}`);
+            _setElText('modalReceive', `${Assets.formatCurrency(receiveAmount)} USDC`);
         }
 
         const triggerRow = document.getElementById('modalTriggerRow');
         if (triggerRow) {
             const showTrigger = (State.orderType === 'trigger' || State.orderType === 'auto') && triggerPrice;
             triggerRow.style.display = showTrigger ? 'flex' : 'none';
-            if (showTrigger) setElText('modalTrigger', Assets.formatCurrency(triggerPrice));
+            if (showTrigger) _setElText('modalTrigger', Assets.formatCurrency(triggerPrice));
         }
 
         const confirmBtn = document.getElementById('modalConfirmBtn');
@@ -378,72 +348,50 @@ export const Trading = {
 
         document.getElementById('tradeModal')?.classList.remove('show');
 
-        const btnId = side === 'buy' ? 'buyBtn' : 'sellBtn';
-        const btn   = document.getElementById(btnId);
-        if (btn) {
-            btn.disabled = true;
-            btn.classList.add('spinning');
-        }
+        const btn = document.getElementById(side === 'buy' ? 'buyBtn' : 'sellBtn');
+        if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
 
         try {
             const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
             const cashBalance   = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
             const assetBalance  = State.selectedAsset.balance ?? 0;
 
-            const orderData = buildOrderData(side, realtimePrice, cashBalance, assetBalance);
-
+            const orderData = _buildOrderData(side, realtimePrice, cashBalance, assetBalance);
             Logger.log(`Sending ${side.toUpperCase()} order:`, 'info');
 
             const res = await API.placeOrder(orderData);
-
             if (!res.ok) {
                 const errorText = await res.text();
                 throw new Error(errorText || `HTTP ${res.status}`);
             }
 
-            await res.json(); // consume body
+            await res.json();
             Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
 
             if (State.orderType === 'instant') {
                 State.amountSliderValue = 0;
                 const slider = document.getElementById('amountSlider');
                 if (slider) slider.value = 0;
-                // Re-import to avoid circular at module load time
-                const { UI } = await import('./ui.js');
                 UI.updateAmountSlider(0);
             }
 
             await API.refreshData();
-
-            if (State.orderType === 'trigger') {
-                this.updateTriggerButtonBalances();
-            }
+            if (State.orderType === 'trigger') this.updateTriggerButtonBalances();
 
         } catch (error) {
             Logger.log(`❌ Trade failed: ${error.message}`, 'error');
             alert(`Trade failed: ${error.message}`);
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.classList.remove('spinning');
-            }
-            if (State.orderType !== 'trigger') {
-                State.pendingTradeSide = null;
-            }
+            if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
+            if (State.orderType !== 'trigger') State.pendingTradeSide = null;
         }
     },
 
-    // ── Trigger order confirmation modal ─────────────────────────────────────
+    // ── Trigger order confirm modal ───────────────────────────────────────────
 
     async showConfirmModal() {
-        if (!State.selectedAsset) {
-            alert('No asset selected');
-            return;
-        }
-        if (State.triggerAmountPercent === 0) {
-            alert('Please select an amount');
-            return;
-        }
+        if (!State.selectedAsset) { alert('No asset selected'); return; }
+        if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
         const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
         const triggerPrice  = realtimePrice * (1 + State.triggerOffset / 100);
@@ -465,12 +413,12 @@ export const Trading = {
             typeEl.style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
         }
 
-        setElText('limitModalAsset',   State.selectedAsset.code);
-        setElText('limitModalTrigger', Assets.formatCurrency(triggerPrice));
-        setElText('limitModalAmount',  `$${amount.toFixed(2)} USDC`);
-        setElText('limitModalReceive', `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`);
+        _setElText('limitModalAsset',   State.selectedAsset.code);
+        _setElText('limitModalTrigger', Assets.formatCurrency(triggerPrice));
+        _setElText('limitModalAmount',  `$${amount.toFixed(2)} USDC`);
+        _setElText('limitModalReceive', `${receiveAmount.toFixed(8)} ${State.selectedAsset.code}`);
 
-        State.pendingOrderType   = orderType;
+        State.pendingOrderType    = orderType;
         State.pendingTriggerPrice = triggerPrice;
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
@@ -507,7 +455,6 @@ export const Trading = {
             Logger.log(`Asset: ${orderData.primary}, Qty: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
 
             const res = await API.placeOrder(orderData);
-
             if (!res.ok) {
                 const errorText = await res.text();
                 throw new Error(errorText || `HTTP ${res.status}`);
@@ -540,90 +487,65 @@ export const Trading = {
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
-/** Sets the textContent of an element by ID (no-op if not found). */
-function setElText(id, text) {
+function _setElText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
 }
 
-/**
- * Builds the order payload for confirmTrade based on current state.
- */
-function buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
+function _applyOffsetStyle(el, value) {
+    if (!el) return;
+    if (value > 0) {
+        el.style.color      = '#22c55e';
+        el.style.background = 'rgba(34,197,94,0.15)';
+    } else if (value < 0) {
+        el.style.color      = '#ef4444';
+        el.style.background = 'rgba(239,68,68,0.15)';
+    } else {
+        el.style.color      = '#94a3b8';
+        el.style.background = 'rgba(148,163,184,0.15)';
+    }
+}
+
+function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
         const deviationMultiplier = 1 + State.autoTradeConfig.deviation / 100;
         const triggerPrice        = parseFloat((realtimePrice * deviationMultiplier).toFixed(2));
-
-        let orderType;
-        if (side === 'buy') {
-            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
-        } else {
-            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
-        }
-
+        const orderType = side === 'buy'
+            ? (triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY'  : 'LIMIT_BUY')
+            : (triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL');
         const quantity = side === 'buy'
             ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
             : parseFloat((allocationAmount / realtimePrice).toFixed(8));
-
-        return {
-            primary:       State.selectedAsset.code,
-            secondary:     'USDC',
-            quantity,
-            assetQuantity: State.selectedAsset.code,
-            orderType,
-            trigger:       triggerPrice
-        };
+        return { primary: State.selectedAsset.code, secondary: 'USDC', quantity,
+                 assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
     }
 
     if (side === 'buy') {
         const cashAmount = (State.amountSliderValue / 100) * cashBalance;
-
         if (State.orderType === 'instant') {
-            return {
-                primary:       State.selectedAsset.code,
-                secondary:     'USDC',
-                quantity:      parseFloat((cashAmount / realtimePrice).toFixed(8)),
-                orderType:     'MARKET_BUY',
-                assetQuantity: State.selectedAsset.code
-            };
+            return { primary: State.selectedAsset.code, secondary: 'USDC',
+                     quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
+                     orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
         }
-
-        // trigger buy
-        const offsetMultiplier = 1 + State.triggerOffset / 100;
-        const triggerPrice     = parseFloat((realtimePrice * offsetMultiplier).toFixed(2));
-        return {
-            primary:       State.selectedAsset.code,
-            secondary:     'USDC',
-            quantity:      parseFloat((cashAmount / triggerPrice).toFixed(8)),
-            assetQuantity: State.selectedAsset.code,
-            orderType:     triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
-            trigger:       triggerPrice
-        };
+        const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+        return { primary: State.selectedAsset.code, secondary: 'USDC',
+                 quantity: parseFloat((cashAmount / triggerPrice).toFixed(8)),
+                 assetQuantity: State.selectedAsset.code,
+                 orderType: triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
+                 trigger: triggerPrice };
     }
 
     // sell
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
-
     if (State.orderType === 'instant') {
-        return {
-            primary:       State.selectedAsset.code,
-            secondary:     'USDC',
-            quantity:      sellQty,
-            orderType:     'MARKET_SELL',
-            assetQuantity: State.selectedAsset.code
-        };
+        return { primary: State.selectedAsset.code, secondary: 'USDC',
+                 quantity: sellQty, orderType: 'MARKET_SELL',
+                 assetQuantity: State.selectedAsset.code };
     }
-
-    // trigger sell
-    const offsetMultiplier = 1 + State.triggerOffset / 100;
-    const triggerPrice     = parseFloat((realtimePrice * offsetMultiplier).toFixed(2));
-    return {
-        primary:       State.selectedAsset.code,
-        secondary:     'USDC',
-        quantity:      sellQty,
-        assetQuantity: State.selectedAsset.code,
-        orderType:     triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
-        trigger:       triggerPrice
-    };
+    const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+    return { primary: State.selectedAsset.code, secondary: 'USDC',
+             quantity: sellQty, assetQuantity: State.selectedAsset.code,
+             orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
+             trigger: triggerPrice };
 }
