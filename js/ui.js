@@ -164,10 +164,9 @@ const UI = {
 
     // ── Trading Panel ─────────────────────────────────────────────────────────
 
-    openTrade(code) {
+        openTrade(code) {
         State.selectedAsset = State.portfolioData.assets.find(a => a.code === code);
         if (!State.selectedAsset) return;
-
         const style  = CONFIG.ASSET_STYLES[code];
         const iconEl = document.getElementById('tradeIcon');
         const nameEl = document.getElementById('tradeName');
@@ -177,36 +176,38 @@ const UI = {
             iconEl.style.color      = style.color;
         }
         if (nameEl) nameEl.textContent = code;
-
         // Reset all state and sliders
         State.amountSliderValue  = 0;
         State.triggerOffset      = 0;
         State.isMiniChartVisible = false;
         State.autoTradeConfig    = { deviation: 0, allocation: 0 };
-
         const amountSlider = document.getElementById('amountSlider');
         const triggerSlider = document.getElementById('triggerSlider');
         const autoDevSlider = document.getElementById('autoDevSlider');
         const autoAllocSlider = document.getElementById('autoAllocSlider');
         if (amountSlider)   amountSlider.value   = 0;
         if (triggerSlider)  triggerSlider.value  = 0;
-        if (autoDevSlider)  autoDevSlider.value  = 0;
-        if (autoAllocSlider) autoAllocSlider.value = 0;
-
+        if (autoDevSlider)  autoDevSlider.value  = 3;
+        if (autoAllocSlider) autoAllocSlider.value = 3;
         document.getElementById('miniChartContainer')?.classList.remove('show');
         document.getElementById('chartToggleBtn')?.classList.remove('active');
-
         Trading.updateTriggerButtonBalances();
         this.updateAmountDisplay();
         Trading.updateTriggerDisplay();
         Trading.updateAutoTradeDisplay();
-
+        
+        // Initialize AutoTrader display
+        if (typeof AutoTrader !== 'undefined') {
+            AutoTrader.updateDeviation(3);
+            AutoTrader.updateAllocation(3);
+        }
+        
         document.getElementById('chartSection')?.classList.add('trading-open');
         document.getElementById('chartSlider')?.classList.add('slide-left');
-
         document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
         if (event?.currentTarget) event.currentTarget.classList.add('selected');
     },
+
 
     closeTradingView() {
         document.getElementById('chartSection')?.classList.remove('trading-open');
