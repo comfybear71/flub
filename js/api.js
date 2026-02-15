@@ -1,23 +1,18 @@
 // ==========================================
 // API - All Network Requests
 // ==========================================
+
+// JWT token expiry — Swyftx tokens last ~1 hour, refresh every 50 minutes
+const TOKEN_TTL_MS = 50 * 60 * 1000;
+let _tokenExpiresAt = 0;
+
 const API = {
     async connect() {
         UI.updateStatus('connecting');
         Logger.log('Connecting to Swyftx...', 'info');
 
         try {
-            const res = await fetch('/api/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ endpoint: '/auth/refresh/', method: 'POST' })
-            });
-
-            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-            const data = await res.json();
-            if (!data.accessToken) throw new Error('No access token in response');
-
-            State.jwtToken = data.accessToken;
+            await this._ensureToken();
             Logger.log('Connected!', 'success');
             UI.updateStatus('connected');
             await this.refreshData();
@@ -35,6 +30,29 @@ const API = {
         }
     },
 
+    // Only re-authenticates if the cached token is expired or missing
+    async _ensureToken() {
+        if (State.jwtToken && Date.now() < _tokenExpiresAt) {
+            Logger.log('Using cached token', 'info');
+            return;
+        }
+
+        Logger.log('Fetching new auth token...', 'info');
+        const res = await _fetchWithRetry('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: '/auth/refresh/', method: 'POST' })
+        });
+
+        if (!res.ok) throw new Error(`Auth failed: HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.accessToken) throw new Error('No access token in response');
+
+        State.jwtToken  = data.accessToken;
+        _tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
+        Logger.log('Token refreshed', 'success');
+    },
+
     async refreshData() {
         const btn = document.getElementById('refreshBtn');
         btn?.classList.add('spinning');
@@ -42,7 +60,7 @@ const API = {
         try {
             Logger.log('Fetching portfolio data...', 'info');
 
-            const response = await fetch(CONFIG.API_URL);
+            const response = await _fetchWithRetry(CONFIG.API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
             const data = await response.json();
@@ -88,7 +106,7 @@ const API = {
         Logger.log('API Request: POST /orders/', 'info');
         Logger.log('Order data: ' + JSON.stringify(orderData), 'info');
 
-        const res = await fetch('/api/proxy', {
+        const res = await _fetchWithRetry('/api/proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -110,6 +128,44 @@ const API = {
 };
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
+
+/**
+ * fetch() wrapper that retries once on 429 (rate limit) after waiting
+ * for the Retry-After header, or a default 5 second backoff.
+ */
+async function _fetchWithRetry(url, options = {}, maxRetries = 2) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const res = await fetch(url, options);
+
+        if (res.status !== 429) return res;
+
+        if (attempt === maxRetries) {
+            Logger.log('Rate limited by Swyftx API. Please wait a moment before retrying.', 'error');
+            return res;
+        }
+
+        // Read Retry-After header if provided, otherwise back off 5s then 10s
+        const retryAfter = res.headers.get('Retry-After');
+        const waitMs     = retryAfter ? parseInt(retryAfter) * 1000 : attempt * 5000;
+
+        Logger.log(`Rate limited (429). Retrying in ${waitMs / 1000}s...`, 'info');
+
+        // Show a non-blocking status update
+        const list = document.getElementById('holdings-list');
+        if (list && list.querySelector('.retry-notice') === null) {
+            const notice = document.createElement('div');
+            notice.className = 'retry-notice';
+            notice.style.cssText = 'text-align:center;color:#eab308;padding:12px;font-size:13px;';
+            notice.textContent = `Rate limited — retrying in ${waitMs / 1000}s...`;
+            list.prepend(notice);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+
+        // Clean up notice
+        document.querySelector('.retry-notice')?.remove();
+    }
+}
 
 function _extractAssets(data) {
     if (!data || typeof data !== 'object') return [];
