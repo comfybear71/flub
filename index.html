@@ -41,6 +41,20 @@
                     </div>
                 </div>
                 <p class="text-xs text-slate-500 mt-2 font-medium">Tap coin to trade</p>
+                
+                <!-- Cash balances moved here from holdings header -->
+                <div class="cash-balances-header" style="position:relative;transform:none;left:auto;margin-top:12px;">
+                    <div class="cash-balance-item">
+                        <div class="cash-dot usdc-dot"></div>
+                        <span class="cash-label">USDC</span>
+                        <span class="cash-amount" id="headerUsdcBalance">$0.00</span>
+                    </div>
+                    <div class="cash-balance-item">
+                        <div class="cash-dot aud-dot"></div>
+                        <span class="cash-label">AUD</span>
+                        <span class="cash-amount" id="headerAudBalance">$0.00</span>
+                    </div>
+                </div>
             </div>
             
             <div class="trading-view" id="tradingView">
@@ -265,19 +279,6 @@
         <div class="holdings-header">
             <h2 class="text-lg font-bold holdings-title">Holdings</h2>
             
-            <!-- AUD/USDC Balances in the center -->
-            <div class="cash-balances-header">
-                <div class="cash-balance-item usdc">
-                    <span class="cash-dot usdc-dot"></span>
-                    <span class="cash-label">USDC</span>
-                    <span class="cash-amount" id="headerUsdcBalance">$0.00</span>
-                </div>
-                <div class="cash-balance-item aud">
-                    <span class="cash-dot aud-dot"></span>
-                    <span class="cash-label">AUD</span>
-                    <span class="cash-amount" id="headerAudBalance">$0.00</span>
-                </div>
-            </div>
             
             <button onclick="UI.toggleSort()" class="sort-btn">
                 <span id="currentSortLabel">Sort: Value</span>
