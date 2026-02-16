@@ -164,7 +164,10 @@ const UI = {
 
     // ── Trading Panel ─────────────────────────────────────────────────────────
 
-        openTrade(code) {
+    openTrade(code) {
+        // Scroll to top when opening trade view
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
         State.selectedAsset = State.portfolioData.assets.find(a => a.code === code);
         if (!State.selectedAsset) return;
         const style  = CONFIG.ASSET_STYLES[code];
@@ -207,7 +210,6 @@ const UI = {
         document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
         if (event?.currentTarget) event.currentTarget.classList.add('selected');
     },
-
 
     closeTradingView() {
         document.getElementById('chartSection')?.classList.remove('trading-open');
