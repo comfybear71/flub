@@ -14,7 +14,7 @@ const CONFIG = {
     // Solana RPC endpoint (fallback)
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
     // Helius API key — get free key at https://dev.helius.xyz (recommended for reliable balance fetching)
-    HELIUS_API_KEY: '',
+    HELIUS_API_KEY: 'b81f2789-b697-4987-83f5-6f7e0d24538e',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
