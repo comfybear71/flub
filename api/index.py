@@ -15,7 +15,8 @@ from database import (
     record_deposit,
     record_trade,
     get_all_active_users,
-    calculate_pool_allocations
+    calculate_pool_allocations,
+    is_admin
 )
 
 
@@ -46,10 +47,18 @@ class handler(BaseHTTPRequestHandler):
                 self._send_json(200, portfolio)
 
             elif path == '/api/users':
+                wallet = params.get('admin_wallet')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
                 users = get_all_active_users()
                 self._send_json(200, {"users": users, "count": len(users)})
 
             elif path == '/api/pool/allocations':
+                wallet = params.get('admin_wallet')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
                 allocations = calculate_pool_allocations()
                 self._send_json(200, {"allocations": allocations})
 
@@ -92,6 +101,11 @@ class handler(BaseHTTPRequestHandler):
                 self._send_json(200, result)
 
             elif path == '/api/trade':
+                admin_wallet = body.get('adminWallet')
+                if not admin_wallet or not is_admin(admin_wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+
                 coin = body.get('coin')
                 trade_type = body.get('type')
                 amount = body.get('amount')

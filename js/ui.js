@@ -3,12 +3,41 @@
 // ==========================================
 const UI = {
     init() {
-        this.checkPin();
+        // Only show PIN for admin (deferred until role is known)
+        // Non-admins never see the PIN modal
     },
 
-    // ── PIN / Auth ────────────────────────────────────────────────────────────
+    // ── Role-based UI ───────────────────────────────────────────────────────
+
+    applyRole(role) {
+        const adminEls = document.querySelectorAll('.admin-only');
+        const userEls = document.querySelectorAll('.user-only');
+
+        if (role === 'admin') {
+            // Show admin sections, hide user-only sections
+            adminEls.forEach(el => el.style.display = '');
+            userEls.forEach(el => el.style.display = 'none');
+            // Show PIN modal if no PIN set
+            this.checkPin();
+            Logger.log('Admin mode active', 'success');
+        } else if (role === 'user') {
+            // Hide admin sections, show user sections
+            adminEls.forEach(el => el.style.display = 'none');
+            userEls.forEach(el => el.style.display = '');
+            // Close any open trading panel
+            this.closeTradingView();
+            Logger.log('User mode active', 'success');
+        } else {
+            // Not connected — hide role-specific items, show defaults
+            adminEls.forEach(el => el.style.display = '');
+            userEls.forEach(el => el.style.display = 'none');
+        }
+    },
+
+    // ── PIN / Auth (admin only) ──────────────────────────────────────────────
 
     checkPin() {
+        if (State.userRole !== 'admin') return;
         const savedPin = localStorage.getItem('tradePin');
         if (!savedPin) {
             document.getElementById('pinModal')?.classList.add('show');
@@ -77,8 +106,23 @@ const UI = {
 
         const headerUsdc = document.getElementById('headerUsdcBalance');
         const headerAud  = document.getElementById('headerAudBalance');
-        if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
-        if (headerAud)  headerAud.textContent  = Assets.formatCurrency(audBalance);
+
+        // Users see their share of cash, admin sees pool totals
+        if (State.userRole === 'user' && State.userAllocation > 0) {
+            const userUsdc = usdcBalance * (State.userAllocation / 100);
+            const userAud = audBalance * (State.userAllocation / 100);
+            if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(userUsdc);
+            if (headerAud)  headerAud.textContent  = Assets.formatCurrency(userAud);
+        } else {
+            if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
+            if (headerAud)  headerAud.textContent  = Assets.formatCurrency(audBalance);
+        }
+
+        // Update portfolio hint text
+        const hintEl = document.getElementById('portfolioHint');
+        if (hintEl) {
+            hintEl.textContent = State.userRole === 'admin' ? 'Tap coin to trade' : 'Your pool holdings';
+        }
 
         const cryptoAssets = State.portfolioData.assets.filter(
             a => a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
@@ -116,8 +160,16 @@ const UI = {
 
         const totalEl = document.getElementById('total-value');
         const countEl = document.getElementById('asset-count');
-        if (totalEl) totalEl.textContent = Assets.formatCurrency(totalValue);
-        if (countEl) countEl.textContent = `${cryptoAssets.length} assets + cash`;
+
+        // For regular users show their share, for admin show total pool
+        if (State.userRole === 'user' && State.userAllocation > 0) {
+            const userShare = totalValue * (State.userAllocation / 100);
+            if (totalEl) totalEl.textContent = Assets.formatCurrency(userShare);
+            if (countEl) countEl.textContent = `Your share (${State.userAllocation.toFixed(1)}%)`;
+        } else {
+            if (totalEl) totalEl.textContent = Assets.formatCurrency(totalValue);
+            if (countEl) countEl.textContent = `${cryptoAssets.length} assets + cash`;
+        }
     },
 
     // ── Holdings List ─────────────────────────────────────────────────────────
@@ -135,13 +187,37 @@ const UI = {
             return;
         }
 
+        const isAdmin = State.userRole === 'admin';
+
+        // Update holdings title based on role
+        const titleEl = document.querySelector('.holdings-title');
+        if (titleEl) {
+            titleEl.textContent = isAdmin ? 'Holdings' :
+                (State.userRole === 'user' ? 'Pool Holdings (Your Share)' : 'Holdings');
+        }
+
         container.innerHTML = holdings.map(asset => {
             const style      = CONFIG.ASSET_STYLES[asset.code] ?? { color: '#666', icon: asset.code[0] };
             const change     = asset.change_24h || 0;
             const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
             const changeSign  = change >= 0 ? '+' : '';
+
+            // Users see their allocation share, admin sees pool totals
+            let displayBalance = asset.balance;
+            let displayValue = asset.usd_value;
+            if (State.userRole === 'user' && State.userAllocation > 0) {
+                displayBalance = asset.balance * (State.userAllocation / 100);
+                displayValue = asset.usd_value * (State.userAllocation / 100);
+            }
+
+            // Only admin can click to trade, users see read-only
+            const clickAction = isAdmin
+                ? `onclick="UI.openTrade('${asset.code}')"`
+                : '';
+            const cursorStyle = isAdmin ? '' : 'cursor:default;';
+
             return `
-            <div class="card" onclick="UI.openTrade('${asset.code}')">
+            <div class="card" ${clickAction} style="${cursorStyle}">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
                         <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
@@ -149,11 +225,11 @@ const UI = {
                         </div>
                         <div>
                             <div class="font-bold text-sm">${asset.code}</div>
-                            <div class="text-xs text-slate-400">${Assets.formatNumber(asset.balance)} ${asset.code}</div>
+                            <div class="text-xs text-slate-400">${Assets.formatNumber(displayBalance)} ${asset.code}</div>
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-bold text-sm">${Assets.formatCurrency(asset.usd_value)}</div>
+                        <div class="font-bold text-sm">${Assets.formatCurrency(displayValue)}</div>
                         <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
                         <div class="text-xs font-semibold" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
                     </div>
@@ -161,18 +237,21 @@ const UI = {
             </div>`;
         }).join('');
 
-        // Update auto-trader tier badges
-        if (typeof AutoTrader !== 'undefined') {
+        // Update auto-trader tier badges (admin only)
+        if (isAdmin && typeof AutoTrader !== 'undefined') {
             AutoTrader.renderTierBadges();
         }
     },
 
-    // ── Trading Panel ─────────────────────────────────────────────────────────
+    // ── Trading Panel (Admin Only) ───────────────────────────────────────────
 
     openTrade(code) {
+        // Only admin can trade
+        if (State.userRole !== 'admin') return;
+
         // Scroll to top when opening trade view
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        
+
         State.selectedAsset = State.portfolioData.assets.find(a => a.code === code);
         if (!State.selectedAsset) return;
         const style  = CONFIG.ASSET_STYLES[code];
@@ -465,5 +544,64 @@ const UI = {
         if (currentValueEl) currentValueEl.textContent = Assets.formatCurrency(data.currentValue || data.totalDeposited || 0);
 
         section.style.display = 'block';
+    },
+
+    // ── Deposit Modal ────────────────────────────────────────────────────────
+
+    showDepositModal() {
+        // Close wallet panel first
+        document.getElementById('walletPanel')?.classList.remove('show');
+        document.getElementById('depositModal')?.classList.add('show');
+    },
+
+    closeDepositModal() {
+        document.getElementById('depositModal')?.classList.remove('show');
+        document.getElementById('depositAmount').value = '';
+    },
+
+    async submitDeposit() {
+        const amountInput = document.getElementById('depositAmount');
+        const amount = parseFloat(amountInput?.value);
+
+        if (!amount || amount < 1) {
+            alert('Please enter a valid amount (minimum $1 USDC)');
+            return;
+        }
+
+        if (!PhantomWallet.walletAddress) {
+            alert('Please connect your wallet first');
+            return;
+        }
+
+        try {
+            // For now, record the deposit intent
+            // In production, this would trigger an on-chain USDC transfer first
+            const response = await fetch('/api/deposit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    walletAddress: PhantomWallet.walletAddress,
+                    amount: amount,
+                    txHash: 'pending_' + Date.now(),
+                    currency: 'USDC'
+                })
+            });
+
+            if (!response.ok) throw new Error('Deposit failed');
+
+            const result = await response.json();
+            this.closeDepositModal();
+            Logger.log(`Deposit of $${amount} USDC recorded`, 'success');
+
+            // Reload user portfolio to update allocation
+            await PhantomWallet.loadUserPortfolio();
+            // Re-render to reflect new allocation
+            this.renderPortfolio();
+            this.renderHoldings();
+
+        } catch (error) {
+            Logger.log(`Deposit error: ${error.message}`, 'error');
+            alert('Deposit failed: ' + error.message);
+        }
     }
 };

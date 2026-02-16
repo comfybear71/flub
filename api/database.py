@@ -14,6 +14,9 @@ from nacl.exceptions import BadSignatureError
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
 DB_NAME = "flub"
 
+# Admin wallet addresses (set via env var, comma-separated)
+ADMIN_WALLETS = [w.strip() for w in os.getenv("ADMIN_WALLETS", "").split(",") if w.strip()]
+
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
 
@@ -92,10 +95,17 @@ def register_user(wallet_address: str, signature: List[int], message: str) -> Di
         return format_user_data(existing_user)
 
 
+def is_admin(wallet_address: str) -> bool:
+    """Check if a wallet address belongs to an admin"""
+    return wallet_address in ADMIN_WALLETS
+
+
 def format_user_data(user: Dict) -> Dict:
     """Format user data for API response"""
+    wallet = user["walletAddress"]
     return {
-        "walletAddress": user["walletAddress"],
+        "walletAddress": wallet,
+        "role": "admin" if is_admin(wallet) else "user",
         "allocation": user.get("allocation", 0.0),
         "totalDeposited": user.get("totalDeposited", 0.0),
         "totalWithdrawn": user.get("totalWithdrawn", 0.0),
@@ -116,8 +126,10 @@ def get_user_portfolio(wallet_address: str) -> Optional[Dict]:
     # This will be enhanced when we add real-time price tracking
     current_value = user.get("totalDeposited", 0.0)  # Placeholder
 
+    wallet = user["walletAddress"]
     return {
-        "walletAddress": user["walletAddress"],
+        "walletAddress": wallet,
+        "role": "admin" if is_admin(wallet) else "user",
         "allocation": user.get("allocation", 0.0),
         "totalDeposited": user.get("totalDeposited", 0.0),
         "currentValue": current_value,

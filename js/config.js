@@ -5,6 +5,11 @@ const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
     AUD_TO_USD_RATE: 0.65,
+    // Admin wallet addresses — only these wallets get full trading access
+    ADMIN_WALLETS: [
+        // Add your admin Phantom wallet public key(s) here
+        // e.g. 'AbCd1234...your-wallet-address'
+    ],
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
@@ -60,5 +65,7 @@ const State = {
     // Phantom wallet / user tracking
     userAllocation: 0,
     userHoldings: {},
-    userDeposits: 0
+    userDeposits: 0,
+    // Role: 'admin', 'user', or null (not connected)
+    userRole: null
 };

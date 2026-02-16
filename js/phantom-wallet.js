@@ -83,8 +83,10 @@ const PhantomWallet = {
     handleDisconnect() {
         this.walletAddress = null;
         this.isConnected = false;
+        State.userRole = null;
         this.clearUserSession();
         UI.updateWalletStatus('disconnected');
+        UI.applyRole(null);
         Logger.log('Wallet disconnected', 'info');
     },
 
@@ -111,11 +113,19 @@ const PhantomWallet = {
             }
 
             const userData = await response.json();
+
+            // Set role from backend response (or check frontend config as fallback)
+            State.userRole = userData.role ||
+                (CONFIG.ADMIN_WALLETS.includes(this.walletAddress) ? 'admin' : 'user');
+
             this.saveUserData(userData);
-            Logger.log('User authenticated', 'success');
+            Logger.log(`Authenticated as ${State.userRole}`, 'success');
 
             // Load user's portfolio data
             await this.loadUserPortfolio();
+
+            // Apply role-based UI
+            UI.applyRole(State.userRole);
 
         } catch (error) {
             Logger.log(`Registration error: ${error.message}`, 'error');
@@ -140,6 +150,37 @@ const PhantomWallet = {
         } catch (error) {
             Logger.log(`Portfolio load error: ${error.message}`, 'error');
         }
+    },
+
+    // Called when user clicks wallet button while connected
+    toggleWalletPanel() {
+        const panel = document.getElementById('walletPanel');
+        if (!panel) return;
+
+        if (panel.classList.contains('show')) {
+            panel.classList.remove('show');
+        } else {
+            this.updateWalletPanel();
+            panel.classList.add('show');
+        }
+    },
+
+    updateWalletPanel() {
+        const addrEl = document.getElementById('walletPanelAddress');
+        const roleEl = document.getElementById('walletPanelRole');
+        const allocEl = document.getElementById('walletPanelAllocation');
+        const depositedEl = document.getElementById('walletPanelDeposited');
+        const valueEl = document.getElementById('walletPanelValue');
+
+        if (addrEl) addrEl.textContent = this.walletAddress || '';
+        if (roleEl) {
+            const role = State.userRole || 'user';
+            roleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+            roleEl.className = `wallet-panel-role-badge ${role}`;
+        }
+        if (allocEl) allocEl.textContent = (State.userAllocation || 0).toFixed(2) + '%';
+        if (depositedEl) depositedEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
+        if (valueEl) valueEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
     },
 
     saveUserSession() {
