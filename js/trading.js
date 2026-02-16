@@ -424,13 +424,15 @@ const Trading = {
         const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
 
         // Determine order type based on trigger vs market price
-        // Buy below market = STOP_LIMIT_BUY (triggers when price drops TO this level)
-        // Sell above market = STOP_LIMIT_SELL (triggers when price rises TO this level)
+        // LIMIT_BUY  (3): pending until price DROPS to trigger (Buy Dip)
+        // LIMIT_SELL  (4): pending until price RISES to trigger (Sell Rise)
+        // STOP_LIMIT_BUY  (5): triggers when price RISES above trigger
+        // STOP_LIMIT_SELL (6): triggers when price DROPS below trigger
         let orderType;
         if (State.selectedLimitType === 'buy') {
-            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
         } else {
-            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
         }
 
         let spendDisplay, receiveDisplay, quantity;
