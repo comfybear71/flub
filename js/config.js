@@ -11,6 +11,12 @@ const CONFIG = {
     ],
     // Solana USDC mint address (mainnet)
     USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    // BUDJU token mint address (Solana)
+    BUDJU_MINT: '2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump',
+    // BUDJU requirement to use the system (not enforced yet)
+    BUDJU_REQUIRED: 1_000_000,
+    // Pool USDC deposit address (on-chain)
+    DEPOSIT_ADDRESS: '2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD',
     // Solana RPC endpoint (fallback)
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
     // Helius API key — get free key at https://dev.helius.xyz (recommended for reliable balance fetching)
@@ -74,5 +80,5 @@ const State = {
     // Role: 'admin', 'user', or null (not connected)
     userRole: null,
     // On-chain wallet balances (from Solana RPC)
-    walletBalances: { sol: 0, usdc: 0 }
+    walletBalances: { sol: 0, usdc: 0, budju: 0 }
 };

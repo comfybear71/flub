@@ -551,6 +551,9 @@ const UI = {
     showDepositModal() {
         // Close wallet panel first
         document.getElementById('walletPanel')?.classList.remove('show');
+        // Show available USDC balance
+        const availEl = document.getElementById('depositAvailableUsdc');
+        if (availEl) availEl.textContent = (State.walletBalances.usdc || 0).toFixed(2);
         document.getElementById('depositModal')?.classList.add('show');
     },
 
@@ -573,35 +576,30 @@ const UI = {
             return;
         }
 
+        // Check available USDC balance
+        if (amount > (State.walletBalances.usdc || 0)) {
+            alert(`Insufficient USDC balance. You have ${(State.walletBalances.usdc || 0).toFixed(2)} USDC`);
+            return;
+        }
+
         try {
-            // For now, record the deposit intent
-            // In production, this would trigger an on-chain USDC transfer first
-            const response = await fetch('/api/deposit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    walletAddress: PhantomWallet.walletAddress,
-                    amount: amount,
-                    txHash: 'pending_' + Date.now(),
-                    currency: 'USDC'
-                })
-            });
+            // Send USDC on-chain via Phantom to the deposit address
+            const txSignature = await PhantomWallet.sendUsdcDeposit(amount);
 
-            if (!response.ok) throw new Error('Deposit failed');
-
-            const result = await response.json();
             this.closeDepositModal();
-            Logger.log(`Deposit of $${amount} USDC recorded`, 'success');
+            Logger.log(`Deposit of ${amount} USDC sent! TX: ${txSignature.substring(0, 16)}...`, 'success');
+            alert(`Deposit successful!\n\n${amount} USDC sent to Flub pool.\nTX: ${txSignature.substring(0, 24)}...`);
 
-            // Reload user portfolio to update allocation
-            await PhantomWallet.loadUserPortfolio();
-            // Re-render to reflect new allocation
-            this.renderPortfolio();
-            this.renderHoldings();
+            // Refresh balances after deposit
+            await PhantomWallet.fetchOnChainBalances();
 
         } catch (error) {
             Logger.log(`Deposit error: ${error.message}`, 'error');
-            alert('Deposit failed: ' + error.message);
+            if (error.message.includes('User rejected')) {
+                alert('Transaction cancelled by user');
+            } else {
+                alert('Deposit failed: ' + error.message);
+            }
         }
     }
 };
