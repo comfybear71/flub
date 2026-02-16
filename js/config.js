@@ -17,6 +17,7 @@ const CONFIG = {
         'SUI':  { color: '#4ade80', icon: 'S',  name: 'Sui' },
         'LUNA': { color: '#ef4444', icon: 'L',  name: 'Terra' },
         'ENA':  { color: '#6b7280', icon: 'E',  name: 'Ethena' },
+        'NEXO': { color: '#1a56db', icon: 'N',  name: 'Nexo' },
         'USDC': { color: '#22c55e', icon: '$',  name: 'USD Coin' },
         'ADA':  { color: '#3b82f6', icon: 'A',  name: 'Cardano' },
         'POL':  { color: '#8b5cf6', icon: 'P',  name: 'Polygon' },
