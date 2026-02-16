@@ -1272,40 +1272,6 @@ input[type="range"]::-moz-range-thumb {
     color: #ef4444;
 }
 
-/* User Stats Section */
-.user-stats-section {
-    margin-top: 12px;
-}
-
-.user-stats-card {
-    display: flex;
-    justify-content: space-around;
-    padding: 12px 8px;
-    background: rgba(171, 159, 242, 0.08);
-    border-radius: 12px;
-    border: 1px solid rgba(171, 159, 242, 0.15);
-}
-
-.user-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.user-stat-label {
-    font-size: 10px;
-    color: #64748b;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.user-stat-value {
-    font-size: 14px;
-    font-weight: 700;
-    color: #ab9ff2;
-}
 
 /* ══════════════════════════════════════════
    Wallet Panel (slide-down overlay)

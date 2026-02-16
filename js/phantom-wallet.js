@@ -171,6 +171,9 @@ const PhantomWallet = {
             // Update panel if it's open
             this.updateWalletPanel();
 
+            // Update deposited banner with latest wallet balance
+            UI._updateUserDepositBanner();
+
         } catch (error) {
             Logger.log(`Balance fetch error: ${error.message}`, 'error');
         }

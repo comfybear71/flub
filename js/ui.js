@@ -290,17 +290,20 @@ const UI = {
     _updateUserDepositBanner() {
         const bannerEl = document.getElementById('userDepositedBanner');
         const amountEl = document.getElementById('userDepositedAmount');
-        const warningEl = document.getElementById('lowBalanceWarning');
+        const walletEl = document.getElementById('userWalletUsdc');
+        const warningEl = document.getElementById('lowWalletWarning');
         if (!bannerEl) return;
 
         if (State.userRole === 'user') {
             const deposited = State.userDeposits || 0;
+            const walletUsdc = State.walletBalances.usdc || 0;
             if (amountEl) amountEl.textContent = Assets.formatCurrency(deposited);
+            if (walletEl) walletEl.textContent = Assets.formatCurrency(walletUsdc);
             bannerEl.style.display = 'block';
 
-            // Show low balance warning if deposited < $10
+            // Show deposit prompt when wallet USDC drops below $20
             if (warningEl) {
-                warningEl.style.display = deposited < 10 ? 'block' : 'none';
+                warningEl.style.display = walletUsdc < 20 ? 'block' : 'none';
             }
         } else {
             bannerEl.style.display = 'none';
@@ -720,25 +723,7 @@ const UI = {
         } else {
             btn.classList.remove('phantom-connected');
             btnText.textContent = 'Connect';
-            // Hide user stats when disconnected
-            const statsSection = document.getElementById('userStatsSection');
-            if (statsSection) statsSection.style.display = 'none';
         }
-    },
-
-    renderUserStats(data) {
-        const section = document.getElementById('userStatsSection');
-        if (!section) return;
-
-        const allocationEl   = document.getElementById('userAllocation');
-        const depositedEl    = document.getElementById('userDeposited');
-        const currentValueEl = document.getElementById('userCurrentValue');
-
-        if (allocationEl)   allocationEl.textContent   = (data.allocation || 0).toFixed(2) + '%';
-        if (depositedEl)    depositedEl.textContent    = Assets.formatCurrency(data.totalDeposited || 0);
-        if (currentValueEl) currentValueEl.textContent = Assets.formatCurrency(data.currentValue || data.totalDeposited || 0);
-
-        section.style.display = 'block';
     },
 
     // ── Deposit Modal ────────────────────────────────────────────────────────
