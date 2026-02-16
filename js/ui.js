@@ -160,6 +160,11 @@ const UI = {
                 </div>
             </div>`;
         }).join('');
+
+        // Update auto-trader tier badges
+        if (typeof AutoTrader !== 'undefined') {
+            AutoTrader.renderTierBadges();
+        }
     },
 
     // ── Trading Panel ─────────────────────────────────────────────────────────
@@ -185,18 +190,10 @@ const UI = {
         State.isMiniChartVisible = false;
         State.pendingTradeSide   = 'buy';
         State.autoTradeConfig    = { deviation: 0, allocation: 0 };
-        // Stop any running auto trade when switching coins
-        if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
-            AutoTrader.stop();
-        }
         const amountSlider = document.getElementById('amountSlider');
         const triggerSlider = document.getElementById('triggerSlider');
-        const autoDevSlider = document.getElementById('autoDevSlider');
-        const autoAllocSlider = document.getElementById('autoAllocSlider');
         if (amountSlider)   amountSlider.value   = 0;
         if (triggerSlider)  triggerSlider.value  = 0;
-        if (autoDevSlider)  autoDevSlider.value  = 0;
-        if (autoAllocSlider) autoAllocSlider.value = 0;
         document.getElementById('miniChartContainer')?.classList.remove('show');
         document.getElementById('chartToggleBtn')?.classList.remove('active');
         // Reset instant toggle to Buy

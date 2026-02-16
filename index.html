@@ -100,12 +100,6 @@
                         </svg>
                         Trigger
                     </button>
-                    <button class="order-btn" id="btnAuto" onclick="UI.setOrderType('auto')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                        </svg>
-                        Auto
-                    </button>
                 </div>
                 
                 <div class="amount-compact" id="amountSection">
@@ -221,77 +215,6 @@
                 </div>
 
                 
-                <div class="auto-compact" id="autoSection">
-                    <div class="auto-header">
-                        <span class="auto-title">Auto Trade Settings</span>
-                        <span class="auto-reset" onclick="Trading.resetAutoTrade()">Reset</span>
-                    </div>
-                    
-                    <div style="margin-bottom: 10px;">
-                        <div class="auto-price-row">
-                            <div class="auto-price" id="autoPrice">$0.00</div>
-                            <div class="auto-deviation" id="autoDeviation">0%</div>
-                        </div>
-                        
-                        <div id="autoGuide" style="text-align: center; margin-bottom: 6px; font-size: 11px; color: #64748b;">
-                            <span id="autoGuideText">Set price deviation</span>
-                        </div>
-                        
-                        <div id="autoError" class="error-message" style="display: none; margin-bottom: 6px;"></div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoDevFill" style="width: 50%; background: #a855f7;"></div>
-                            <input type="range" id="autoDevSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateAutoDevSlider(this.value)">
-                        </div>
-                        <div class="slider-labels" id="autoDevLabels">
-                            <span>-20%</span>
-                            <span>Current</span>
-                            <span>+20%</span>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-                        <div class="auto-allocation-row">
-                            <span class="auto-allocation-label">Portfolio Allocation</span>
-                            <span class="auto-allocation-value" id="autoAllocationValue">0% of 0 USDC</span>
-                        </div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoAllocFill" style="width: 0%; background: #22c55e;"></div>
-                            <input type="range" id="autoAllocSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateAutoAllocSlider(this.value)">
-                        </div>
-                        <div class="slider-labels">
-                            <span>0%</span>
-                            <span id="autoAllocPercent">0%</span>
-                            <span>100%</span>
-                        </div>
-                    </div>
-
-                    <!-- How it works info -->
-                    <div style="margin-top:12px; padding:10px; background:rgba(168,85,247,0.08); border-radius:8px; border:1px solid rgba(168,85,247,0.15);">
-                        <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                            <span style="font-size:12px; font-weight:600; color:#a855f7;">How It Works</span>
-                        </div>
-                        <div style="font-size:11px; color:#94a3b8; line-height:1.6;">
-                            <div><b style="color:#e2e8f0;">Deviation</b> = how far price must move to trigger</div>
-                            <div><b style="color:#e2e8f0;">Allocation</b> = % of USDC balance per trade</div>
-                            <div>Price drops &rarr; auto <span style="color:#22c55e;font-weight:600;">BUY</span> &nbsp;|&nbsp; Price rises &rarr; auto <span style="color:#ef4444;font-weight:600;">SELL</span> (83%)</div>
-                            <div>Checks every 60s &bull; 24h cooldown per coin &bull; $100 USDC reserve</div>
-                        </div>
-                    </div>
-
-                    <!-- Live status -->
-                    <div id="autoStatus" style="display:none; text-align:center; padding:8px; border-radius:8px; margin-top:10px; font-size:12px; font-weight:600; background:rgba(168,85,247,0.15); color:#a855f7;"></div>
-
-                    <!-- Start / Stop button -->
-                    <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:14px; border-radius:10px; border:none; font-size:15px; font-weight:700; cursor:pointer; color:white; background:#a855f7; margin-top:10px; transition:all 0.2s;">
-                        <span id="autoToggleBtnText">Start Auto Trading</span>
-                    </button>
-                </div>
-                
             </div>
             
         </div>
@@ -317,7 +240,112 @@
         </div>
         
         <div class="last-updated" id="last-updated">Last updated: --</div>
-        
+
+        <!-- ═══ Auto Trading Section ═══ -->
+        <div class="card" style="margin-top: 20px;" id="autoTradingSection">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    <span class="font-bold text-base">Auto Trading</span>
+                </div>
+                <div id="autoStatusBadge" style="display:none; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:rgba(168,85,247,0.2); color:#a855f7;">ACTIVE</div>
+            </div>
+
+            <!-- Tier 1: Blue Chips -->
+            <div style="margin-bottom:16px; padding:12px; background:rgba(59,130,246,0.06); border-radius:10px; border:1px solid rgba(59,130,246,0.15);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:13px; font-weight:700; color:#3b82f6;">Tier 1 &ndash; Blue Chips</span>
+                    <span style="font-size:11px; color:#64748b;">Buy/sell at small moves, bigger allocation</span>
+                </div>
+                <div id="tier1Coins" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px;">
+                    <span style="font-size:11px; color:#64748b;">Loading...</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px;">
+                            <span>Deviation</span>
+                            <span id="t1DevValue" style="color:#3b82f6; font-weight:600;">2%</span>
+                        </div>
+                        <div class="slider-box" style="height:32px;">
+                            <div class="slider-track"></div>
+                            <div class="slider-fill" id="t1DevFill" style="width:10%; background:#3b82f6;"></div>
+                            <input type="range" id="t1DevSlider" min="1" max="15" value="2" step="1" style="height:32px;" oninput="AutoTrader.updateTierUI()">
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px;">
+                            <span>Allocation</span>
+                            <span id="t1AllocValue" style="color:#22c55e; font-weight:600;">10%</span>
+                        </div>
+                        <div class="slider-box" style="height:32px;">
+                            <div class="slider-track"></div>
+                            <div class="slider-fill" id="t1AllocFill" style="width:40%; background:#22c55e;"></div>
+                            <input type="range" id="t1AllocSlider" min="1" max="25" value="10" step="1" style="height:32px;" oninput="AutoTrader.updateTierUI()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tier 2: Alts -->
+            <div style="margin-bottom:16px; padding:12px; background:rgba(234,179,8,0.06); border-radius:10px; border:1px solid rgba(234,179,8,0.15);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:13px; font-weight:700; color:#eab308;">Tier 2 &ndash; Alts</span>
+                    <span style="font-size:11px; color:#64748b;">Bigger moves needed, smaller allocation</span>
+                </div>
+                <div id="tier2Coins" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px;">
+                    <span style="font-size:11px; color:#64748b;">Loading...</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px;">
+                            <span>Deviation</span>
+                            <span id="t2DevValue" style="color:#eab308; font-weight:600;">5%</span>
+                        </div>
+                        <div class="slider-box" style="height:32px;">
+                            <div class="slider-track"></div>
+                            <div class="slider-fill" id="t2DevFill" style="width:16%; background:#eab308;"></div>
+                            <input type="range" id="t2DevSlider" min="2" max="20" value="5" step="1" style="height:32px;" oninput="AutoTrader.updateTierUI()">
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-bottom:4px;">
+                            <span>Allocation</span>
+                            <span id="t2AllocValue" style="color:#22c55e; font-weight:600;">5%</span>
+                        </div>
+                        <div class="slider-box" style="height:32px;">
+                            <div class="slider-track"></div>
+                            <div class="slider-fill" id="t2AllocFill" style="width:25%; background:#22c55e;"></div>
+                            <input type="range" id="t2AllocSlider" min="1" max="20" value="5" step="1" style="height:32px;" oninput="AutoTrader.updateTierUI()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How it works -->
+            <div style="padding:10px; background:rgba(168,85,247,0.06); border-radius:8px; border:1px solid rgba(168,85,247,0.12); margin-bottom:12px;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    <span style="font-size:11px; font-weight:600; color:#a855f7;">How It Works</span>
+                </div>
+                <div style="font-size:11px; color:#94a3b8; line-height:1.5;">
+                    <div>Monitors <b style="color:#e2e8f0;">all coins</b> every 60s against their starting price</div>
+                    <div>Price drops by deviation% &rarr; <span style="color:#22c55e;font-weight:600;">BUY</span> &nbsp;|&nbsp; Price rises &rarr; <span style="color:#ef4444;font-weight:600;">SELL</span> (83% to accumulate)</div>
+                    <div>24h cooldown per coin after trade &bull; Always keeps $100 USDC reserve</div>
+                </div>
+            </div>
+
+            <!-- Error display -->
+            <div id="autoError" class="error-message" style="display:none; margin-bottom:10px;"></div>
+
+            <!-- Live status -->
+            <div id="autoStatus" style="display:none; padding:10px; border-radius:8px; margin-bottom:10px; font-size:11px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.5;"></div>
+
+            <!-- Start / Stop button -->
+            <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:14px; border-radius:10px; border:none; font-size:15px; font-weight:700; cursor:pointer; color:white; background:#a855f7; transition:all 0.2s;">
+                <span id="autoToggleBtnText">Start Auto Trading (All Coins)</span>
+            </button>
+        </div>
+
         <div class="card" style="margin-top: 20px;">
             <div class="section-title">Activity Log</div>
             <div id="log-container" class="log-container">
