@@ -2,7 +2,10 @@
   "version": 2,
   "builds": [
     { "src": "api/proxy.js", "use": "@vercel/node" },
-    { "src": "api/index.py", "use": "@vercel/python" }
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/proxy", "dest": "/api/proxy.js" },
@@ -11,7 +14,10 @@
     { "src": "/api/trade", "dest": "/api/index.py" },
     { "src": "/api/users", "dest": "/api/index.py" },
     { "src": "/api/pool/(.*)", "dest": "/api/index.py" },
-    { "src": "/api/(.*)", "dest": "/api/$1" }
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/css/(.*)", "dest": "/css/$1" },
+    { "src": "/js/(.*)", "dest": "/js/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
 
