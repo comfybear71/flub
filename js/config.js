@@ -56,5 +56,9 @@ const State = {
     liveRates: {},
     pendingOrderType: null,
     pendingTriggerPrice: 0,
-    pendingQuantity: 0
+    pendingQuantity: 0,
+    // Phantom wallet / user tracking
+    userAllocation: 0,
+    userHoldings: {},
+    userDeposits: 0
 };

@@ -5,6 +5,11 @@ const App = {
     init() {
         UI.init();
         API.connect();
+
+        // Initialize Phantom wallet
+        if (typeof PhantomWallet !== 'undefined') {
+            PhantomWallet.init();
+        }
     },
 
     refreshData() {

@@ -17,13 +17,22 @@
             <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
             Connecting...
         </div>
-        <button onclick="App.refreshData()" class="wallet-btn" id="refreshBtn">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
-                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
-                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
-            </svg>
-        </button>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <button onclick="PhantomWallet.isConnected ? PhantomWallet.disconnect() : PhantomWallet.connect()" class="phantom-btn" id="phantomBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span id="phantomBtnText">Connect</span>
+            </button>
+            <button onclick="App.refreshData()" class="wallet-btn" id="refreshBtn">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+                    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+                    <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+                </svg>
+            </button>
+        </div>
     </div>
 </header>
 
@@ -56,8 +65,26 @@
                         <span class="cash-amount" id="headerAudBalance">$0.00</span>
                     </div>
                 </div>
+
+                <!-- User allocation stats (shown when wallet connected) -->
+                <div id="userStatsSection" class="user-stats-section" style="display:none; margin-top:12px;">
+                    <div class="user-stats-card">
+                        <div class="user-stat">
+                            <span class="user-stat-label">Your Allocation</span>
+                            <span class="user-stat-value" id="userAllocation">0%</span>
+                        </div>
+                        <div class="user-stat">
+                            <span class="user-stat-label">Deposited</span>
+                            <span class="user-stat-value" id="userDeposited">$0.00</span>
+                        </div>
+                        <div class="user-stat">
+                            <span class="user-stat-label">Current Value</span>
+                            <span class="user-stat-value" id="userCurrentValue">$0.00</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
+
             <div class="trading-view" id="tradingView">
                 
                 <div class="trade-header-compact">
@@ -512,10 +539,35 @@
     </div>
 </nav>
 
+<!-- Phantom Install Modal -->
+<div id="phantomInstallModal" class="trade-modal-overlay">
+    <div class="trade-modal-content" style="text-align: center;">
+        <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #ab9ff2, #6e56cf); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+            </svg>
+        </div>
+        <div class="trade-modal-title" style="color: #ab9ff2;">Phantom Wallet Required</div>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px; line-height: 1.5;">
+            To sign in and track your portfolio allocation, you need the Phantom wallet browser extension.
+        </p>
+        <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer"
+           style="display:block; width:100%; padding:14px; background:#ab9ff2; color:white; border:none; border-radius:10px; font-size:15px; font-weight:700; text-decoration:none; margin-bottom:10px;">
+            Install Phantom
+        </a>
+        <button onclick="document.getElementById('phantomInstallModal').classList.remove('show')"
+                class="trade-modal-btn cancel" style="width:100%;">
+            Close
+        </button>
+    </div>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/logger.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/api.js"></script>
+<script src="js/phantom-wallet.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/autotrader.js"></script>
 <script src="js/trading.js"></script>

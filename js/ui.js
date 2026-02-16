@@ -430,5 +430,40 @@ const UI = {
         Assets.sort(type);
         this.renderHoldings();
         this.closeSort();
+    },
+
+    // ── Phantom Wallet Status ────────────────────────────────────────────────
+
+    updateWalletStatus(status, address) {
+        const btn     = document.getElementById('phantomBtn');
+        const btnText = document.getElementById('phantomBtnText');
+        if (!btn || !btnText) return;
+
+        if (status === 'connected' && address) {
+            const short = `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
+            btn.classList.add('phantom-connected');
+            btnText.textContent = short;
+        } else {
+            btn.classList.remove('phantom-connected');
+            btnText.textContent = 'Connect';
+            // Hide user stats when disconnected
+            const statsSection = document.getElementById('userStatsSection');
+            if (statsSection) statsSection.style.display = 'none';
+        }
+    },
+
+    renderUserStats(data) {
+        const section = document.getElementById('userStatsSection');
+        if (!section) return;
+
+        const allocationEl   = document.getElementById('userAllocation');
+        const depositedEl    = document.getElementById('userDeposited');
+        const currentValueEl = document.getElementById('userCurrentValue');
+
+        if (allocationEl)   allocationEl.textContent   = (data.allocation || 0).toFixed(2) + '%';
+        if (depositedEl)    depositedEl.textContent    = Assets.formatCurrency(data.totalDeposited || 0);
+        if (currentValueEl) currentValueEl.textContent = Assets.formatCurrency(data.currentValue || data.totalDeposited || 0);
+
+        section.style.display = 'block';
     }
 };
