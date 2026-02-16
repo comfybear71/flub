@@ -2,7 +2,7 @@
 // CONFIG - Constants & Configuration
 // ==========================================
 const CONFIG = {
-    API_URL: 'https://portfolio-api-sooty-three.vercel.app/api/portfolio',
+    API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
     AUD_TO_USD_RATE: 0.65,
     ASSET_STYLES: {
