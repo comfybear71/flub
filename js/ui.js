@@ -2,8 +2,10 @@
 // UI - User Interface & DOM Manipulation
 // ==========================================
 const UI = {
-    // Track which chart view is showing for users: 'pool' or 'user'
-    chartView: 'pool',
+    // Track which chart view is showing for users: 'user' (default) or 'pool'
+    chartView: 'user',
+    // Track which holdings view: 'mine' (default for users) or 'project'
+    holdingsView: 'mine',
 
     init() {
         // Only show PIN for admin (deferred until role is known)
@@ -67,11 +69,11 @@ const UI = {
             const diffX = e.changedTouches[0].clientX - startX;
             if (Math.abs(diffX) > 50) {
                 if (diffX < 0) {
-                    // Swipe left → user chart
-                    this._setChartView('user');
-                } else {
-                    // Swipe right → pool chart
+                    // Swipe left → project chart
                     this._setChartView('pool');
+                } else {
+                    // Swipe right → my chart
+                    this._setChartView('user');
                 }
             }
         }, { passive: true });
@@ -181,40 +183,64 @@ const UI = {
         const totalValue  = cryptoTotal + usdcBalance + audBalance;
 
         const isUser = State.userRole === 'user';
-        const showUserView = isUser && this.chartView === 'user' && State.userAllocation > 0;
+        const deposited = State.userDeposits || 0;
+        const hasAllocation = State.userAllocation > 0;
 
         // Determine chart data and labels
-        let chartData, chartColors, centerLabel, centerValue, subtitle;
+        let chartData, chartColors, chartLabels, centerLabel, centerValue, subtitle;
 
-        if (showUserView) {
-            // User's own allocation view
-            const userShare = totalValue * (State.userAllocation / 100);
-            chartData = cryptoAssets.map(a => (a.usd_value || 0) * (State.userAllocation / 100));
-            chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
-            centerLabel = 'Your Share';
-            centerValue = Assets.formatCurrency(userShare);
-            subtitle = `${State.userAllocation.toFixed(1)}% of pool`;
-            if (hintEl) hintEl.textContent = 'Swipe left for pool view';
+        if (isUser && this.chartView === 'user') {
+            // USER'S OWN CHART — shows their deposit + their share of crypto
+            if (hasAllocation) {
+                // User has allocation — show their proportional crypto holdings
+                const userCrypto = cryptoAssets.map(a => (a.usd_value || 0) * (State.userAllocation / 100));
+                const userCryptoTotal = userCrypto.reduce((s, v) => s + v, 0);
+                // Remaining USDC deposit not yet allocated
+                const usdcRemaining = Math.max(0, deposited - userCryptoTotal);
+                chartData = [...userCrypto];
+                chartColors = [...cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666')];
+                chartLabels = [...cryptoAssets.map(a => a.code)];
+                if (usdcRemaining > 0.01) {
+                    chartData.push(usdcRemaining);
+                    chartColors.push('#22c55e');
+                    chartLabels.push('USDC');
+                }
+                centerLabel = 'My Portfolio';
+                centerValue = Assets.formatCurrency(deposited);
+                subtitle = `${State.userAllocation.toFixed(1)}% of pool`;
+            } else {
+                // User deposited but has NO allocation yet — show USDC only
+                chartData = deposited > 0 ? [deposited] : [1];
+                chartColors = deposited > 0 ? ['#22c55e'] : ['#1e293b'];
+                chartLabels = deposited > 0 ? ['USDC'] : ['Empty'];
+                centerLabel = 'My Portfolio';
+                centerValue = deposited > 0 ? Assets.formatCurrency(deposited) : '$0.00';
+                subtitle = deposited > 0 ? 'USDC deposited' : 'No deposits yet';
+            }
+            if (hintEl) hintEl.textContent = 'Swipe left for project view';
         } else if (isUser && this.chartView === 'pool') {
-            // User sees pool overview
+            // USER SEES PROJECT CHART
             chartData = cryptoAssets.map(a => a.usd_value || 0);
             chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
-            centerLabel = 'Pool Total';
+            chartLabels = cryptoAssets.map(a => a.code);
+            centerLabel = 'Project Total';
             centerValue = Assets.formatCurrency(totalValue);
             subtitle = `${cryptoAssets.length} assets`;
-            if (hintEl) hintEl.textContent = 'Swipe right for your share';
+            if (hintEl) hintEl.textContent = 'Swipe right for your portfolio';
         } else if (State.userRole === 'admin') {
             // Admin view
             chartData = cryptoAssets.map(a => a.usd_value || 0);
             chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            chartLabels = cryptoAssets.map(a => a.code);
             centerLabel = 'Total';
             centerValue = Assets.formatCurrency(totalValue);
             subtitle = `${cryptoAssets.length} assets + cash`;
             if (hintEl) hintEl.textContent = 'Tap coin to trade';
         } else {
-            // Visitor (not logged in) — pool overview only
+            // Visitor (not logged in) — project overview
             chartData = cryptoAssets.map(a => a.usd_value || 0);
             chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            chartLabels = cryptoAssets.map(a => a.code);
             centerLabel = 'Pool Total';
             centerValue = Assets.formatCurrency(totalValue);
             subtitle = `${cryptoAssets.length} assets`;
@@ -239,11 +265,8 @@ const UI = {
                     tooltip: {
                         callbacks: {
                             label(context) {
-                                const asset = cryptoAssets[context.dataIndex];
-                                const val = showUserView
-                                    ? (asset.usd_value || 0) * (State.userAllocation / 100)
-                                    : asset.usd_value;
-                                return `${asset.code}: ${Assets.formatCurrency(val)}`;
+                                const label = chartLabels[context.dataIndex] || '';
+                                return `${label}: ${Assets.formatCurrency(chartData[context.dataIndex])}`;
                             }
                         }
                     }
@@ -283,43 +306,119 @@ const UI = {
 
     // ── Holdings List ─────────────────────────────────────────────────────────
 
+    // ── Holdings view toggle (user only) ────────────────────────────────────
+
+    setHoldingsView(view) {
+        this.holdingsView = view;
+        const btnMine = document.getElementById('btnMyHoldings');
+        const btnProject = document.getElementById('btnProjectHoldings');
+        if (btnMine) {
+            btnMine.style.background = view === 'mine' ? 'rgba(59,130,246,0.15)' : 'transparent';
+            btnMine.style.color = view === 'mine' ? '#3b82f6' : '#64748b';
+            btnMine.style.borderColor = view === 'mine' ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.1)';
+        }
+        if (btnProject) {
+            btnProject.style.background = view === 'project' ? 'rgba(59,130,246,0.15)' : 'transparent';
+            btnProject.style.color = view === 'project' ? '#3b82f6' : '#64748b';
+            btnProject.style.borderColor = view === 'project' ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.1)';
+        }
+        this.renderHoldings();
+    },
+
     renderHoldings() {
         const container = document.getElementById('holdings-list');
         if (!container) return;
 
-        const holdings = State.portfolioData.assets.filter(
+        const allHoldings = State.portfolioData.assets.filter(
             a => a.code !== 'AUD' && a.code !== 'USDC'
         );
 
-        if (holdings.length === 0) {
+        const isAdmin = State.userRole === 'admin';
+        const isUser = State.userRole === 'user';
+        const showUserHoldings = isUser && this.holdingsView === 'mine';
+
+        // Update holdings title based on role and view
+        const titleEl = document.querySelector('.holdings-title');
+        if (titleEl) {
+            if (isAdmin) {
+                titleEl.textContent = 'Holdings';
+            } else if (isUser) {
+                titleEl.textContent = this.holdingsView === 'mine' ? 'My Holdings' : 'Project Holdings';
+            } else {
+                titleEl.textContent = 'Holdings';
+            }
+        }
+
+        // For user's "Mine" view: show their proportional holdings or empty state
+        if (showUserHoldings) {
+            const deposited = State.userDeposits || 0;
+            const hasAllocation = State.userAllocation > 0;
+
+            if (!hasAllocation || allHoldings.length === 0) {
+                // User has no crypto allocation yet
+                container.innerHTML = `
+                    <div style="text-align:center;padding:30px 20px;">
+                        <div style="width:50px;height:50px;background:rgba(34,197,94,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                        </div>
+                        ${deposited > 0
+                            ? `<div style="font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">${Assets.formatCurrency(deposited)} USDC Deposited</div>
+                               <div style="font-size:12px;color:#94a3b8;line-height:1.5;">Your deposit is in the pool.<br>Crypto holdings will appear here once the pool trades begin.</div>`
+                            : `<div style="font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">No Holdings Yet</div>
+                               <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">Deposit USDC to start participating in the pool.</div>
+                               <button onclick="UI.showDepositModal()" style="padding:10px 20px;background:#22c55e;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">Deposit USDC</button>`
+                        }
+                    </div>`;
+                return;
+            }
+
+            // User has allocation — show their proportional share
+            container.innerHTML = allHoldings.map(asset => {
+                const style = CONFIG.ASSET_STYLES[asset.code] ?? { color: '#666', icon: asset.code[0] };
+                const change = asset.change_24h || 0;
+                const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
+                const changeSign = change >= 0 ? '+' : '';
+                const displayBalance = asset.balance * (State.userAllocation / 100);
+                const displayValue = asset.usd_value * (State.userAllocation / 100);
+
+                return `
+                <div class="card" style="cursor:default;">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
+                                <span class="coin-icon-letter">${style.icon}</span>
+                            </div>
+                            <div>
+                                <div class="font-bold text-sm">${asset.code}</div>
+                                <div class="text-xs text-slate-400">${Assets.formatNumber(displayBalance)} ${asset.code}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-sm">${Assets.formatCurrency(displayValue)}</div>
+                            <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
+                            <div class="text-xs font-semibold" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            return;
+        }
+
+        // Project view (for users) or default (admin/visitor)
+        if (allHoldings.length === 0) {
             container.innerHTML = '<div style="text-align:center;color:#64748b;padding:40px;">No crypto holdings found</div>';
             return;
         }
 
-        const isAdmin = State.userRole === 'admin';
-
-        // Update holdings title based on role
-        const titleEl = document.querySelector('.holdings-title');
-        if (titleEl) {
-            titleEl.textContent = isAdmin ? 'Holdings' :
-                (State.userRole === 'user' ? 'Pool Holdings (Your Share)' : 'Holdings');
-        }
-
-        container.innerHTML = holdings.map(asset => {
+        container.innerHTML = allHoldings.map(asset => {
             const style      = CONFIG.ASSET_STYLES[asset.code] ?? { color: '#666', icon: asset.code[0] };
             const change     = asset.change_24h || 0;
             const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
             const changeSign  = change >= 0 ? '+' : '';
 
-            // Users see their allocation share, admin sees pool totals
-            let displayBalance = asset.balance;
-            let displayValue = asset.usd_value;
-            if (State.userRole === 'user' && State.userAllocation > 0) {
-                displayBalance = asset.balance * (State.userAllocation / 100);
-                displayValue = asset.usd_value * (State.userAllocation / 100);
-            }
-
-            // Only admin can click to trade, users see read-only
+            // Only admin can click to trade
             const clickAction = isAdmin
                 ? `onclick="UI.openTrade('${asset.code}')"`
                 : '';
@@ -334,11 +433,11 @@ const UI = {
                         </div>
                         <div>
                             <div class="font-bold text-sm">${asset.code}</div>
-                            <div class="text-xs text-slate-400">${Assets.formatNumber(displayBalance)} ${asset.code}</div>
+                            <div class="text-xs text-slate-400">${Assets.formatNumber(asset.balance)} ${asset.code}</div>
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-bold text-sm">${Assets.formatCurrency(displayValue)}</div>
+                        <div class="font-bold text-sm">${Assets.formatCurrency(asset.usd_value)}</div>
                         <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
                         <div class="text-xs font-semibold" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
                     </div>
