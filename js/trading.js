@@ -463,6 +463,7 @@ const Trading = {
         State.pendingOrderType    = orderType;
         State.pendingTriggerPrice = triggerPrice;
         State.pendingQuantity     = quantity;
+        State.pendingAssetCode    = State.selectedAsset.code;
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -480,21 +481,22 @@ const Trading = {
         btn.textContent = 'Submitting...';
 
         try {
-            // Use the quantity pre-calculated in showConfirmModal
+            // Use values pre-calculated and locked in showConfirmModal
+            const assetCode    = State.pendingAssetCode;
             const quantity     = State.pendingQuantity;
             const triggerPrice = State.pendingTriggerPrice;
 
             const orderData = {
                 primary:       'USDC',
-                secondary:     State.selectedAsset.code,
+                secondary:     assetCode,
                 quantity,
-                assetQuantity: State.selectedAsset.code,
+                assetQuantity: assetCode,
                 orderType:     State.pendingOrderType,
                 trigger:       triggerPrice
             };
 
-            Logger.log(`Sending ${State.pendingOrderType} order:`, 'info');
-            Logger.log(`Asset: ${orderData.primary}, Qty: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
+            Logger.log(`Sending ${State.pendingOrderType} order for ${assetCode}:`, 'info');
+            Logger.log(`Qty: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
 
             const res = await API.placeOrder(orderData);
             if (!res.ok) {
