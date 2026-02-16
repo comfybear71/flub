@@ -475,7 +475,12 @@ const PhantomWallet = {
         }
         if (allocEl) allocEl.textContent = (State.userAllocation || 0).toFixed(2) + '%';
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
-        if (valueEl) valueEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
+
+        // Calculate current portfolio value based on allocation
+        const alloc = State.userAllocation || 0;
+        const totalPoolValue = State.portfolioData.assets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
+        const currentValue = alloc > 0 ? (totalPoolValue * alloc / 100) : (State.userDeposits || 0);
+        if (valueEl) valueEl.textContent = Assets.formatCurrency(currentValue);
 
         // On-chain balances
         if (solEl) solEl.textContent = (State.walletBalances.sol || 0).toFixed(4);
@@ -488,19 +493,29 @@ const PhantomWallet = {
             budjuReqEl.style.display = budju < CONFIG.BUDJU_REQUIRED ? 'block' : 'none';
         }
 
-        // Show user's pool holdings
+        // Build user's proportional holdings from pool data
         if (holdingsListEl) {
-            const holdings = State.userHoldings || {};
-            const entries = Object.entries(holdings).filter(([_, amt]) => amt > 0);
-            if (entries.length > 0) {
-                holdingsListEl.innerHTML = entries.map(([coin, amt]) => {
+            const cryptoAssets = State.portfolioData.assets.filter(
+                a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+            );
+            if (alloc > 0 && cryptoAssets.length > 0) {
+                // Update State.userHoldings with proportional values
+                State.userHoldings = {};
+                cryptoAssets.forEach(a => {
+                    State.userHoldings[a.code] = a.balance * (alloc / 100);
+                });
+
+                holdingsListEl.innerHTML = cryptoAssets.map(a => {
+                    const userBal = a.balance * (alloc / 100);
+                    const userVal = a.usd_value * (alloc / 100);
                     return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <span style="color:#94a3b8;">${coin}</span>
-                        <span style="color:#e2e8f0;font-weight:600;">${parseFloat(amt).toFixed(6)}</span>
+                        <span style="color:#94a3b8;">${a.code}</span>
+                        <span style="color:#e2e8f0;font-weight:600;">${userBal.toFixed(6)} <span style="color:#64748b;font-size:11px;">(${Assets.formatCurrency(userVal)})</span></span>
                     </div>`;
                 }).join('');
             } else {
-                holdingsListEl.textContent = 'No holdings yet';
+                State.userHoldings = {};
+                holdingsListEl.textContent = State.userDeposits > 0 ? 'Awaiting trades...' : 'No holdings yet';
             }
         }
     },

@@ -182,6 +182,9 @@ const UI = {
         const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
         const totalValue  = cryptoTotal + usdcBalance + audBalance;
 
+        // Recalculate user allocation every time portfolio refreshes
+        this.calculateUserAllocation();
+
         const isUser = State.userRole === 'user';
         const deposited = State.userDeposits || 0;
         const hasAllocation = State.userAllocation > 0;
@@ -836,6 +839,32 @@ const UI = {
         }
     },
 
+    // ── User allocation calculation ──────────────────────────────────────────
+
+    calculateUserAllocation() {
+        // Only calculate for users who have deposited
+        if (State.userRole !== 'user' || !State.userDeposits) {
+            State.userAllocation = 0;
+            return;
+        }
+
+        // Total pool value = all assets from Swyftx (USDC + AUD + crypto)
+        const totalPoolValue = State.portfolioData.assets.reduce(
+            (sum, a) => sum + (a.usd_value || 0), 0
+        );
+
+        if (totalPoolValue <= 0) {
+            State.userAllocation = 0;
+            return;
+        }
+
+        // User's allocation = their deposits / total pool value * 100
+        // Cap at 100% in case deposits exceed pool value (shouldn't happen normally)
+        State.userAllocation = Math.min(100, (State.userDeposits / totalPoolValue) * 100);
+
+        Logger.log(`User allocation: ${State.userAllocation.toFixed(2)}% ($${State.userDeposits.toFixed(2)} / $${totalPoolValue.toFixed(2)})`, 'info');
+    },
+
     // ── Deposit tracking (localStorage until backend) ────────────────────────
 
     _recordDeposit(wallet, amount, txHash) {
@@ -847,6 +876,9 @@ const UI = {
         // Update state
         const total = deposits.reduce((sum, d) => sum + d.amount, 0);
         State.userDeposits = total;
+
+        // Recalculate allocation with new deposit
+        this.calculateUserAllocation();
 
         Logger.log(`Total deposited: $${total.toFixed(2)} USDC`, 'success');
     },
@@ -860,6 +892,9 @@ const UI = {
         // Update wallet panel
         const depositedEl = document.getElementById('walletPanelDeposited');
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(total);
+
+        // Calculate allocation based on current pool data
+        this.calculateUserAllocation();
 
         return total;
     }
