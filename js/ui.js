@@ -2,6 +2,9 @@
 // UI - User Interface & DOM Manipulation
 // ==========================================
 const UI = {
+    // Track which chart view is showing for users: 'pool' or 'user'
+    chartView: 'pool',
+
     init() {
         // Only show PIN for admin (deferred until role is known)
         // Non-admins never see the PIN modal
@@ -17,6 +20,9 @@ const UI = {
             // Show admin sections, hide user-only sections
             adminEls.forEach(el => el.style.display = '');
             userEls.forEach(el => el.style.display = 'none');
+            // Hide swipe dots for admin
+            const dots = document.getElementById('chartDots');
+            if (dots) dots.style.display = 'none';
             // Show PIN modal if no PIN set
             this.checkPin();
             Logger.log('Admin mode active', 'success');
@@ -24,6 +30,11 @@ const UI = {
             // Hide admin sections, show user sections
             adminEls.forEach(el => el.style.display = 'none');
             userEls.forEach(el => el.style.display = '');
+            // Show swipe dots for user
+            const dots = document.getElementById('chartDots');
+            if (dots) dots.style.display = 'block';
+            // Init swipe gestures
+            this._initChartSwipe();
             // Close any open trading panel
             this.closeTradingView();
             Logger.log('User mode active', 'success');
@@ -31,7 +42,54 @@ const UI = {
             // Not connected — hide role-specific items, show defaults
             adminEls.forEach(el => el.style.display = '');
             userEls.forEach(el => el.style.display = 'none');
+            const dots = document.getElementById('chartDots');
+            if (dots) dots.style.display = 'none';
         }
+    },
+
+    // ── Chart swipe for users ────────────────────────────────────────────────
+
+    _swipeInitialized: false,
+
+    _initChartSwipe() {
+        if (this._swipeInitialized) return;
+        this._swipeInitialized = true;
+
+        const chartArea = document.querySelector('.portfolio-view');
+        if (!chartArea) return;
+
+        let startX = 0;
+        chartArea.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+        }, { passive: true });
+
+        chartArea.addEventListener('touchend', (e) => {
+            const diffX = e.changedTouches[0].clientX - startX;
+            if (Math.abs(diffX) > 50) {
+                if (diffX < 0) {
+                    // Swipe left → user chart
+                    this._setChartView('user');
+                } else {
+                    // Swipe right → pool chart
+                    this._setChartView('pool');
+                }
+            }
+        }, { passive: true });
+
+        // Also allow tapping the dots
+        document.getElementById('dot-pool')?.addEventListener('click', () => this._setChartView('pool'));
+        document.getElementById('dot-user')?.addEventListener('click', () => this._setChartView('user'));
+    },
+
+    _setChartView(view) {
+        this.chartView = view;
+        // Update dots
+        const dotPool = document.getElementById('dot-pool');
+        const dotUser = document.getElementById('dot-user');
+        if (dotPool) dotPool.style.background = view === 'pool' ? '#3b82f6' : 'rgba(255,255,255,0.2)';
+        if (dotUser) dotUser.style.background = view === 'user' ? '#3b82f6' : 'rgba(255,255,255,0.2)';
+        // Re-render the chart
+        this.renderPortfolio();
     },
 
     // ── PIN / Auth (admin only) ──────────────────────────────────────────────
@@ -107,37 +165,62 @@ const UI = {
         const headerUsdc = document.getElementById('headerUsdcBalance');
         const headerAud  = document.getElementById('headerAudBalance');
 
-        // Users see their share of cash, admin sees pool totals
-        if (State.userRole === 'user' && State.userAllocation > 0) {
-            const userUsdc = usdcBalance * (State.userAllocation / 100);
-            const userAud = audBalance * (State.userAllocation / 100);
-            if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(userUsdc);
-            if (headerAud)  headerAud.textContent  = Assets.formatCurrency(userAud);
-        } else {
-            if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
-            if (headerAud)  headerAud.textContent  = Assets.formatCurrency(audBalance);
-        }
+        // Admin always sees pool totals for USDC/AUD
+        if (headerUsdc) headerUsdc.textContent = Assets.formatCurrency(usdcBalance);
+        if (headerAud)  headerAud.textContent  = Assets.formatCurrency(audBalance);
 
         // Update portfolio hint text
         const hintEl = document.getElementById('portfolioHint');
-        if (hintEl) {
-            hintEl.textContent = State.userRole === 'admin' ? 'Tap coin to trade' : 'Your pool holdings';
-        }
+        const labelEl = document.getElementById('chartLabel');
 
         const cryptoAssets = State.portfolioData.assets.filter(
             a => a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
         );
 
-        const colors      = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
         const cryptoTotal = cryptoAssets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
         const totalValue  = cryptoTotal + usdcBalance + audBalance;
+
+        const isUser = State.userRole === 'user';
+        const showUserView = isUser && this.chartView === 'user' && State.userAllocation > 0;
+
+        // Determine chart data and labels
+        let chartData, chartColors, centerLabel, centerValue, subtitle;
+
+        if (showUserView) {
+            // User's own allocation view
+            const userShare = totalValue * (State.userAllocation / 100);
+            chartData = cryptoAssets.map(a => (a.usd_value || 0) * (State.userAllocation / 100));
+            chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            centerLabel = 'Your Share';
+            centerValue = Assets.formatCurrency(userShare);
+            subtitle = `${State.userAllocation.toFixed(1)}% of pool`;
+            if (hintEl) hintEl.textContent = 'Swipe left for pool view';
+        } else if (isUser && this.chartView === 'pool') {
+            // User sees pool overview
+            chartData = cryptoAssets.map(a => a.usd_value || 0);
+            chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            centerLabel = 'Pool Total';
+            centerValue = Assets.formatCurrency(totalValue);
+            subtitle = `${cryptoAssets.length} assets`;
+            if (hintEl) hintEl.textContent = 'Swipe right for your share';
+        } else {
+            // Admin view
+            chartData = cryptoAssets.map(a => a.usd_value || 0);
+            chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            centerLabel = 'Total';
+            centerValue = Assets.formatCurrency(totalValue);
+            subtitle = `${cryptoAssets.length} assets + cash`;
+            if (hintEl) hintEl.textContent = 'Tap coin to trade';
+        }
+
+        if (labelEl) labelEl.textContent = centerLabel;
 
         State.portfolioChart = new Chart(ctx.getContext('2d'), {
             type: 'doughnut',
             data: {
                 datasets: [{
-                    data: cryptoAssets.map(a => a.usd_value || 0),
-                    backgroundColor: colors,
+                    data: chartData,
+                    backgroundColor: chartColors,
                     borderWidth: 0
                 }]
             },
@@ -149,7 +232,10 @@ const UI = {
                         callbacks: {
                             label(context) {
                                 const asset = cryptoAssets[context.dataIndex];
-                                return `${asset.code}: ${Assets.formatCurrency(asset.usd_value)}`;
+                                const val = showUserView
+                                    ? (asset.usd_value || 0) * (State.userAllocation / 100)
+                                    : asset.usd_value;
+                                return `${asset.code}: ${Assets.formatCurrency(val)}`;
                             }
                         }
                     }
@@ -160,15 +246,30 @@ const UI = {
 
         const totalEl = document.getElementById('total-value');
         const countEl = document.getElementById('asset-count');
+        if (totalEl) totalEl.textContent = centerValue;
+        if (countEl) countEl.textContent = subtitle;
 
-        // For regular users show their share, for admin show total pool
-        if (State.userRole === 'user' && State.userAllocation > 0) {
-            const userShare = totalValue * (State.userAllocation / 100);
-            if (totalEl) totalEl.textContent = Assets.formatCurrency(userShare);
-            if (countEl) countEl.textContent = `Your share (${State.userAllocation.toFixed(1)}%)`;
+        // Update user deposited banner + low balance warning
+        this._updateUserDepositBanner();
+    },
+
+    _updateUserDepositBanner() {
+        const bannerEl = document.getElementById('userDepositedBanner');
+        const amountEl = document.getElementById('userDepositedAmount');
+        const warningEl = document.getElementById('lowBalanceWarning');
+        if (!bannerEl) return;
+
+        if (State.userRole === 'user') {
+            const deposited = State.userDeposits || 0;
+            if (amountEl) amountEl.textContent = Assets.formatCurrency(deposited);
+            bannerEl.style.display = 'block';
+
+            // Show low balance warning if deposited < $10
+            if (warningEl) {
+                warningEl.style.display = deposited < 10 ? 'block' : 'none';
+            }
         } else {
-            if (totalEl) totalEl.textContent = Assets.formatCurrency(totalValue);
-            if (countEl) countEl.textContent = `${cryptoAssets.length} assets + cash`;
+            bannerEl.style.display = 'none';
         }
     },
 
@@ -554,12 +655,22 @@ const UI = {
         // Show available USDC balance
         const availEl = document.getElementById('depositAvailableUsdc');
         if (availEl) availEl.textContent = (State.walletBalances.usdc || 0).toFixed(2);
+        // Reset loading state
+        const loadingEl = document.getElementById('depositLoading');
+        const buttonsEl = document.getElementById('depositButtons');
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (buttonsEl) buttonsEl.style.display = '';
         document.getElementById('depositModal')?.classList.add('show');
     },
 
     closeDepositModal() {
         document.getElementById('depositModal')?.classList.remove('show');
         document.getElementById('depositAmount').value = '';
+        // Reset loading state
+        const loadingEl = document.getElementById('depositLoading');
+        const buttonsEl = document.getElementById('depositButtons');
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (buttonsEl) buttonsEl.style.display = '';
     },
 
     async submitDeposit() {
@@ -582,6 +693,12 @@ const UI = {
             return;
         }
 
+        // Show loading spinner, hide buttons
+        const loadingEl = document.getElementById('depositLoading');
+        const buttonsEl = document.getElementById('depositButtons');
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (buttonsEl) buttonsEl.style.display = 'none';
+
         try {
             // Send USDC on-chain via Phantom to the deposit address
             const txSignature = await PhantomWallet.sendUsdcDeposit(amount);
@@ -594,6 +711,10 @@ const UI = {
             await PhantomWallet.fetchOnChainBalances();
 
         } catch (error) {
+            // Restore buttons on error
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (buttonsEl) buttonsEl.style.display = '';
+
             Logger.log(`Deposit error: ${error.message}`, 'error');
             if (error.message.includes('User rejected')) {
                 alert('Transaction cancelled by user');
