@@ -103,8 +103,11 @@ const API = {
     },
 
     async placeOrder(orderData) {
+        // Convert string order types to Swyftx numeric values
+        const normalised = _normaliseOrderData(orderData);
+
         Logger.log('API Request: POST /orders/', 'info');
-        Logger.log('Order data: ' + JSON.stringify(orderData), 'info');
+        Logger.log('Order data: ' + JSON.stringify(normalised), 'info');
 
         const res = await _fetchWithRetry('/api/proxy', {
             method: 'POST',
@@ -112,7 +115,7 @@ const API = {
             body: JSON.stringify({
                 endpoint: '/orders/',
                 method: 'POST',
-                body: orderData,
+                body: normalised,
                 authToken: State.jwtToken,
                 pin: CONFIG.TRADE_PIN
             })
@@ -140,6 +143,43 @@ async function _fetchWithRetry(url, options = {}) {
         Logger.log('Rate limited (429) — wait a few seconds then tap refresh.', 'error');
     }
     return res;
+}
+
+// Swyftx expects orderType as an integer (1-6), quantity/trigger as strings,
+// and primary/secondary/assetQuantity as string asset IDs.
+const _ORDER_TYPE_MAP = {
+    'MARKET_BUY':      1,
+    'MARKET_SELL':     2,
+    'LIMIT_BUY':       3,
+    'LIMIT_SELL':      4,
+    'STOP_LIMIT_BUY':  5,
+    'STOP_LIMIT_SELL': 6
+};
+
+function _normaliseOrderData(data) {
+    const out = { ...data };
+
+    // orderType: string → integer
+    if (typeof out.orderType === 'string' && _ORDER_TYPE_MAP[out.orderType] !== undefined) {
+        out.orderType = _ORDER_TYPE_MAP[out.orderType];
+    }
+
+    // quantity & trigger: number → string (Swyftx expects strings)
+    if (typeof out.quantity === 'number') out.quantity = String(out.quantity);
+    if (typeof out.trigger === 'number')  out.trigger  = String(out.trigger);
+
+    // primary / secondary / assetQuantity: convert codes → numeric IDs if possible
+    if (typeof out.primary === 'string' && CONFIG.CODE_TO_ID[out.primary] !== undefined) {
+        out.primary = String(CONFIG.CODE_TO_ID[out.primary]);
+    }
+    if (typeof out.secondary === 'string' && CONFIG.CODE_TO_ID[out.secondary] !== undefined) {
+        out.secondary = String(CONFIG.CODE_TO_ID[out.secondary]);
+    }
+    if (typeof out.assetQuantity === 'string' && CONFIG.CODE_TO_ID[out.assetQuantity] !== undefined) {
+        out.assetQuantity = String(CONFIG.CODE_TO_ID[out.assetQuantity]);
+    }
+
+    return out;
 }
 
 function _extractAssets(data) {
