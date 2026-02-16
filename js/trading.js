@@ -485,8 +485,8 @@ const Trading = {
             const triggerPrice = State.pendingTriggerPrice;
 
             const orderData = {
-                primary:       State.selectedAsset.code,
-                secondary:     'USDC',
+                primary:       'USDC',
+                secondary:     State.selectedAsset.code,
                 quantity,
                 assetQuantity: State.selectedAsset.code,
                 orderType:     State.pendingOrderType,
@@ -559,19 +559,19 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
         const quantity = side === 'buy'
             ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
             : parseFloat((allocationAmount / realtimePrice).toFixed(8));
-        return { primary: State.selectedAsset.code, secondary: 'USDC', quantity,
+        return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
                  assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
     }
 
     if (side === 'buy') {
         const cashAmount = (State.amountSliderValue / 100) * cashBalance;
         if (State.orderType === 'instant') {
-            return { primary: State.selectedAsset.code, secondary: 'USDC',
+            return { primary: 'USDC', secondary: State.selectedAsset.code,
                      quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
                      orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
         }
         const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-        return { primary: State.selectedAsset.code, secondary: 'USDC',
+        return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: parseFloat((cashAmount / triggerPrice).toFixed(8)),
                  assetQuantity: State.selectedAsset.code,
                  orderType: triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
@@ -581,12 +581,12 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     // sell
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
     if (State.orderType === 'instant') {
-        return { primary: State.selectedAsset.code, secondary: 'USDC',
+        return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: sellQty, orderType: 'MARKET_SELL',
                  assetQuantity: State.selectedAsset.code };
     }
     const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-    return { primary: State.selectedAsset.code, secondary: 'USDC',
+    return { primary: 'USDC', secondary: State.selectedAsset.code,
              quantity: sellQty, assetQuantity: State.selectedAsset.code,
              orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
              trigger: triggerPrice };

@@ -257,8 +257,8 @@ const AutoTrader = {
 
         try {
             const response = await API.placeOrder({
-                primary: code,
-                secondary: 'USDC',
+                primary: 'USDC',
+                secondary: code,
                 quantity,
                 assetQuantity: code,
                 orderType: 'MARKET_BUY'
@@ -297,10 +297,10 @@ const AutoTrader = {
 
         try {
             const response = await API.placeOrder({
-                primary: code,
-                secondary: 'USDC',
+                primary: 'USDC',
+                secondary: code,
                 quantity,
-                assetQuantity: 'USDC',
+                assetQuantity: code,
                 orderType: 'MARKET_SELL'
             });
 

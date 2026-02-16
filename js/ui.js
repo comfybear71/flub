@@ -578,13 +578,13 @@ const UI = {
             if (autoSection)    autoSection.style.display = 'none';
         } else if (type === 'trigger') {
             if (amountSection)  amountSection.style.display = 'none';
-            if (triggerSection) triggerSection.style.display = '';
+            if (triggerSection) triggerSection.style.display = 'block';
             if (autoSection)    autoSection.style.display = 'none';
             Trading.resetTrigger();
         } else if (type === 'auto') {
             if (amountSection)  amountSection.style.display = 'none';
             if (triggerSection) triggerSection.style.display = 'none';
-            if (autoSection)    autoSection.style.display = '';
+            if (autoSection)    autoSection.style.display = 'block';
         }
 
         State.triggerOffset = 0;
