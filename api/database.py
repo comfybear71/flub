@@ -12,7 +12,7 @@ from nacl.exceptions import BadSignatureError
 
 # MongoDB connection
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
-DB_NAME = "portfolio_trader"
+DB_NAME = "flub"
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
