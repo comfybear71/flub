@@ -315,16 +315,8 @@ const UI = {
         this.holdingsView = view;
         const btnMine = document.getElementById('btnMyHoldings');
         const btnProject = document.getElementById('btnProjectHoldings');
-        if (btnMine) {
-            btnMine.style.background = view === 'mine' ? 'rgba(59,130,246,0.15)' : 'transparent';
-            btnMine.style.color = view === 'mine' ? '#3b82f6' : '#64748b';
-            btnMine.style.borderColor = view === 'mine' ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.1)';
-        }
-        if (btnProject) {
-            btnProject.style.background = view === 'project' ? 'rgba(59,130,246,0.15)' : 'transparent';
-            btnProject.style.color = view === 'project' ? '#3b82f6' : '#64748b';
-            btnProject.style.borderColor = view === 'project' ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.1)';
-        }
+        if (btnMine) btnMine.classList.toggle('active', view === 'mine');
+        if (btnProject) btnProject.classList.toggle('active', view === 'project');
         this.renderHoldings();
     },
 
@@ -340,17 +332,9 @@ const UI = {
         const isUser = State.userRole === 'user';
         const showUserHoldings = isUser && this.holdingsView === 'mine';
 
-        // Update holdings title based on role and view
+        // Title always stays as "Holdings" — the toggle pill indicates Mine vs Pool
         const titleEl = document.querySelector('.holdings-title');
-        if (titleEl) {
-            if (isAdmin) {
-                titleEl.textContent = 'Holdings';
-            } else if (isUser) {
-                titleEl.textContent = this.holdingsView === 'mine' ? 'My Holdings' : 'Project Holdings';
-            } else {
-                titleEl.textContent = 'Holdings';
-            }
-        }
+        if (titleEl) titleEl.textContent = 'Holdings';
 
         // For user's "Mine" view: show their proportional holdings or empty state
         if (showUserHoldings) {
