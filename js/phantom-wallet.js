@@ -24,6 +24,7 @@ const PhantomWallet = {
             this.provider.on('accountChanged', (publicKey) => {
                 if (publicKey) {
                     this.walletAddress = publicKey.toString();
+                    this.determineRole();
                     this.saveUserSession();
                 } else {
                     this.handleDisconnect();
@@ -33,7 +34,41 @@ const PhantomWallet = {
             Logger.log('Phantom wallet not found', 'error');
             this.showInstallPrompt();
         }
+
+        // Click-outside to close wallet panel
+        this._initClickOutside();
     },
+
+    // ── Click-outside handler ────────────────────────────────────────────────
+
+    _initClickOutside() {
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('walletPanel');
+            if (!panel || !panel.classList.contains('show')) return;
+
+            const content = panel.querySelector('.wallet-panel-content');
+            const phantomBtn = document.getElementById('phantomBtn');
+
+            // Close if click is on the overlay backdrop (not the content or the trigger button)
+            if (!content.contains(e.target) && !phantomBtn.contains(e.target)) {
+                panel.classList.remove('show');
+            }
+        });
+    },
+
+    // ── Role determination (no backend needed) ───────────────────────────────
+
+    determineRole() {
+        if (CONFIG.ADMIN_WALLETS.includes(this.walletAddress)) {
+            State.userRole = 'admin';
+        } else {
+            State.userRole = 'user';
+        }
+        UI.applyRole(State.userRole);
+        Logger.log(`Role: ${State.userRole}`, 'success');
+    },
+
+    // ── Connection ───────────────────────────────────────────────────────────
 
     async connect() {
         if (!this.provider) {
@@ -49,12 +84,13 @@ const PhantomWallet = {
 
             Logger.log(`Connected: ${this.walletAddress.substring(0, 8)}...`, 'success');
 
-            // Register or login user in backend
-            await this.registerUser();
+            // Determine role immediately from config
+            this.determineRole();
 
             // Fetch on-chain balances (SOL + USDC)
             await this.fetchOnChainBalances();
 
+            this.saveUserSession();
             UI.updateWalletStatus('connected', this.walletAddress);
 
         } catch (error) {
@@ -74,10 +110,17 @@ const PhantomWallet = {
         }
     },
 
-    handleConnect() {
+    async handleConnect() {
         if (this.provider.publicKey) {
             this.walletAddress = this.provider.publicKey.toString();
             this.isConnected = true;
+
+            // Determine role immediately from config
+            this.determineRole();
+
+            // Fetch on-chain balances
+            await this.fetchOnChainBalances();
+
             this.saveUserSession();
             UI.updateWalletStatus('connected', this.walletAddress);
         }
@@ -94,78 +137,7 @@ const PhantomWallet = {
         Logger.log('Wallet disconnected', 'info');
     },
 
-    async registerUser() {
-        try {
-            // Create signature to verify wallet ownership
-            const message = `Sign in to Portfolio Trader\nTimestamp: ${Date.now()}`;
-            const encodedMessage = new TextEncoder().encode(message);
-            const signedMessage = await this.provider.signMessage(encodedMessage, 'utf8');
-
-            // Send to backend for verification and user registration
-            const response = await fetch('/api/user/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    walletAddress: this.walletAddress,
-                    signature: Array.from(signedMessage.signature),
-                    message: message
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('User registration failed');
-            }
-
-            const userData = await response.json();
-
-            // Set role: check frontend config FIRST (instant), then backend
-            if (CONFIG.ADMIN_WALLETS.includes(this.walletAddress)) {
-                State.userRole = 'admin';
-            } else {
-                State.userRole = userData.role || 'user';
-            }
-
-            this.saveUserData(userData);
-            Logger.log(`Authenticated as ${State.userRole}`, 'success');
-
-            // Load user's portfolio data
-            await this.loadUserPortfolio();
-
-            // Apply role-based UI
-            UI.applyRole(State.userRole);
-
-        } catch (error) {
-            Logger.log(`Registration error: ${error.message}`, 'error');
-            // Even if backend registration fails, still check admin from config
-            if (CONFIG.ADMIN_WALLETS.includes(this.walletAddress)) {
-                State.userRole = 'admin';
-                UI.applyRole('admin');
-                Logger.log('Admin detected from config (backend unavailable)', 'info');
-            }
-        }
-    },
-
-    async loadUserPortfolio() {
-        try {
-            const response = await fetch(`/api/user/portfolio?wallet=${this.walletAddress}`);
-            if (!response.ok) throw new Error('Failed to load portfolio');
-
-            const data = await response.json();
-
-            // Update UI with user's allocation and holdings
-            State.userAllocation = data.allocation;
-            State.userHoldings = data.holdings;
-            State.userDeposits = data.totalDeposited;
-
-            UI.renderUserStats(data);
-            Logger.log(`Portfolio loaded: ${data.allocation}% allocation`, 'success');
-
-        } catch (error) {
-            Logger.log(`Portfolio load error: ${error.message}`, 'error');
-        }
-    },
-
-    // ── On-chain balance fetching ────────────────────────────────────────────
+    // ── On-chain balance fetching (Helius RPC) ──────────────────────────────
 
     async fetchOnChainBalances() {
         if (!this.walletAddress) return;
@@ -173,10 +145,12 @@ const PhantomWallet = {
         try {
             Logger.log('Fetching on-chain balances...', 'info');
 
+            const rpcUrl = this._getRpcUrl();
+
             // Fetch SOL and USDC balances in parallel
             const [solBalance, usdcBalance] = await Promise.all([
-                this._getSolBalance(),
-                this._getUsdcBalance()
+                this._getSolBalance(rpcUrl),
+                this._getUsdcBalance(rpcUrl)
             ]);
 
             State.walletBalances = {
@@ -186,14 +160,25 @@ const PhantomWallet = {
 
             Logger.log(`Wallet: ${solBalance.toFixed(4)} SOL, ${usdcBalance.toFixed(2)} USDC`, 'success');
 
+            // Update panel if it's open
+            this.updateWalletPanel();
+
         } catch (error) {
             Logger.log(`Balance fetch error: ${error.message}`, 'error');
         }
     },
 
-    async _getSolBalance() {
+    _getRpcUrl() {
+        // Use Helius if API key is configured, otherwise fall back to public RPC
+        if (CONFIG.HELIUS_API_KEY) {
+            return `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`;
+        }
+        return CONFIG.SOLANA_RPC;
+    },
+
+    async _getSolBalance(rpcUrl) {
         try {
-            const response = await fetch(CONFIG.SOLANA_RPC, {
+            const response = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -204,6 +189,10 @@ const PhantomWallet = {
                 })
             });
             const data = await response.json();
+            if (data.error) {
+                Logger.log(`SOL RPC error: ${data.error.message}`, 'error');
+                return 0;
+            }
             // Convert lamports to SOL (1 SOL = 1e9 lamports)
             return (data.result?.value || 0) / 1e9;
         } catch (e) {
@@ -212,9 +201,9 @@ const PhantomWallet = {
         }
     },
 
-    async _getUsdcBalance() {
+    async _getUsdcBalance(rpcUrl) {
         try {
-            const response = await fetch(CONFIG.SOLANA_RPC, {
+            const response = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -229,6 +218,10 @@ const PhantomWallet = {
                 })
             });
             const data = await response.json();
+            if (data.error) {
+                Logger.log(`USDC RPC error: ${data.error.message}`, 'error');
+                return 0;
+            }
             const accounts = data.result?.value || [];
             if (accounts.length === 0) return 0;
 
@@ -249,7 +242,6 @@ const PhantomWallet = {
 
     // ── Wallet panel ─────────────────────────────────────────────────────────
 
-    // Called when user clicks wallet button while connected
     toggleWalletPanel() {
         const panel = document.getElementById('walletPanel');
         if (!panel) return;
@@ -257,10 +249,10 @@ const PhantomWallet = {
         if (panel.classList.contains('show')) {
             panel.classList.remove('show');
         } else {
-            // Refresh on-chain balances when opening panel
-            this.fetchOnChainBalances().then(() => this.updateWalletPanel());
             this.updateWalletPanel();
             panel.classList.add('show');
+            // Refresh balances in background (panel shows cached values immediately)
+            this.fetchOnChainBalances();
         }
     },
 
@@ -336,7 +328,6 @@ const PhantomWallet = {
         }
     },
 
-    // Format wallet address for display
     formatAddress(address) {
         if (!address) return '';
         return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;

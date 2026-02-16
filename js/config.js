@@ -11,8 +11,10 @@ const CONFIG = {
     ],
     // Solana USDC mint address (mainnet)
     USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    // Solana RPC endpoint
+    // Solana RPC endpoint (fallback)
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
+    // Helius API key — get free key at https://dev.helius.xyz (recommended for reliable balance fetching)
+    HELIUS_API_KEY: '',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
