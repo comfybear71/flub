@@ -87,6 +87,9 @@ const PhantomWallet = {
             // Determine role immediately from config
             this.determineRole();
 
+            // Load deposit history from localStorage
+            UI.loadDeposits(this.walletAddress);
+
             // Fetch on-chain balances (SOL + USDC + BUDJU)
             await this.fetchOnChainBalances();
 
@@ -117,6 +120,9 @@ const PhantomWallet = {
 
             // Determine role immediately from config
             this.determineRole();
+
+            // Load deposit history from localStorage
+            UI.loadDeposits(this.walletAddress);
 
             // Fetch on-chain balances
             await this.fetchOnChainBalances();

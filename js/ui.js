@@ -39,8 +39,8 @@ const UI = {
             this.closeTradingView();
             Logger.log('User mode active', 'success');
         } else {
-            // Not connected — hide role-specific items, show defaults
-            adminEls.forEach(el => el.style.display = '');
+            // Not connected — hide BOTH admin and user sections, visitors see chart + holdings only
+            adminEls.forEach(el => el.style.display = 'none');
             userEls.forEach(el => el.style.display = 'none');
             const dots = document.getElementById('chartDots');
             if (dots) dots.style.display = 'none';
@@ -203,7 +203,7 @@ const UI = {
             centerValue = Assets.formatCurrency(totalValue);
             subtitle = `${cryptoAssets.length} assets`;
             if (hintEl) hintEl.textContent = 'Swipe right for your share';
-        } else {
+        } else if (State.userRole === 'admin') {
             // Admin view
             chartData = cryptoAssets.map(a => a.usd_value || 0);
             chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
@@ -211,6 +211,14 @@ const UI = {
             centerValue = Assets.formatCurrency(totalValue);
             subtitle = `${cryptoAssets.length} assets + cash`;
             if (hintEl) hintEl.textContent = 'Tap coin to trade';
+        } else {
+            // Visitor (not logged in) — pool overview only
+            chartData = cryptoAssets.map(a => a.usd_value || 0);
+            chartColors = cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666');
+            centerLabel = 'Pool Total';
+            centerValue = Assets.formatCurrency(totalValue);
+            subtitle = `${cryptoAssets.length} assets`;
+            if (hintEl) hintEl.textContent = 'Connect wallet to join';
         }
 
         if (labelEl) labelEl.textContent = centerLabel;
@@ -476,18 +484,18 @@ const UI = {
         const autoSection    = document.getElementById('autoSection');
 
         if (type === 'instant') {
-            amountSection?.classList.remove('hidden');
-            triggerSection?.classList.remove('show');
-            autoSection?.classList.remove('show');
+            if (amountSection)  amountSection.style.display = '';
+            if (triggerSection) triggerSection.style.display = 'none';
+            if (autoSection)    autoSection.style.display = 'none';
         } else if (type === 'trigger') {
-            amountSection?.classList.add('hidden');
-            triggerSection?.classList.add('show');
-            autoSection?.classList.remove('show');
+            if (amountSection)  amountSection.style.display = 'none';
+            if (triggerSection) triggerSection.style.display = '';
+            if (autoSection)    autoSection.style.display = 'none';
             Trading.resetTrigger();
         } else if (type === 'auto') {
-            amountSection?.classList.add('hidden');
-            triggerSection?.classList.remove('show');
-            autoSection?.classList.add('show');
+            if (amountSection)  amountSection.style.display = 'none';
+            if (triggerSection) triggerSection.style.display = 'none';
+            if (autoSection)    autoSection.style.display = '';
         }
 
         State.triggerOffset = 0;
@@ -703,12 +711,17 @@ const UI = {
             // Send USDC on-chain via Phantom to the deposit address
             const txSignature = await PhantomWallet.sendUsdcDeposit(amount);
 
+            // Track deposit locally (until backend is built)
+            this._recordDeposit(PhantomWallet.walletAddress, amount, txSignature);
+
             this.closeDepositModal();
             Logger.log(`Deposit of ${amount} USDC sent! TX: ${txSignature.substring(0, 16)}...`, 'success');
             alert(`Deposit successful!\n\n${amount} USDC sent to Flub pool.\nTX: ${txSignature.substring(0, 24)}...`);
 
             // Refresh balances after deposit
             await PhantomWallet.fetchOnChainBalances();
+            // Re-render to reflect new deposit
+            this.renderPortfolio();
 
         } catch (error) {
             // Restore buttons on error
@@ -722,5 +735,33 @@ const UI = {
                 alert('Deposit failed: ' + error.message);
             }
         }
+    },
+
+    // ── Deposit tracking (localStorage until backend) ────────────────────────
+
+    _recordDeposit(wallet, amount, txHash) {
+        const key = `flub_deposits_${wallet}`;
+        const deposits = JSON.parse(localStorage.getItem(key) || '[]');
+        deposits.push({ amount, txHash, timestamp: Date.now() });
+        localStorage.setItem(key, JSON.stringify(deposits));
+
+        // Update state
+        const total = deposits.reduce((sum, d) => sum + d.amount, 0);
+        State.userDeposits = total;
+
+        Logger.log(`Total deposited: $${total.toFixed(2)} USDC`, 'success');
+    },
+
+    loadDeposits(wallet) {
+        const key = `flub_deposits_${wallet}`;
+        const deposits = JSON.parse(localStorage.getItem(key) || '[]');
+        const total = deposits.reduce((sum, d) => sum + d.amount, 0);
+        State.userDeposits = total;
+
+        // Update wallet panel
+        const depositedEl = document.getElementById('walletPanelDeposited');
+        if (depositedEl) depositedEl.textContent = Assets.formatCurrency(total);
+
+        return total;
     }
 };
