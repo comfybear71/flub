@@ -52,6 +52,9 @@ const PhantomWallet = {
             // Register or login user in backend
             await this.registerUser();
 
+            // Fetch on-chain balances (SOL + USDC)
+            await this.fetchOnChainBalances();
+
             UI.updateWalletStatus('connected', this.walletAddress);
 
         } catch (error) {
@@ -84,6 +87,7 @@ const PhantomWallet = {
         this.walletAddress = null;
         this.isConnected = false;
         State.userRole = null;
+        State.walletBalances = { sol: 0, usdc: 0 };
         this.clearUserSession();
         UI.updateWalletStatus('disconnected');
         UI.applyRole(null);
@@ -114,9 +118,12 @@ const PhantomWallet = {
 
             const userData = await response.json();
 
-            // Set role from backend response (or check frontend config as fallback)
-            State.userRole = userData.role ||
-                (CONFIG.ADMIN_WALLETS.includes(this.walletAddress) ? 'admin' : 'user');
+            // Set role: check frontend config FIRST (instant), then backend
+            if (CONFIG.ADMIN_WALLETS.includes(this.walletAddress)) {
+                State.userRole = 'admin';
+            } else {
+                State.userRole = userData.role || 'user';
+            }
 
             this.saveUserData(userData);
             Logger.log(`Authenticated as ${State.userRole}`, 'success');
@@ -129,6 +136,12 @@ const PhantomWallet = {
 
         } catch (error) {
             Logger.log(`Registration error: ${error.message}`, 'error');
+            // Even if backend registration fails, still check admin from config
+            if (CONFIG.ADMIN_WALLETS.includes(this.walletAddress)) {
+                State.userRole = 'admin';
+                UI.applyRole('admin');
+                Logger.log('Admin detected from config (backend unavailable)', 'info');
+            }
         }
     },
 
@@ -152,6 +165,90 @@ const PhantomWallet = {
         }
     },
 
+    // ── On-chain balance fetching ────────────────────────────────────────────
+
+    async fetchOnChainBalances() {
+        if (!this.walletAddress) return;
+
+        try {
+            Logger.log('Fetching on-chain balances...', 'info');
+
+            // Fetch SOL and USDC balances in parallel
+            const [solBalance, usdcBalance] = await Promise.all([
+                this._getSolBalance(),
+                this._getUsdcBalance()
+            ]);
+
+            State.walletBalances = {
+                sol: solBalance,
+                usdc: usdcBalance
+            };
+
+            Logger.log(`Wallet: ${solBalance.toFixed(4)} SOL, ${usdcBalance.toFixed(2)} USDC`, 'success');
+
+        } catch (error) {
+            Logger.log(`Balance fetch error: ${error.message}`, 'error');
+        }
+    },
+
+    async _getSolBalance() {
+        try {
+            const response = await fetch(CONFIG.SOLANA_RPC, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getBalance',
+                    params: [this.walletAddress]
+                })
+            });
+            const data = await response.json();
+            // Convert lamports to SOL (1 SOL = 1e9 lamports)
+            return (data.result?.value || 0) / 1e9;
+        } catch (e) {
+            Logger.log(`SOL balance error: ${e.message}`, 'error');
+            return 0;
+        }
+    },
+
+    async _getUsdcBalance() {
+        try {
+            const response = await fetch(CONFIG.SOLANA_RPC, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getTokenAccountsByOwner',
+                    params: [
+                        this.walletAddress,
+                        { mint: CONFIG.USDC_MINT },
+                        { encoding: 'jsonParsed' }
+                    ]
+                })
+            });
+            const data = await response.json();
+            const accounts = data.result?.value || [];
+            if (accounts.length === 0) return 0;
+
+            // Sum all USDC token accounts (usually just one)
+            let total = 0;
+            for (const account of accounts) {
+                const info = account.account?.data?.parsed?.info;
+                if (info) {
+                    total += parseFloat(info.tokenAmount?.uiAmount || 0);
+                }
+            }
+            return total;
+        } catch (e) {
+            Logger.log(`USDC balance error: ${e.message}`, 'error');
+            return 0;
+        }
+    },
+
+    // ── Wallet panel ─────────────────────────────────────────────────────────
+
     // Called when user clicks wallet button while connected
     toggleWalletPanel() {
         const panel = document.getElementById('walletPanel');
@@ -160,6 +257,8 @@ const PhantomWallet = {
         if (panel.classList.contains('show')) {
             panel.classList.remove('show');
         } else {
+            // Refresh on-chain balances when opening panel
+            this.fetchOnChainBalances().then(() => this.updateWalletPanel());
             this.updateWalletPanel();
             panel.classList.add('show');
         }
@@ -171,6 +270,9 @@ const PhantomWallet = {
         const allocEl = document.getElementById('walletPanelAllocation');
         const depositedEl = document.getElementById('walletPanelDeposited');
         const valueEl = document.getElementById('walletPanelValue');
+        const solEl = document.getElementById('walletPanelSol');
+        const usdcEl = document.getElementById('walletPanelUsdc');
+        const holdingsListEl = document.getElementById('walletPanelHoldingsList');
 
         if (addrEl) addrEl.textContent = this.walletAddress || '';
         if (roleEl) {
@@ -181,7 +283,29 @@ const PhantomWallet = {
         if (allocEl) allocEl.textContent = (State.userAllocation || 0).toFixed(2) + '%';
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
         if (valueEl) valueEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
+
+        // On-chain balances
+        if (solEl) solEl.textContent = (State.walletBalances.sol || 0).toFixed(4) + ' SOL';
+        if (usdcEl) usdcEl.textContent = (State.walletBalances.usdc || 0).toFixed(2) + ' USDC';
+
+        // Show user's pool holdings
+        if (holdingsListEl) {
+            const holdings = State.userHoldings || {};
+            const entries = Object.entries(holdings).filter(([_, amt]) => amt > 0);
+            if (entries.length > 0) {
+                holdingsListEl.innerHTML = entries.map(([coin, amt]) => {
+                    return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span style="color:#94a3b8;">${coin}</span>
+                        <span style="color:#e2e8f0;font-weight:600;">${parseFloat(amt).toFixed(6)}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                holdingsListEl.textContent = 'No holdings yet';
+            }
+        }
     },
+
+    // ── Session management ───────────────────────────────────────────────────
 
     saveUserSession() {
         localStorage.setItem('phantom_wallet', this.walletAddress);

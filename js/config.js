@@ -7,9 +7,12 @@ const CONFIG = {
     AUD_TO_USD_RATE: 0.65,
     // Admin wallet addresses — only these wallets get full trading access
     ADMIN_WALLETS: [
-        // Add your admin Phantom wallet public key(s) here
-        // e.g. 'AbCd1234...your-wallet-address'
+        'AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq'
     ],
+    // Solana USDC mint address (mainnet)
+    USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    // Solana RPC endpoint
+    SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
@@ -67,5 +70,7 @@ const State = {
     userHoldings: {},
     userDeposits: 0,
     // Role: 'admin', 'user', or null (not connected)
-    userRole: null
+    userRole: null,
+    // On-chain wallet balances (from Solana RPC)
+    walletBalances: { sol: 0, usdc: 0 }
 };

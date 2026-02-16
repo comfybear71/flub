@@ -557,8 +557,24 @@
             <span id="walletPanelRole" class="wallet-panel-role-badge user">User</span>
         </div>
 
-        <!-- Wallet Stats -->
+        <!-- On-Chain Wallet Balances -->
+        <div style="margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Wallet Balances</div>
+            <div style="display:flex;gap:8px;">
+                <div style="flex:1;padding:10px;background:rgba(168,85,247,0.1);border-radius:10px;border:1px solid rgba(168,85,247,0.2);text-align:center;">
+                    <div style="font-size:10px;color:#a855f7;font-weight:600;margin-bottom:4px;">SOL</div>
+                    <div id="walletPanelSol" style="font-size:14px;font-weight:700;color:#e2e8f0;">0.0000 SOL</div>
+                </div>
+                <div style="flex:1;padding:10px;background:rgba(34,197,94,0.1);border-radius:10px;border:1px solid rgba(34,197,94,0.2);text-align:center;">
+                    <div style="font-size:10px;color:#22c55e;font-weight:600;margin-bottom:4px;">USDC</div>
+                    <div id="walletPanelUsdc" style="font-size:14px;font-weight:700;color:#e2e8f0;">0.00 USDC</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pool Stats -->
         <div class="wallet-panel-stats">
+            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Flub Pool</div>
             <div class="wallet-panel-stat">
                 <span class="wallet-panel-stat-label">Pool Allocation</span>
                 <span class="wallet-panel-stat-value" id="walletPanelAllocation">0%</span>
@@ -575,7 +591,7 @@
 
         <!-- User Holdings (their share of the pool) -->
         <div id="walletPanelHoldings" class="wallet-panel-holdings">
-            <div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Your Holdings</div>
+            <div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Pool Holdings</div>
             <div id="walletPanelHoldingsList" style="font-size:12px;color:#64748b;">No holdings yet</div>
         </div>
 
