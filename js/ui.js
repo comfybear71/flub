@@ -183,6 +183,7 @@ const UI = {
         State.amountSliderValue  = 0;
         State.triggerOffset      = 0;
         State.isMiniChartVisible = false;
+        State.pendingTradeSide   = 'buy';
         State.autoTradeConfig    = { deviation: 0, allocation: 0 };
         const amountSlider = document.getElementById('amountSlider');
         const triggerSlider = document.getElementById('triggerSlider');
@@ -194,6 +195,8 @@ const UI = {
         if (autoAllocSlider) autoAllocSlider.value = 3;
         document.getElementById('miniChartContainer')?.classList.remove('show');
         document.getElementById('chartToggleBtn')?.classList.remove('active');
+        // Reset instant toggle to Buy
+        this.setInstantSide('buy');
         Trading.updateTriggerButtonBalances();
         this.updateAmountDisplay();
         Trading.updateTriggerDisplay();
@@ -328,6 +331,58 @@ const UI = {
         this.updateAmountDisplay();
     },
 
+    // ── Instant Buy/Sell Toggle ──────────────────────────────────────────────
+
+    setInstantSide(side) {
+        State.pendingTradeSide = side;
+
+        const buyBtn  = document.getElementById('instantBuyBtn');
+        const sellBtn = document.getElementById('instantSellBtn');
+        buyBtn?.classList.toggle('active', side === 'buy');
+        sellBtn?.classList.toggle('active', side === 'sell');
+
+        // Update slider fill colour
+        const fill = document.getElementById('amountFill');
+        if (fill) fill.style.background = side === 'buy' ? '#22c55e' : '#ef4444';
+
+        // Update confirm button
+        const confirmBtn  = document.getElementById('instantConfirmBtn');
+        const confirmText = document.getElementById('instantConfirmText');
+        if (confirmBtn) {
+            confirmBtn.className = `instant-confirm-btn ${side}`;
+        }
+        if (confirmText) {
+            confirmText.textContent = side === 'buy' ? 'Confirm Buy' : 'Confirm Sell';
+        }
+
+        // Reset slider when switching
+        State.amountSliderValue = 0;
+        const slider = document.getElementById('amountSlider');
+        if (slider) slider.value = 0;
+        const amountFill = document.getElementById('amountFill');
+        if (amountFill) amountFill.style.width = '0%';
+        const amountPercent = document.getElementById('amountPercent');
+        if (amountPercent) amountPercent.textContent = '0%';
+
+        this.updateInstantBalance();
+        this.updateAmountDisplay();
+    },
+
+    updateInstantBalance() {
+        const infoEl = document.getElementById('instantAvailable');
+        if (!infoEl) return;
+
+        const side = State.pendingTradeSide || 'buy';
+        if (side === 'buy') {
+            const usdcBal = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
+            infoEl.textContent = `${Assets.formatCurrency(usdcBal)} USDC`;
+        } else {
+            const bal  = State.selectedAsset?.balance ?? 0;
+            const code = State.selectedAsset?.code ?? '';
+            infoEl.textContent = `${Assets.formatNumber(bal)} ${code}`;
+        }
+    },
+
     // ── Amount Display ────────────────────────────────────────────────────────
 
     updateAmountSlider(value) {
@@ -343,18 +398,19 @@ const UI = {
         const cashBalance  = State.portfolioData.assets.find(a => a.code === State.cashAsset)?.usd_value ?? 0;
         const assetBalance = State.selectedAsset?.balance   ?? 0;
         const currentPrice = State.selectedAsset?.usd_price ?? 0;
+        const side         = State.pendingTradeSide || 'buy';
 
         let displayAmount, conversionText;
 
-        if (State.pendingTradeSide === 'sell') {
+        if (side === 'sell') {
             const sellQty  = (State.amountSliderValue / 100) * assetBalance;
             displayAmount  = sellQty * currentPrice;
-            conversionText = `${sellQty.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
+            conversionText = `${Assets.formatNumber(sellQty)} ${State.selectedAsset?.code ?? ''} → USDC`;
         } else {
             const cashAmount  = (State.amountSliderValue / 100) * cashBalance;
             displayAmount     = cashAmount;
             const receiveAmt  = currentPrice > 0 ? cashAmount / currentPrice : 0;
-            conversionText    = `≈ ${receiveAmt.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
+            conversionText    = `USDC → ${receiveAmt.toFixed(8)} ${State.selectedAsset?.code ?? ''}`;
         }
 
         const amountValueEl    = document.getElementById('amountValue');

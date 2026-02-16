@@ -253,6 +253,7 @@ const Trading = {
     // ── Order preparation & confirmation ─────────────────────────────────────
 
     prepareTrade(side) {
+        if (!side) side = State.pendingTradeSide || 'buy';
         State.pendingTradeSide = side;
 
         if (!State.selectedAsset) return;
@@ -368,8 +369,8 @@ const Trading = {
 
         document.getElementById('tradeModal')?.classList.remove('show');
 
-        const btn = document.getElementById(side === 'buy' ? 'buyBtn' : 'sellBtn');
-        if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
+        const btn = document.getElementById('instantConfirmBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Placing order...'; }
 
         try {
             const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
@@ -402,8 +403,14 @@ const Trading = {
             Logger.log(`❌ Trade failed: ${error.message}`, 'error');
             alert(`Trade failed: ${error.message}`);
         } finally {
-            if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
-            if (State.orderType !== 'trigger') State.pendingTradeSide = null;
+            if (btn) {
+                btn.disabled = false;
+                const side = State.pendingTradeSide || 'buy';
+                btn.innerHTML = `<span id="instantConfirmText">Confirm ${side === 'buy' ? 'Buy' : 'Sell'}</span>`;
+            }
+            if (State.orderType !== 'trigger') {
+                // Keep the side selection but allow new trades
+            }
         }
     },
 

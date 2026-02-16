@@ -71,29 +71,12 @@
                             <span id="tradeName">BTC</span>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 3v18h18"/>
-                                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
-                            </svg>
-                        </button>
-                        
-                        <div class="header-actions">
-                            <button class="action-btn-mini sell" id="sellBtn" onclick="Trading.prepareTrade('sell')">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                    <path d="M5 12h14"/>
-                                </svg>
-                                Sell
-                            </button>
-                            <button class="action-btn-mini buy" id="buyBtn" onclick="Trading.prepareTrade('buy')">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                    <path d="M12 5v14M5 12h14"/>
-                                </svg>
-                                Buy
-                            </button>
-                        </div>
-                    </div>
+                    <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3v18h18"/>
+                            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+                        </svg>
+                    </button>
                 </div>
                 
                 <div class="mini-chart-container" id="miniChartContainer">
@@ -125,11 +108,22 @@
                 </div>
                 
                 <div class="amount-compact" id="amountSection">
+                    <!-- Buy / Sell toggle -->
+                    <div class="instant-side-toggle" id="instantSideToggle">
+                        <button class="instant-side-btn buy active" id="instantBuyBtn" onclick="UI.setInstantSide('buy')">Buy</button>
+                        <button class="instant-side-btn sell" id="instantSellBtn" onclick="UI.setInstantSide('sell')">Sell</button>
+                    </div>
+
+                    <!-- Balance context -->
+                    <div class="instant-balance-info" id="instantBalanceInfo">
+                        Available: <span id="instantAvailable">$0.00 USDC</span>
+                    </div>
+
                     <div class="amount-display">
                         <div class="amount-value" id="amountValue">$0.00</div>
                         <div class="amount-conversion" id="conversionText">≈ 0 BTC</div>
                     </div>
-                    
+
                     <div class="slider-box">
                         <div class="slider-track"></div>
                         <div class="slider-fill" id="amountFill" style="width: 0%;"></div>
@@ -140,6 +134,11 @@
                         <span id="amountPercent">0%</span>
                         <span>100%</span>
                     </div>
+
+                    <!-- Confirm button -->
+                    <button class="instant-confirm-btn buy" id="instantConfirmBtn" onclick="Trading.prepareTrade(State.pendingTradeSide || 'buy')">
+                        <span id="instantConfirmText">Confirm Buy</span>
+                    </button>
                 </div>
                 
                                 <div class="trigger-compact" id="triggerSection">
