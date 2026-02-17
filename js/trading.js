@@ -425,6 +425,12 @@ const Trading = {
         const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD display
         const audTrigger    = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD
 
+        Logger.log(`─── TRIGGER DEBUG ───`, 'info');
+        Logger.log(`Asset: ${State.selectedAsset.code} (id: ${State.selectedAsset.asset_id})`, 'info');
+        Logger.log(`USD price: $${realtimePrice}, AUD price: A$${audPrice}`, 'info');
+        Logger.log(`Offset: ${State.triggerOffset}%, USD trigger: $${triggerPrice}, AUD trigger: A$${audTrigger}`, 'info');
+        Logger.log(`Balance: ${State.selectedAsset.balance}, Amount %: ${State.triggerAmountPercent}%`, 'info');
+
         // Determine order type based on trigger vs market price
         // LIMIT_BUY  (3): pending until price DROPS to trigger (Buy Dip)
         // LIMIT_SELL  (4): pending until price RISES to trigger (Sell Rise)

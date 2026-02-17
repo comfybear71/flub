@@ -103,11 +103,18 @@ const API = {
     },
 
     async placeOrder(orderData) {
+        Logger.log('─── ORDER DEBUG ───', 'info');
+        Logger.log('Raw input: ' + JSON.stringify(orderData), 'info');
+
         // Convert string order types to Swyftx numeric values
         const normalised = _normaliseOrderData(orderData);
 
+        Logger.log('Normalised: ' + JSON.stringify(normalised), 'info');
+        Logger.log(`  primary=${normalised.primary} secondary=${normalised.secondary}`, 'info');
+        Logger.log(`  quantity=${normalised.quantity} (type: ${typeof normalised.quantity})`, 'info');
+        Logger.log(`  assetQuantity=${normalised.assetQuantity}`, 'info');
+        Logger.log(`  orderType=${normalised.orderType} trigger=${normalised.trigger}`, 'info');
         Logger.log('API Request: POST /orders/', 'info');
-        Logger.log('Order data: ' + JSON.stringify(normalised), 'info');
 
         const res = await _fetchWithRetry('/api/proxy', {
             method: 'POST',
