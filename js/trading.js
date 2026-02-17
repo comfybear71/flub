@@ -467,6 +467,12 @@ const Trading = {
         if (isBuy) {
             const usdcBalance = this.getTriggerCashBalance('USDC');
             const spendAmount = parseFloat((usdcBalance * State.triggerAmountPercent / 100).toFixed(2));
+
+            if (spendAmount < MINIMUM_ORDER_USDC_LIMIT) {
+                alert(`Minimum trigger order is ~$${MINIMUM_ORDER_USDC_LIMIT} USDC. You selected $${spendAmount.toFixed(2)}.`);
+                return;
+            }
+
             quantity          = parseFloat((spendAmount / triggerPrice).toFixed(8));
             spendDisplay      = `${Assets.formatCurrency(spendAmount)} USDC`;
             receiveDisplay    = `${quantity} ${State.selectedAsset.code}`;
@@ -475,8 +481,8 @@ const Trading = {
             const cryptoQty    = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
             const receiveUsdc  = parseFloat((cryptoQty * triggerPrice).toFixed(2));
 
-            if (receiveUsdc < MINIMUM_ORDER_USDC) {
-                alert(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. Your sell is worth ~$${receiveUsdc.toFixed(2)}. Try increasing the amount slider.`);
+            if (receiveUsdc < MINIMUM_ORDER_USDC_LIMIT) {
+                alert(`Minimum trigger order is ~$${MINIMUM_ORDER_USDC_LIMIT} USDC. Your sell is worth ~$${receiveUsdc.toFixed(2)}. Try increasing the amount slider.`);
                 return;
             }
 
@@ -604,8 +610,11 @@ function _applyOffsetStyle(el, value) {
     }
 }
 
-// Swyftx minimum order ≈ $10 AUD ≈ $6.50 USD.  Use $7 USDC as safe floor.
-const MINIMUM_ORDER_USDC = 7;
+// Swyftx minimums differ by order type:
+//   MARKET (instant) orders: ~$10 AUD ≈ $7 USDC
+//   LIMIT  (trigger) orders: ~$75 AUD ≈ $50 USDC  (confirmed via testing)
+const MINIMUM_ORDER_USDC_MARKET = 7;
+const MINIMUM_ORDER_USDC_LIMIT  = 50;
 
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     // All orders: USDC primary, crypto secondary
@@ -630,8 +639,8 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
             // MARKET_BUY: express quantity in USDC (the amount we're spending).
             // Swyftx validates minimum order on market orders — USDC amounts
             // are larger numbers and match what the user actually selected.
-            if (cashAmount < MINIMUM_ORDER_USDC) {
-                throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. You selected $${cashAmount.toFixed(2)}.`);
+            if (cashAmount < MINIMUM_ORDER_USDC_MARKET) {
+                throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC_MARKET} USDC. You selected $${cashAmount.toFixed(2)}.`);
             }
             return { primary: 'USDC', secondary: State.selectedAsset.code,
                      quantity: parseFloat(cashAmount.toFixed(2)),
@@ -651,8 +660,8 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
         // MARKET_SELL: express quantity in USDC (value we expect to receive).
         // Avoids tiny crypto numbers that may trip Swyftx minimum-order check.
         const sellValueUsdc = parseFloat((sellQty * realtimePrice).toFixed(2));
-        if (sellValueUsdc < MINIMUM_ORDER_USDC) {
-            throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. Your sell is worth ~$${sellValueUsdc.toFixed(2)}.`);
+        if (sellValueUsdc < MINIMUM_ORDER_USDC_MARKET) {
+            throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC_MARKET} USDC. Your sell is worth ~$${sellValueUsdc.toFixed(2)}.`);
         }
         return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: sellValueUsdc, orderType: 'MARKET_SELL',
