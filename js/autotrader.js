@@ -22,6 +22,7 @@ const AutoTrader = {
     basePrices: {},       // { BTC: 98000, ETH: 3500, ... }
     cooldowns: {},
     checkCount: 0,
+    tradeLog: [],         // { time, coin, side, qty, price, amount }
 
     // Tier 1 defaults (blue chips)
     TIER1_COINS: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'],
@@ -191,7 +192,6 @@ const AutoTrader = {
             await API.refreshData();
         }
 
-        const statusLines = [];
         let tradeExecuted = false;
 
         for (const code of Object.keys(this.basePrices)) {
@@ -205,9 +205,6 @@ const AutoTrader = {
 
             const change = ((currentPrice - basePrice) / basePrice) * 100;
             const tier = this.getTier(code);
-            const sign = change >= 0 ? '+' : '';
-
-            statusLines.push(`${code}(T${tier}): ${sign}${change.toFixed(1)}%`);
 
             // Check if deviation threshold hit
             if (Math.abs(change) >= settings.deviation) {
@@ -229,8 +226,8 @@ const AutoTrader = {
             this.renderTierBadges();
         }
 
-        // Update status display
-        this._updateStatus(statusLines);
+        // Update status display with visual indicators + thresholds
+        this._updateStatus();
 
         // Check if all coins are now on cooldown
         const remaining = Object.keys(this.basePrices).filter(c => !this._isOnCooldown(c));
@@ -266,6 +263,7 @@ const AutoTrader = {
 
             if (response.ok) {
                 Logger.log(`${code} buy executed!`, 'success');
+                this._addTradeLog(code, 'BUY', quantity, currentPrice, tradeAmount);
                 this._setCooldown(code);
                 delete this.basePrices[code];
             } else {
@@ -305,7 +303,9 @@ const AutoTrader = {
             });
 
             if (response.ok) {
+                const sellValue = quantity * currentPrice;
                 Logger.log(`${code} sell executed!`, 'success');
+                this._addTradeLog(code, 'SELL', quantity, currentPrice, sellValue);
                 this._setCooldown(code);
                 delete this.basePrices[code];
             } else {
@@ -342,19 +342,137 @@ const AutoTrader = {
         }
     },
 
-    _updateStatus(statusLines) {
+    _updateStatus() {
         const status = document.getElementById('autoStatus');
         if (!status) return;
 
-        const activeCount = Object.keys(this.basePrices).filter(c => !this._isOnCooldown(c)).length;
-        const cdCount = Object.keys(this.basePrices).filter(c => this._isOnCooldown(c)).length;
+        const coins = Object.keys(this.basePrices);
+        const activeCoins = coins.filter(c => !this._isOnCooldown(c));
+        const cdCoins     = coins.filter(c => this._isOnCooldown(c));
 
-        let html = `<div style="font-weight:600; margin-bottom:4px;">Monitoring ${activeCount} coin${activeCount !== 1 ? 's' : ''}`;
-        if (cdCount > 0) html += ` (${cdCount} on cooldown)`;
+        let html = `<div style="font-weight:600; margin-bottom:6px;">Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+        if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;">(${cdCoins.length} on cooldown)</span>`;
         html += '</div>';
-        html += `<div style="font-size:10px; line-height:1.6;">${statusLines.join(' &bull; ')}</div>`;
+
+        // ── Per-coin threshold table ──
+        html += '<div style="display:flex; flex-direction:column; gap:4px;">';
+        for (const code of activeCoins) {
+            const settings     = this.getSettings(code);
+            const currentPrice = API.getRealtimePrice(code);
+            const basePrice    = this.basePrices[code];
+            if (!basePrice || !currentPrice) continue;
+
+            const change    = ((currentPrice - basePrice) / basePrice) * 100;
+            const deviation = settings.deviation;
+            const progress  = Math.min(Math.abs(change) / deviation, 1); // 0..1 how close to trigger
+            const tier      = this.getTier(code);
+
+            // Buy trigger (price drops) / Sell trigger (price rises)
+            const buyTrigger  = basePrice * (1 - deviation / 100);
+            const sellTrigger = basePrice * (1 + deviation / 100);
+
+            // Color gradient: grey → yellow → orange → red based on proximity
+            let barColor, textColor;
+            if (progress < 0.5) {
+                barColor  = '#3b82f6';  // blue — calm
+                textColor = '#94a3b8';
+            } else if (progress < 0.75) {
+                barColor  = '#eab308';  // yellow — warming up
+                textColor = '#eab308';
+            } else if (progress < 0.95) {
+                barColor  = '#f97316';  // orange — close
+                textColor = '#f97316';
+            } else {
+                barColor  = '#ef4444';  // red — about to trigger
+                textColor = '#ef4444';
+            }
+
+            const sign = change >= 0 ? '+' : '';
+            const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
+
+            html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">`;
+            // Row 1: Coin name, change %, progress bar
+            html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
+            html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
+            html += `<span style="font-size:10px; color:#64748b;">T${tier}</span>`;
+            html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
+            html += `<div style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.5s;"></div>`;
+            html += `</div>`;
+            html += `<span style="font-size:11px; font-weight:600; color:${textColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
+            html += `</div>`;
+            // Row 2: Price thresholds
+            html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
+            html += `<span>Buy &lt; $${buyTrigger.toFixed(2)}</span>`;
+            html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+            html += `<span>Sell &gt; $${sellTrigger.toFixed(2)}</span>`;
+            html += `</div>`;
+            html += `</div>`;
+        }
+
+        // Cooldown coins (compact)
+        if (cdCoins.length > 0) {
+            html += `<div style="padding:4px 8px; font-size:9px; color:#64748b;">`;
+            html += cdCoins.map(c => `${c} (cd: ${this._getCooldownRemaining(c)})`).join(' &bull; ');
+            html += `</div>`;
+        }
+        html += '</div>';
 
         status.innerHTML = html;
+
+        // ── Update trade log panel ──
+        this._renderTradeLog();
+    },
+
+    // ── Trade Log ─────────────────────────────────────────────────────────────
+
+    _addTradeLog(coin, side, quantity, price, amount) {
+        const entry = {
+            time: new Date(),
+            coin,
+            side,          // 'BUY' or 'SELL'
+            quantity,
+            price,
+            amount         // USDC value
+        };
+        this.tradeLog.unshift(entry); // newest first
+        if (this.tradeLog.length > 50) this.tradeLog.pop();
+
+        // Persist
+        localStorage.setItem('auto_trade_log', JSON.stringify(this.tradeLog));
+
+        this._renderTradeLog();
+    },
+
+    _renderTradeLog() {
+        const container = document.getElementById('autoTradeLog');
+        if (!container) return;
+
+        if (this.tradeLog.length === 0) {
+            container.innerHTML = '<div style="font-size:10px; color:#64748b; text-align:center; padding:12px;">No auto-trades yet. Trades will appear here when triggered.</div>';
+            return;
+        }
+
+        let html = '';
+        for (const entry of this.tradeLog.slice(0, 20)) {
+            const time = new Date(entry.time);
+            const timeStr = time.toLocaleDateString('en-AU', { day:'2-digit', month:'short' }) + ' ' +
+                            time.toLocaleTimeString('en-AU', { hour:'2-digit', minute:'2-digit', hour12:false });
+            const isBuy = entry.side === 'BUY';
+            const sideColor = isBuy ? '#22c55e' : '#ef4444';
+            const sideIcon  = isBuy ? '&#9650;' : '&#9660;';
+            const style = CONFIG.ASSET_STYLES[entry.coin] || { color: '#666' };
+
+            html += `<div style="display:flex; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:10px;">`;
+            html += `<span style="color:${sideColor}; font-weight:700; font-size:11px;">${sideIcon}</span>`;
+            html += `<span style="color:${style.color}; font-weight:600; min-width:36px;">${entry.coin}</span>`;
+            html += `<span style="color:${sideColor}; font-weight:600;">${entry.side}</span>`;
+            html += `<span style="color:#94a3b8; flex:1;">${entry.quantity} @ $${entry.price.toFixed(2)}</span>`;
+            html += `<span style="color:#c4b5fd; font-weight:600;">$${entry.amount.toFixed(2)}</span>`;
+            html += `<span style="color:#64748b; font-size:9px; min-width:75px; text-align:right;">${timeStr}</span>`;
+            html += `</div>`;
+        }
+
+        container.innerHTML = html;
     },
 
     // ── Cooldown Management ──────────────────────────────────────────────────
@@ -436,6 +554,12 @@ const AutoTrader = {
             }
         }
 
+        // Load trade log
+        const logData = localStorage.getItem('auto_trade_log');
+        if (logData) {
+            try { this.tradeLog = JSON.parse(logData); } catch (e) { this.tradeLog = []; }
+        }
+
         // Load saved tier settings
         const tierData = localStorage.getItem('auto_tiers');
         if (tierData) {
@@ -462,6 +586,13 @@ const AutoTrader = {
         if (t2Alloc) t2Alloc.value = this.tier2.allocation;
 
         this.updateTierUI();
+        this._renderTradeLog();
+    },
+
+    clearTradeLog() {
+        this.tradeLog = [];
+        localStorage.removeItem('auto_trade_log');
+        this._renderTradeLog();
     }
 };
 

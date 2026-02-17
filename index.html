@@ -337,6 +337,17 @@
                     <!-- Live status -->
                     <div id="autoStatus" style="display:none; padding:8px; border-radius:8px; margin-bottom:8px; font-size:10px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.4;"></div>
 
+                    <!-- Trade Log -->
+                    <div style="margin-bottom:8px; border-radius:8px; border:1px solid rgba(168,85,247,0.15); overflow:hidden;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(168,85,247,0.08);">
+                            <span style="font-size:10px; font-weight:700; color:#a855f7;">Trade Log</span>
+                            <button onclick="AutoTrader.clearTradeLog()" style="font-size:9px; color:#64748b; background:none; border:none; cursor:pointer; padding:2px 6px;">Clear</button>
+                        </div>
+                        <div id="autoTradeLog" style="max-height:150px; overflow-y:auto;">
+                            <div style="font-size:10px; color:#64748b; text-align:center; padding:12px;">No auto-trades yet. Trades will appear here when triggered.</div>
+                        </div>
+                    </div>
+
                     <!-- Start / Stop button -->
                     <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; color:white; background:#a855f7; transition:all 0.2s;">
                         <span id="autoToggleBtnText">Start Auto Trading</span>
