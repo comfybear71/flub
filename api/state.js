@@ -10,12 +10,14 @@ let cachedClient = null;
 
 async function getDb() {
     const uri = process.env.MONGODB_URI;
-    if (!uri) throw new Error('MONGODB_URI not set — add it in Vercel Environment Variables (get a free cluster at mongodb.com/atlas)');
+    if (!uri) throw new Error('MONGODB_URI not set');
 
     if (!cachedClient) {
         cachedClient = new MongoClient(uri, {
             maxPoolSize: 1,
-            serverSelectionTimeoutMS: 5000
+            serverSelectionTimeoutMS: 5000,
+            tls: true,
+            tlsAllowInvalidCertificates: false
         });
         await cachedClient.connect();
     }
