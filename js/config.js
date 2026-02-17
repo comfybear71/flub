@@ -5,21 +5,14 @@ const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
     AUD_TO_USD_RATE: 0.65,
-    // Admin wallet addresses — only these wallets get full trading access
     ADMIN_WALLETS: [
         'AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq'
     ],
-    // Solana USDC mint address (mainnet)
     USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    // BUDJU token mint address (Solana)
     BUDJU_MINT: '2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump',
-    // BUDJU requirement to use the system (not enforced yet)
     BUDJU_REQUIRED: 1_000_000,
-    // Pool USDC deposit address (on-chain)
     DEPOSIT_ADDRESS: '2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD',
-    // Solana RPC endpoint (fallback)
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
-    // Helius API key — get free key at https://dev.helius.xyz (recommended for reliable balance fetching)
     HELIUS_API_KEY: 'b81f2789-b697-4987-83f5-6f7e0d24538e',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
@@ -75,12 +68,9 @@ const State = {
     pendingTriggerPrice: 0,
     pendingQuantity: 0,
     pendingPrimary: 'USDC',
-    // Phantom wallet / user tracking
     userAllocation: 0,
     userHoldings: {},
     userDeposits: 0,
-    // Role: 'admin', 'user', or null (not connected)
     userRole: null,
-    // On-chain wallet balances (from Solana RPC)
     walletBalances: { sol: 0, usdc: 0, budju: 0 }
 };
