@@ -93,10 +93,8 @@ const API = {
             UI.updateLastUpdated();
             Logger.log(`Loaded ${State.portfolioData.assets.length} assets`, 'success');
 
-            // Fetch pending orders in background (admin only)
-            if (State.userRole === 'admin') {
-                this.fetchPendingOrders();
-            }
+            // Fetch pending orders in background
+            this.fetchPendingOrders();
 
         } catch (error) {
             Logger.log(`Refresh error: ${error.message}`, 'error');
@@ -120,99 +118,99 @@ const API = {
 
     async fetchPendingOrders() {
         try {
-            await this._ensureToken();
+            // ── 1) Load locally-tracked trigger orders ──────────────────
+            const localOrders = Trading.getLocalPendingOrders();
 
-            // Try both endpoints: /orders/open (dedicated pending) and /orders/ (all, filter client-side)
-            let orders = [];
+            // Map order type strings to numeric + buy/sell
+            const TYPE_MAP = {
+                'LIMIT_BUY': 3, 'LIMIT_SELL': 4, 'STOP_LIMIT_BUY': 5, 'STOP_LIMIT_SELL': 6,
+                'MARKET_BUY': 1, 'MARKET_SELL': 2
+            };
 
-            // 1) Try /orders/open — Swyftx's dedicated open-orders endpoint
-            const openRes = await _fetchWithRetry('/api/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ endpoint: '/orders/open', method: 'GET', authToken: State.jwtToken })
-            });
-            if (openRes.ok) {
-                const openData = await openRes.json();
-                if (!openData.error) {
-                    const openOrders = Array.isArray(openData) ? openData : (openData.orders ?? []);
-                    orders = openOrders;
-                    Logger.log(`/orders/open returned ${orders.length} orders`, 'info');
+            const normalised = localOrders.map(o => {
+                const ot       = typeof o.orderType === 'string' ? (TYPE_MAP[o.orderType] ?? 0) : parseInt(o.orderType ?? 0);
+                const isBuy    = ot === 1 || ot === 3 || ot === 5;
+                const trigger  = parseFloat(o.trigger ?? 0);
+                const quantity = parseFloat(o.quantity ?? 0);
+                const priCode  = o.priCode ?? 'USDC';
+
+                // Current price in the same currency as the trigger
+                const asset      = State.portfolioData.assets.find(a => a.code === o.assetCode);
+                const currentPrice = priCode === 'AUD'
+                    ? (asset?.price ?? 0)
+                    : (asset?.usd_price ?? 0);
+
+                const distance = currentPrice > 0 && trigger > 0
+                    ? Math.abs(currentPrice - trigger) / currentPrice * 100
+                    : 100;
+
+                return {
+                    id:           o.id ?? '',
+                    orderType:    ot,
+                    status:       0,   // 0 = locally tracked (pending)
+                    isBuy,
+                    assetCode:    o.assetCode ?? '',
+                    priCode,
+                    trigger,
+                    quantity,
+                    currentPrice,
+                    distance:     Math.round(distance * 100) / 100,
+                    created:      o.created ?? '',
+                    local:        true
+                };
+            }).filter(o => o.trigger > 0);
+
+            // ── 2) Also try Swyftx API for any server-side pending orders ─
+            let apiOrders = [];
+            try {
+                await this._ensureToken();
+                const openRes = await _fetchWithRetry('/api/proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint: '/orders/open', method: 'GET', authToken: State.jwtToken })
+                });
+                if (openRes.ok) {
+                    const openData = await openRes.json();
+                    if (!openData.error) {
+                        const raw = Array.isArray(openData) ? openData : (openData.orders ?? []);
+                        const idToCode = {};
+                        for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
+                            idToCode[String(id)] = code;
+                        }
+                        apiOrders = raw.map(o => {
+                            const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                            const isBuy = ot === 1 || ot === 3 || ot === 5;
+                            const secId = String(o.secondary_asset ?? '');
+                            const priId = String(o.primary_asset ?? '');
+                            const assetCode = idToCode[secId] ?? secId;
+                            const priCode   = idToCode[priId] ?? priId;
+                            const trigger   = parseFloat(o.trigger ?? 0);
+                            const quantity  = parseFloat(o.quantity ?? 0);
+                            const asset     = State.portfolioData.assets.find(a => a.code === assetCode);
+                            const currentPrice = priCode === 'AUD' ? (asset?.price ?? 0) : (asset?.usd_price ?? 0);
+                            const distance = currentPrice > 0 && trigger > 0
+                                ? Math.abs(currentPrice - trigger) / currentPrice * 100 : 100;
+                            return {
+                                id: o.orderUuid ?? o.id ?? '', orderType: ot,
+                                status: parseInt(o.status ?? 0), isBuy, assetCode, priCode,
+                                trigger, quantity, currentPrice,
+                                distance: Math.round(distance * 100) / 100,
+                                created: o.created_time ?? '', local: false
+                            };
+                        }).filter(o => o.trigger > 0);
+                    }
                 }
+            } catch (e) {
+                Logger.log(`API pending orders check: ${e.message}`, 'info');
             }
 
-            // 2) Fallback: scan /orders/ pages for non-completed orders (status != 4)
-            if (orders.length === 0) {
-                for (let page = 1; page <= 5; page++) {
-                    const res = await _fetchWithRetry('/api/proxy', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ endpoint: `/orders/?page=${page}`, method: 'GET', authToken: State.jwtToken })
-                    });
-                    if (!res.ok) break;
-                    const data = await res.json();
-                    const pageOrders = Array.isArray(data) ? data : (data.orders ?? []);
-                    if (pageOrders.length === 0) break;
+            // ── 3) Merge: local + API (dedupe by id) ──────────────────
+            const seen = new Set(apiOrders.map(o => o.id));
+            const merged = [...apiOrders, ...normalised.filter(o => !seen.has(o.id))];
 
-                    // Keep orders that are pending/processing (status != 4) or are limit/stop types (3-6)
-                    const pending = pageOrders.filter(o => {
-                        const st = parseInt(o.status ?? 0);
-                        const ot = parseInt(o.order_type ?? o.orderType ?? 0);
-                        return st !== 4 || (ot >= 3 && ot <= 6);
-                    });
-                    orders.push(...pending);
-                }
-                Logger.log(`/orders/ scan found ${orders.length} pending/trigger orders`, 'info');
-            }
+            State.pendingOrders = merged.sort((a, b) => a.distance - b.distance);
 
-            // Build reverse ID→code map from current portfolio data
-            const idToCode = {};
-            for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
-                idToCode[String(id)] = code;
-            }
-
-            // Normalise each order into a clean object
-            State.pendingOrders = orders
-                .map(o => {
-                    const orderType  = parseInt(o.orderType ?? o.order_type ?? 0);
-                    const status     = parseInt(o.status ?? 4);
-                    const isBuy      = orderType === 1 || orderType === 3 || orderType === 5;
-                    const secId      = String(o.secondary_asset ?? o.secondaryAsset ?? o.secondary ?? '');
-                    const priId      = String(o.primary_asset ?? o.primaryAsset ?? o.primary ?? '');
-                    const assetCode  = idToCode[secId] ?? o.secondary_code ?? secId;
-                    const priCode    = idToCode[priId] ?? o.primary_code ?? priId;
-
-                    const trigger    = parseFloat(o.trigger ?? o.rate ?? 0);
-                    const quantity   = parseFloat(o.quantity ?? o.amount ?? 0);
-                    const created    = o.created_at ?? o.createdAt ?? o.created_time ?? '';
-
-                    // Get current price in the same currency as the trigger
-                    const asset      = State.portfolioData.assets.find(a => a.code === assetCode);
-                    const currentPrice = priCode === 'AUD'
-                        ? (asset?.price ?? 0)                    // AUD price
-                        : (asset?.usd_price ?? 0);              // USD price
-
-                    const distance   = currentPrice > 0 && trigger > 0
-                        ? Math.abs(currentPrice - trigger) / currentPrice * 100
-                        : 100;
-
-                    return {
-                        id:           o.orderUuid ?? o.order_uuid ?? o.id ?? '',
-                        orderType,
-                        status,
-                        isBuy,
-                        assetCode,
-                        priCode,
-                        trigger,
-                        quantity,
-                        currentPrice,
-                        distance:     Math.round(distance * 100) / 100,
-                        created
-                    };
-                })
-                .filter(o => o.trigger > 0)               // must have a trigger price
-                .sort((a, b) => a.distance - b.distance);  // closest to trigger first
-
-            Logger.log(`Loaded ${State.pendingOrders.length} pending orders`, 'info');
+            Logger.log(`Pending orders: ${normalised.length} local + ${apiOrders.length} API = ${State.pendingOrders.length} total`, 'info');
             UI.renderPendingOrders();
 
         } catch (error) {

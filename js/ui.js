@@ -494,6 +494,11 @@ const UI = {
             const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
             const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity);
 
+            // Dismiss button only for locally-tracked orders
+            const dismissBtn = order.local
+                ? `<button onclick="Trading.removeLocalPendingOrder('${order.id}')" class="pending-order-dismiss" title="Remove">&times;</button>`
+                : '';
+
             return `
             <div class="pending-order-card ${side}">
                 <div class="pending-order-top">
@@ -504,9 +509,12 @@ const UI = {
                         <span class="pending-order-asset">${order.assetCode}</span>
                         <span class="pending-order-badge ${side}">${typeLabel}</span>
                     </div>
-                    <div class="pending-order-right">
-                        <div class="pending-order-trigger">${triggerFormatted}</div>
-                        <div class="pending-order-qty">${qtyDisplay} ${order.priCode}${statusLabel ? ' · ' + statusLabel : ''}</div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="pending-order-right">
+                            <div class="pending-order-trigger">${triggerFormatted}</div>
+                            <div class="pending-order-qty">${qtyDisplay} ${order.priCode}</div>
+                        </div>
+                        ${dismissBtn}
                     </div>
                 </div>
                 <div class="pending-order-proximity">

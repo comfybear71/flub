@@ -3,6 +3,34 @@
 // ==========================================
 const Trading = {
 
+    // ── Local pending orders (localStorage) ─────────────────────────────────
+
+    _LOCAL_KEY: 'flub_pending_orders',
+
+    getLocalPendingOrders() {
+        try {
+            return JSON.parse(localStorage.getItem(this._LOCAL_KEY) || '[]');
+        } catch { return []; }
+    },
+
+    saveLocalPendingOrder(order) {
+        const orders = this.getLocalPendingOrders();
+        orders.push(order);
+        localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
+        Logger.log(`Saved pending order locally: ${order.assetCode} ${order.orderType}`, 'info');
+    },
+
+    removeLocalPendingOrder(id) {
+        const orders = this.getLocalPendingOrders().filter(o => o.id !== id);
+        localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
+        API.fetchPendingOrders();
+    },
+
+    clearLocalPendingOrders() {
+        localStorage.removeItem(this._LOCAL_KEY);
+        API.fetchPendingOrders();
+    },
+
     // ── Trigger balance helpers ───────────────────────────────────────────────
 
     getTriggerCashBalance(currency) {
@@ -559,10 +587,19 @@ const Trading = {
             document.getElementById('limitConfirmModal')?.classList.remove('show');
             document.getElementById('successModal')?.classList.add('show');
 
+            // Save to local pending orders tracker
+            Trading.saveLocalPendingOrder({
+                id:        data.orderUuid ?? data.id ?? Date.now().toString(),
+                orderType: State.pendingOrderType,
+                assetCode: assetCode,
+                priCode:   State.pendingPrimary,
+                trigger:   triggerPrice,
+                quantity:  quantity,
+                created:   new Date().toISOString()
+            });
+
             await API.refreshData();
             this.updateTriggerButtonBalances();
-            // Refresh pending orders to show the new trigger
-            API.fetchPendingOrders();
 
         } catch (error) {
             let msg = error.message;
