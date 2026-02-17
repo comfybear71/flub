@@ -38,7 +38,7 @@ const Trading = {
 
         const badge = document.getElementById('triggerDirectionBadge');
         if (badge) {
-            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Hi';
+            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Rise';
             badge.style.color        = type === 'buy' ? '#22c55e' : '#ef4444';
             badge.style.background   = type === 'buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
         }
