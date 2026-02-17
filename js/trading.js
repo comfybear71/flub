@@ -561,6 +561,8 @@ const Trading = {
 
             await API.refreshData();
             this.updateTriggerButtonBalances();
+            // Refresh pending orders to show the new trigger
+            API.fetchPendingOrders();
 
         } catch (error) {
             let msg = error.message;

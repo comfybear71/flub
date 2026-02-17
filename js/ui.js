@@ -441,6 +441,77 @@ const UI = {
         }
     },
 
+    // ── Pending Orders ──────────────────────────────────────────────────────
+
+    renderPendingOrders() {
+        const container = document.getElementById('pendingOrdersList');
+        const countEl   = document.getElementById('pendingOrdersCount');
+        if (!container) return;
+
+        const orders = State.pendingOrders || [];
+        if (countEl) countEl.textContent = orders.length;
+
+        if (orders.length === 0) {
+            container.innerHTML = '<div class="pending-orders-empty">No pending trigger orders</div>';
+            return;
+        }
+
+        const ORDER_TYPE_LABELS = {
+            3: 'Limit Buy',
+            4: 'Limit Sell',
+            5: 'Stop Buy',
+            6: 'Stop Sell'
+        };
+
+        container.innerHTML = orders.map(order => {
+            const side       = order.isBuy ? 'buy' : 'sell';
+            const style      = CONFIG.ASSET_STYLES[order.assetCode] ?? { color: '#666', icon: order.assetCode?.[0] ?? '?' };
+            const typeLabel  = ORDER_TYPE_LABELS[order.orderType] ?? 'Order';
+            const currSymbol = order.priCode === 'AUD' ? 'A$' : '$';
+
+            // Proximity: how full the bar is (closer = fuller)
+            // Cap at 30% max distance for the visual
+            const maxDist    = 30;
+            const clampedDist = Math.min(order.distance, maxDist);
+            const proximity  = Math.max(0, ((maxDist - clampedDist) / maxDist) * 100);
+
+            // Classify distance for label styling
+            let distClass = 'far';
+            if (order.distance < 2)       distClass = 'very-close';
+            else if (order.distance < 5)  distClass = 'close';
+
+            const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger);
+            const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
+
+            return `
+            <div class="pending-order-card ${side}">
+                <div class="pending-order-top">
+                    <div class="pending-order-left">
+                        <div class="coin-icon-wrapper" style="width:28px;height:28px;background:${style.color}20;color:${style.color};font-size:12px;">
+                            <span class="coin-icon-letter" style="font-size:12px;">${style.icon}</span>
+                        </div>
+                        <span class="pending-order-asset">${order.assetCode}</span>
+                        <span class="pending-order-badge ${side}">${typeLabel}</span>
+                    </div>
+                    <div class="pending-order-right">
+                        <div class="pending-order-trigger">${triggerFormatted}</div>
+                        <div class="pending-order-qty">${Assets.formatNumber(order.quantity)} ${order.assetCode}</div>
+                    </div>
+                </div>
+                <div class="pending-order-proximity">
+                    <div class="proximity-bar-track">
+                        <div class="proximity-bar-fill ${side}" style="width:${proximity}%;"></div>
+                    </div>
+                    <span class="proximity-label ${distClass}">${order.distance.toFixed(1)}% away</span>
+                </div>
+                <div class="pending-order-current">
+                    <span>Now: ${currentFormatted}</span>
+                    <span>Trigger: ${triggerFormatted}</span>
+                </div>
+            </div>`;
+        }).join('');
+    },
+
     // ── Trading Panel (Admin Only) ───────────────────────────────────────────
 
     openTrade(code) {

@@ -93,6 +93,11 @@ const API = {
             UI.updateLastUpdated();
             Logger.log(`Loaded ${State.portfolioData.assets.length} assets`, 'success');
 
+            // Fetch pending orders in background (admin only)
+            if (State.userRole === 'admin') {
+                this.fetchPendingOrders();
+            }
+
         } catch (error) {
             Logger.log(`Refresh error: ${error.message}`, 'error');
             const list = document.getElementById('holdings-list');
@@ -111,6 +116,85 @@ const API = {
 
     getRealtimePrice(assetCode) {
         return State.portfolioData.assets.find(a => a.code === assetCode)?.usd_price ?? 0;
+    },
+
+    async fetchPendingOrders() {
+        try {
+            await this._ensureToken();
+            const res = await _fetchWithRetry('/api/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: '/orders/',
+                    method: 'GET',
+                    authToken: State.jwtToken
+                })
+            });
+
+            if (!res.ok) {
+                Logger.log(`Pending orders fetch failed: HTTP ${res.status}`, 'error');
+                return;
+            }
+
+            const data = await res.json();
+            const orders = Array.isArray(data) ? data : (data.orders ?? []);
+
+            // Build reverse ID→code map from current portfolio data
+            const idToCode = {};
+            for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
+                idToCode[String(id)] = code;
+            }
+
+            // Normalise each order into a clean object
+            State.pendingOrders = orders
+                .filter(o => {
+                    // Only show open limit/stop-limit orders (types 3-6)
+                    const ot = parseInt(o.orderType ?? o.order_type ?? 0);
+                    return ot >= 3 && ot <= 6;
+                })
+                .map(o => {
+                    const orderType  = parseInt(o.orderType ?? o.order_type ?? 0);
+                    const isBuy      = orderType === 3 || orderType === 5;
+                    const secId      = String(o.secondary_asset ?? o.secondaryAsset ?? o.secondary ?? '');
+                    const priId      = String(o.primary_asset ?? o.primaryAsset ?? o.primary ?? '');
+                    const assetCode  = idToCode[secId] ?? o.secondary_code ?? secId;
+                    const priCode    = idToCode[priId] ?? o.primary_code ?? priId;
+
+                    const trigger    = parseFloat(o.trigger ?? o.rate ?? 0);
+                    const quantity   = parseFloat(o.quantity ?? o.amount ?? 0);
+                    const created    = o.created_at ?? o.createdAt ?? o.created ?? '';
+
+                    // Get current price in the same currency as the trigger
+                    const asset      = State.portfolioData.assets.find(a => a.code === assetCode);
+                    const currentPrice = priCode === 'AUD'
+                        ? (asset?.price ?? 0)                    // AUD price
+                        : (asset?.usd_price ?? 0);              // USD price
+
+                    const distance   = currentPrice > 0
+                        ? Math.abs(currentPrice - trigger) / currentPrice * 100
+                        : 100;
+
+                    return {
+                        id:           o.orderUuid ?? o.order_uuid ?? o.id ?? '',
+                        orderType,
+                        isBuy,
+                        assetCode,
+                        priCode,
+                        trigger,
+                        quantity,
+                        currentPrice,
+                        distance:     Math.round(distance * 100) / 100,
+                        created
+                    };
+                })
+                .sort((a, b) => a.distance - b.distance);  // closest to trigger first
+
+            Logger.log(`Loaded ${State.pendingOrders.length} pending orders`, 'info');
+            UI.renderPendingOrders();
+
+        } catch (error) {
+            Logger.log(`Pending orders error: ${error.message}`, 'error');
+        }
     },
 
     async placeOrder(orderData) {

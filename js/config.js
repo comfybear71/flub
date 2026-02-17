@@ -69,6 +69,7 @@ const State = {
     pendingTriggerPrice: 0,
     pendingQuantity: 0,
     pendingPrimary: 'USDC',
+    pendingOrders: [],
     userAllocation: 0,
     userHoldings: {},
     userDeposits: 0,
