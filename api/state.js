@@ -27,9 +27,20 @@ async function getDb() {
             maxPoolSize: 1,
             serverSelectionTimeoutMS: 10000
         });
-        await cachedClient.connect();
+        try {
+            await cachedClient.connect();
+        } catch (err) {
+            cachedClient = null;  // Clear cache so next request retries
+            throw err;
+        }
     }
     return cachedClient.db('flub');
+}
+
+function debugUri() {
+    const uri = process.env.MONGODB_URI || '';
+    const m = uri.match(/:\/\/([^:]+):([^@]+)@/);
+    return m ? { user: m[1], passLen: m[2].length, hasSpecial: /[^a-zA-Z0-9]/.test(m[2]), first3: m[2].substring(0, 3) } : { raw: uri.substring(0, 30) };
 }
 
 function isAdmin(wallet) {
@@ -45,6 +56,11 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
+        // Debug: check current URI after password change
+        if (req.method === 'GET' && req.query.debug === '1') {
+            return res.status(200).json(debugUri());
+        }
+
         // ── GET: Load state ──
         if (req.method === 'GET') {
             const wallet = req.query.admin_wallet;
