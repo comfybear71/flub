@@ -420,8 +420,10 @@ const Trading = {
         if (!State.selectedAsset) { alert('No asset selected'); return; }
         if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
-        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
-        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);        // USD for display & qty calc
+        const audPrice      = State.selectedAsset.price;                              // AUD for Swyftx API trigger
+        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));  // USD display
+        const audTrigger    = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));       // AUD API
 
         // Determine order type based on trigger vs market price
         // LIMIT_BUY  (3): pending until price DROPS to trigger (Buy Dip)
@@ -464,9 +466,11 @@ const Trading = {
         _setElText('limitModalReceive', receiveDisplay);
 
         State.pendingOrderType    = orderType;
-        State.pendingTriggerPrice = triggerPrice;
+        State.pendingTriggerPrice = audTrigger;   // AUD trigger for Swyftx API
         State.pendingQuantity     = quantity;
         State.pendingAssetCode    = State.selectedAsset.code;
+
+        Logger.log(`Trigger: display=$${triggerPrice} USD, api=A$${audTrigger} AUD`, 'info');
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -553,10 +557,14 @@ function _applyOffsetStyle(el, value) {
 }
 
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
+    // Swyftx evaluates trigger prices against AUD market — always send AUD triggers
+    const audPrice = State.selectedAsset.price;   // AUD price for API trigger
+
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
         const deviationMultiplier = 1 + State.autoTradeConfig.deviation / 100;
-        const triggerPrice        = parseFloat((realtimePrice * deviationMultiplier).toFixed(2));
+        const triggerPrice        = parseFloat((realtimePrice * deviationMultiplier).toFixed(2)); // USD for qty calc
+        const audTrigger          = parseFloat((audPrice * deviationMultiplier).toFixed(2));      // AUD for API
         const orderType = side === 'buy'
             ? (triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY'  : 'LIMIT_BUY')
             : (triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL');
@@ -564,7 +572,7 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
             ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
             : parseFloat((allocationAmount / realtimePrice).toFixed(8));
         return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
-                 assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
+                 assetQuantity: State.selectedAsset.code, orderType, trigger: audTrigger };
     }
 
     if (side === 'buy') {
@@ -574,12 +582,13 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
                      quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
                      orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
         }
-        const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+        const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD for qty
+        const audTrigger   = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD for API
         return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: parseFloat((cashAmount / triggerPrice).toFixed(8)),
                  assetQuantity: State.selectedAsset.code,
                  orderType: triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
-                 trigger: triggerPrice };
+                 trigger: audTrigger };
     }
 
     // sell
@@ -589,9 +598,10 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
                  quantity: sellQty, orderType: 'MARKET_SELL',
                  assetQuantity: State.selectedAsset.code };
     }
-    const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+    const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD for type check
+    const audTrigger   = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD for API
     return { primary: 'USDC', secondary: State.selectedAsset.code,
              quantity: sellQty, assetQuantity: State.selectedAsset.code,
              orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
-             trigger: triggerPrice };
+             trigger: audTrigger };
 }
