@@ -420,10 +420,10 @@ const Trading = {
         if (!State.selectedAsset) { alert('No asset selected'); return; }
         if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
-        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);        // USD for display & qty calc
-        const audPrice      = State.selectedAsset.price;                              // AUD for Swyftx API trigger
-        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));  // USD display
-        const audTrigger    = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));       // AUD API
+        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);   // USD for display & qty calc
+        const audPrice      = State.selectedAsset.price;                         // AUD price
+        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD display
+        const audTrigger    = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD
 
         // Determine order type based on trigger vs market price
         // LIMIT_BUY  (3): pending until price DROPS to trigger (Buy Dip)
@@ -439,7 +439,12 @@ const Trading = {
 
         let spendDisplay, receiveDisplay, quantity;
 
-        if (State.selectedLimitType === 'buy') {
+        // Buy: USDC primary, USD trigger | Sell: AUD primary, AUD trigger
+        const isBuy    = State.selectedLimitType === 'buy';
+        const primary  = isBuy ? 'USDC' : 'AUD';
+        const apiTrigger = isBuy ? triggerPrice : audTrigger;
+
+        if (isBuy) {
             const usdcBalance = this.getTriggerCashBalance('USDC');
             const spendAmount = parseFloat((usdcBalance * State.triggerAmountPercent / 100).toFixed(2));
             quantity          = parseFloat((spendAmount / triggerPrice).toFixed(8));
@@ -457,7 +462,7 @@ const Trading = {
         const typeEl = document.getElementById('limitModalType');
         if (typeEl) {
             typeEl.textContent = orderType.replace(/_/g, ' ');
-            typeEl.style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+            typeEl.style.color = isBuy ? '#22c55e' : '#ef4444';
         }
 
         _setElText('limitModalAsset',   State.selectedAsset.code);
@@ -466,11 +471,12 @@ const Trading = {
         _setElText('limitModalReceive', receiveDisplay);
 
         State.pendingOrderType    = orderType;
-        State.pendingTriggerPrice = audTrigger;   // AUD trigger for Swyftx API
+        State.pendingTriggerPrice = apiTrigger;
+        State.pendingPrimary      = primary;
         State.pendingQuantity     = quantity;
         State.pendingAssetCode    = State.selectedAsset.code;
 
-        Logger.log(`Trigger: display=$${triggerPrice} USD, api=A$${audTrigger} AUD`, 'info');
+        Logger.log(`Order: ${primary} primary, trigger=${apiTrigger} (${primary === 'AUD' ? 'AUD' : 'USD'})`, 'info');
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -494,7 +500,7 @@ const Trading = {
             const triggerPrice = State.pendingTriggerPrice;
 
             const orderData = {
-                primary:       'USDC',
+                primary:       State.pendingPrimary || 'USDC',
                 secondary:     assetCode,
                 quantity,
                 assetQuantity: assetCode,
@@ -557,22 +563,24 @@ function _applyOffsetStyle(el, value) {
 }
 
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
-    // Swyftx evaluates trigger prices against AUD market — always send AUD triggers
-    const audPrice = State.selectedAsset.price;   // AUD price for API trigger
+    // Swyftx: buy triggers use USDC primary + USD trigger, sell triggers use AUD primary + AUD trigger
+    const audPrice = State.selectedAsset.price;
 
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
         const deviationMultiplier = 1 + State.autoTradeConfig.deviation / 100;
-        const triggerPrice        = parseFloat((realtimePrice * deviationMultiplier).toFixed(2)); // USD for qty calc
-        const audTrigger          = parseFloat((audPrice * deviationMultiplier).toFixed(2));      // AUD for API
+        const triggerPrice        = parseFloat((realtimePrice * deviationMultiplier).toFixed(2));
+        const audTrigger          = parseFloat((audPrice * deviationMultiplier).toFixed(2));
         const orderType = side === 'buy'
             ? (triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY'  : 'LIMIT_BUY')
             : (triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL');
         const quantity = side === 'buy'
             ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
             : parseFloat((allocationAmount / realtimePrice).toFixed(8));
-        return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
-                 assetQuantity: State.selectedAsset.code, orderType, trigger: audTrigger };
+        const primary  = side === 'buy' ? 'USDC' : 'AUD';
+        const trigger  = side === 'buy' ? triggerPrice : audTrigger;
+        return { primary, secondary: State.selectedAsset.code, quantity,
+                 assetQuantity: State.selectedAsset.code, orderType, trigger };
     }
 
     if (side === 'buy') {
@@ -582,25 +590,24 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
                      quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
                      orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
         }
-        const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD for qty
-        const audTrigger   = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD for API
+        const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
         return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: parseFloat((cashAmount / triggerPrice).toFixed(8)),
                  assetQuantity: State.selectedAsset.code,
                  orderType: triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
-                 trigger: audTrigger };
+                 trigger: triggerPrice };
     }
 
-    // sell
+    // sell — use AUD primary with AUD trigger for Swyftx compatibility
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
     if (State.orderType === 'instant') {
         return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: sellQty, orderType: 'MARKET_SELL',
                  assetQuantity: State.selectedAsset.code };
     }
-    const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD for type check
-    const audTrigger   = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD for API
-    return { primary: 'USDC', secondary: State.selectedAsset.code,
+    const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
+    const audTrigger   = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));
+    return { primary: 'AUD', secondary: State.selectedAsset.code,
              quantity: sellQty, assetQuantity: State.selectedAsset.code,
              orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
              trigger: audTrigger };
