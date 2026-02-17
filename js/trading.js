@@ -449,6 +449,7 @@ const Trading = {
             const receiveUsdc  = parseFloat((quantity * triggerPrice).toFixed(2));
             spendDisplay       = `${Assets.formatNumber(quantity)} ${State.selectedAsset.code}`;
             receiveDisplay     = `${Assets.formatCurrency(receiveUsdc)} USDC`;
+            Logger.log(`Sell calc: balance=${assetBalance}, pct=${State.triggerAmountPercent}, qty=${quantity}, trigger=${triggerPrice}, value=$${receiveUsdc}`, 'info');
         }
 
         const typeEl = document.getElementById('limitModalType');
@@ -497,8 +498,7 @@ const Trading = {
                 trigger:       triggerPrice
             };
 
-            Logger.log(`Sending ${State.pendingOrderType} order for ${assetCode}:`, 'info');
-            Logger.log(`Qty: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
+            Logger.log(`Sending ${State.pendingOrderType} for ${assetCode}: ${JSON.stringify(orderData)}`, 'info');
 
             const res = await API.placeOrder(orderData);
             if (!res.ok) {
