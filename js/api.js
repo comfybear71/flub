@@ -121,23 +121,48 @@ const API = {
     async fetchPendingOrders() {
         try {
             await this._ensureToken();
-            const res = await _fetchWithRetry('/api/proxy', {
+
+            // Try both endpoints: /orders/open (dedicated pending) and /orders/ (all, filter client-side)
+            let orders = [];
+
+            // 1) Try /orders/open — Swyftx's dedicated open-orders endpoint
+            const openRes = await _fetchWithRetry('/api/proxy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: '/orders/',
-                    method: 'GET',
-                    authToken: State.jwtToken
-                })
+                body: JSON.stringify({ endpoint: '/orders/open', method: 'GET', authToken: State.jwtToken })
             });
-
-            if (!res.ok) {
-                Logger.log(`Pending orders fetch failed: HTTP ${res.status}`, 'error');
-                return;
+            if (openRes.ok) {
+                const openData = await openRes.json();
+                if (!openData.error) {
+                    const openOrders = Array.isArray(openData) ? openData : (openData.orders ?? []);
+                    orders = openOrders;
+                    Logger.log(`/orders/open returned ${orders.length} orders`, 'info');
+                }
             }
 
-            const data = await res.json();
-            const orders = Array.isArray(data) ? data : (data.orders ?? []);
+            // 2) Fallback: scan /orders/ pages for non-completed orders (status != 4)
+            if (orders.length === 0) {
+                for (let page = 1; page <= 5; page++) {
+                    const res = await _fetchWithRetry('/api/proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint: `/orders/?page=${page}`, method: 'GET', authToken: State.jwtToken })
+                    });
+                    if (!res.ok) break;
+                    const data = await res.json();
+                    const pageOrders = Array.isArray(data) ? data : (data.orders ?? []);
+                    if (pageOrders.length === 0) break;
+
+                    // Keep orders that are pending/processing (status != 4) or are limit/stop types (3-6)
+                    const pending = pageOrders.filter(o => {
+                        const st = parseInt(o.status ?? 0);
+                        const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                        return st !== 4 || (ot >= 3 && ot <= 6);
+                    });
+                    orders.push(...pending);
+                }
+                Logger.log(`/orders/ scan found ${orders.length} pending/trigger orders`, 'info');
+            }
 
             // Build reverse ID→code map from current portfolio data
             const idToCode = {};
@@ -147,14 +172,10 @@ const API = {
 
             // Normalise each order into a clean object
             State.pendingOrders = orders
-                .filter(o => {
-                    // Only show open limit/stop-limit orders (types 3-6)
-                    const ot = parseInt(o.orderType ?? o.order_type ?? 0);
-                    return ot >= 3 && ot <= 6;
-                })
                 .map(o => {
                     const orderType  = parseInt(o.orderType ?? o.order_type ?? 0);
-                    const isBuy      = orderType === 3 || orderType === 5;
+                    const status     = parseInt(o.status ?? 4);
+                    const isBuy      = orderType === 1 || orderType === 3 || orderType === 5;
                     const secId      = String(o.secondary_asset ?? o.secondaryAsset ?? o.secondary ?? '');
                     const priId      = String(o.primary_asset ?? o.primaryAsset ?? o.primary ?? '');
                     const assetCode  = idToCode[secId] ?? o.secondary_code ?? secId;
@@ -162,7 +183,7 @@ const API = {
 
                     const trigger    = parseFloat(o.trigger ?? o.rate ?? 0);
                     const quantity   = parseFloat(o.quantity ?? o.amount ?? 0);
-                    const created    = o.created_at ?? o.createdAt ?? o.created ?? '';
+                    const created    = o.created_at ?? o.createdAt ?? o.created_time ?? '';
 
                     // Get current price in the same currency as the trigger
                     const asset      = State.portfolioData.assets.find(a => a.code === assetCode);
@@ -170,13 +191,14 @@ const API = {
                         ? (asset?.price ?? 0)                    // AUD price
                         : (asset?.usd_price ?? 0);              // USD price
 
-                    const distance   = currentPrice > 0
+                    const distance   = currentPrice > 0 && trigger > 0
                         ? Math.abs(currentPrice - trigger) / currentPrice * 100
                         : 100;
 
                     return {
                         id:           o.orderUuid ?? o.order_uuid ?? o.id ?? '',
                         orderType,
+                        status,
                         isBuy,
                         assetCode,
                         priCode,
@@ -187,6 +209,7 @@ const API = {
                         created
                     };
                 })
+                .filter(o => o.trigger > 0)               // must have a trigger price
                 .sort((a, b) => a.distance - b.distance);  // closest to trigger first
 
             Logger.log(`Loaded ${State.pendingOrders.length} pending orders`, 'info');

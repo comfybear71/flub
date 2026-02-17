@@ -457,16 +457,26 @@ const UI = {
         }
 
         const ORDER_TYPE_LABELS = {
+            1: 'Market Buy',
+            2: 'Market Sell',
             3: 'Limit Buy',
             4: 'Limit Sell',
             5: 'Stop Buy',
             6: 'Stop Sell'
         };
 
+        const STATUS_LABELS = {
+            1: 'Open',
+            2: 'Partial',
+            3: 'Cancelled',
+            4: 'Filled'
+        };
+
         container.innerHTML = orders.map(order => {
             const side       = order.isBuy ? 'buy' : 'sell';
             const style      = CONFIG.ASSET_STYLES[order.assetCode] ?? { color: '#666', icon: order.assetCode?.[0] ?? '?' };
-            const typeLabel  = ORDER_TYPE_LABELS[order.orderType] ?? 'Order';
+            const typeLabel  = ORDER_TYPE_LABELS[order.orderType] ?? 'Trigger';
+            const statusLabel = STATUS_LABELS[order.status] ?? '';
             const currSymbol = order.priCode === 'AUD' ? 'A$' : '$';
 
             // Proximity: how full the bar is (closer = fuller)
@@ -482,6 +492,7 @@ const UI = {
 
             const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger);
             const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
+            const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity);
 
             return `
             <div class="pending-order-card ${side}">
@@ -495,7 +506,7 @@ const UI = {
                     </div>
                     <div class="pending-order-right">
                         <div class="pending-order-trigger">${triggerFormatted}</div>
-                        <div class="pending-order-qty">${Assets.formatNumber(order.quantity)} ${order.assetCode}</div>
+                        <div class="pending-order-qty">${qtyDisplay} ${order.priCode}${statusLabel ? ' · ' + statusLabel : ''}</div>
                     </div>
                 </div>
                 <div class="pending-order-proximity">
