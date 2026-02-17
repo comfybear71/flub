@@ -400,8 +400,19 @@ const Trading = {
             if (State.orderType === 'trigger') this.updateTriggerButtonBalances();
 
         } catch (error) {
-            Logger.log(`❌ Trade failed: ${error.message}`, 'error');
-            alert(`Trade failed: ${error.message}`);
+            let msg = error.message;
+            // Parse Swyftx JSON error bodies for a readable message
+            try {
+                const parsed = JSON.parse(msg);
+                const inner  = parsed.error || parsed;
+                if (inner.error === 'MinimumOrderError') {
+                    msg = 'Order too small — Swyftx requires a minimum of ~$10 AUD (~$6.50 USDC). Try increasing the amount slider.';
+                } else {
+                    msg = inner.message || inner.error || msg;
+                }
+            } catch (_) { /* not JSON, use raw message */ }
+            Logger.log(`❌ Trade failed: ${msg}`, 'error');
+            alert(`Trade failed: ${msg}`);
         } finally {
             if (btn) {
                 btn.disabled = false;
@@ -485,7 +496,7 @@ const Trading = {
         State.pendingQuantity      = quantity;                  // always crypto amount
         State.pendingAssetCode     = State.selectedAsset.code;
 
-        Logger.log(`Order: USDC primary, qty=${apiQuantity} ${apiAssetQuantity}, trigger=$${triggerPrice}`, 'info');
+        Logger.log(`Order: USDC primary, qty=${quantity} ${State.selectedAsset.code}, trigger=$${triggerPrice}`, 'info');
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -536,8 +547,18 @@ const Trading = {
             this.updateTriggerButtonBalances();
 
         } catch (error) {
-            Logger.log(`❌ Order failed: ${error.message}`, 'error');
-            alert(`Order failed: ${error.message}`);
+            let msg = error.message;
+            try {
+                const parsed = JSON.parse(msg);
+                const inner  = parsed.error || parsed;
+                if (inner.error === 'MinimumOrderError') {
+                    msg = 'Order too small — Swyftx requires a minimum of ~$10 AUD (~$6.50 USDC). Try increasing the amount.';
+                } else {
+                    msg = inner.message || inner.error || msg;
+                }
+            } catch (_) { /* not JSON */ }
+            Logger.log(`❌ Order failed: ${msg}`, 'error');
+            alert(`Order failed: ${msg}`);
             document.getElementById('limitConfirmModal')?.classList.remove('show');
         } finally {
             btn.disabled    = false;
@@ -572,8 +593,11 @@ function _applyOffsetStyle(el, value) {
     }
 }
 
+// Swyftx minimum order ≈ $10 AUD ≈ $6.50 USD.  Use $5 USDC as safe floor.
+const MINIMUM_ORDER_USDC = 5;
+
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
-    // All orders: USDC primary, crypto quantity, crypto assetQuantity, USD trigger
+    // All orders: USDC primary, crypto secondary
 
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
@@ -592,9 +616,15 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     if (side === 'buy') {
         const cashAmount = (State.amountSliderValue / 100) * cashBalance;
         if (State.orderType === 'instant') {
+            // MARKET_BUY: express quantity in USDC (the amount we're spending).
+            // Swyftx validates minimum order on market orders — USDC amounts
+            // are larger numbers and match what the user actually selected.
+            if (cashAmount < MINIMUM_ORDER_USDC) {
+                throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. You selected $${cashAmount.toFixed(2)}.`);
+            }
             return { primary: 'USDC', secondary: State.selectedAsset.code,
-                     quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
-                     orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
+                     quantity: parseFloat(cashAmount.toFixed(2)),
+                     orderType: 'MARKET_BUY', assetQuantity: 'USDC' };
         }
         const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
         return { primary: 'USDC', secondary: State.selectedAsset.code,
@@ -604,12 +634,18 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
                  trigger: triggerPrice };
     }
 
-    // sell — same format as buy
+    // sell
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
     if (State.orderType === 'instant') {
+        // MARKET_SELL: express quantity in USDC (value we expect to receive).
+        // Avoids tiny crypto numbers that may trip Swyftx minimum-order check.
+        const sellValueUsdc = parseFloat((sellQty * realtimePrice).toFixed(2));
+        if (sellValueUsdc < MINIMUM_ORDER_USDC) {
+            throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. Your sell is worth ~$${sellValueUsdc.toFixed(2)}.`);
+        }
         return { primary: 'USDC', secondary: State.selectedAsset.code,
-                 quantity: sellQty, orderType: 'MARKET_SELL',
-                 assetQuantity: State.selectedAsset.code };
+                 quantity: sellValueUsdc, orderType: 'MARKET_SELL',
+                 assetQuantity: 'USDC' };
     }
     const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
     return { primary: 'USDC', secondary: State.selectedAsset.code,
