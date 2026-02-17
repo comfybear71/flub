@@ -420,6 +420,13 @@ const Trading = {
         if (!State.selectedAsset) { alert('No asset selected'); return; }
         if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
+        // Refresh portfolio to get latest prices before calculating trigger
+        Logger.log('Refreshing prices before order...', 'info');
+        try { await API.refreshData(); } catch (e) { Logger.log('Price refresh failed, using cached: ' + e.message, 'error'); }
+        // Re-read the asset after refresh (balance/price may have updated)
+        const freshAsset = State.portfolioData.assets.find(a => a.code === State.selectedAsset.code);
+        if (freshAsset) State.selectedAsset = freshAsset;
+
         const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);   // USD for display & qty calc
         const audPrice      = State.selectedAsset.price;                         // AUD price
         const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD display

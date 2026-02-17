@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "headers": [
+    { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }] },
+    { "source": "/js/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] },
+    { "source": "/css/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
+  ],
   "builds": [
     { "src": "api/proxy.js", "use": "@vercel/node" },
     { "src": "api/index.py", "use": "@vercel/python" },
