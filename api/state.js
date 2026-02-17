@@ -9,8 +9,18 @@ import { MongoClient } from 'mongodb';
 let cachedClient = null;
 
 async function getDb() {
-    const uri = process.env.MONGODB_URI;
+    let uri = process.env.MONGODB_URI;
     if (!uri) throw new Error('MONGODB_URI not set');
+
+    // Auto-encode special chars in password (common Atlas gotcha)
+    const match = uri.match(/^(mongodb(?:\+srv)?:\/\/[^:]+:)([^@]+)(@.+)$/);
+    if (match) {
+        const rawPass = match[2];
+        const encoded = encodeURIComponent(rawPass);
+        if (rawPass !== encoded) {
+            uri = match[1] + encoded + match[3];
+        }
+    }
 
     if (!cachedClient) {
         cachedClient = new MongoClient(uri, {
@@ -35,28 +45,6 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
-        // Temporary debug — remove after connection works
-        if (req.method === 'GET' && req.query.debug === 'uri') {
-            const uri = process.env.MONGODB_URI || '';
-            // Show first 4 + last 4 chars of password only
-            const match = uri.match(/:\/\/([^:]+):([^@]+)@(.+)/);
-            if (match) {
-                const user = match[1];
-                const pass = match[2];
-                const masked = pass.length > 8
-                    ? pass.slice(0, 4) + '...' + pass.slice(-4)
-                    : '****';
-                return res.status(200).json({
-                    user,
-                    pass_hint: masked,
-                    pass_length: pass.length,
-                    host: match[3].substring(0, 40),
-                    has_special_chars: /[^a-zA-Z0-9]/.test(pass)
-                });
-            }
-            return res.status(200).json({ format: 'unexpected', first50: uri.substring(0, 50) });
-        }
-
         // ── GET: Load state ──
         if (req.method === 'GET') {
             const wallet = req.query.admin_wallet;
