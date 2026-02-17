@@ -13,14 +13,9 @@ async function getDb() {
     if (!uri) throw new Error('MONGODB_URI not set');
 
     if (!cachedClient) {
-        // Append TLS params to URI if not already present
-        const connUri = uri.includes('tls=') || uri.includes('ssl=')
-            ? uri
-            : uri + (uri.includes('?') ? '&' : '?') + 'tls=true&tlsAllowInvalidCertificates=true';
-
-        cachedClient = new MongoClient(connUri, {
+        cachedClient = new MongoClient(uri, {
             maxPoolSize: 1,
-            serverSelectionTimeoutMS: 8000
+            serverSelectionTimeoutMS: 10000
         });
         await cachedClient.connect();
     }
@@ -40,18 +35,6 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
-        // ── Debug: check connection info ──
-        if (req.method === 'GET' && req.query.debug === '1') {
-            const uri = process.env.MONGODB_URI || '';
-            const masked = uri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
-            return res.status(200).json({
-                uri_format: masked.substring(0, 80) + '...',
-                has_uri: !!process.env.MONGODB_URI,
-                has_admin_wallets: !!process.env.ADMIN_WALLETS,
-                node_version: process.version
-            });
-        }
-
         // ── GET: Load state ──
         if (req.method === 'GET') {
             const wallet = req.query.admin_wallet;
