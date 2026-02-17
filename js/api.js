@@ -71,9 +71,20 @@ const API = {
                 throw new Error('No assets found in response: ' + JSON.stringify(data).substring(0, 100));
             }
 
-            State.portfolioData.assets = assets
+            // Split pipeline: normalize → update IDs → filter
+            const normalized = assets
                 .filter(asset => asset?.code !== 'USD')
-                .map(_normalizeAsset)
+                .map(_normalizeAsset);
+
+            // Rebuild CODE_TO_ID from live Swyftx data so order IDs are always correct.
+            for (const a of normalized) {
+                if (a.code && a.asset_id != null) {
+                    CONFIG.CODE_TO_ID[a.code] = a.asset_id;
+                }
+            }
+            Logger.log('CODE_TO_ID updated: ' + JSON.stringify(CONFIG.CODE_TO_ID), 'info');
+
+            State.portfolioData.assets = normalized
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
 
             Assets.sort(State.currentSort);

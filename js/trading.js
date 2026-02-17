@@ -38,7 +38,7 @@ const Trading = {
 
         const badge = document.getElementById('triggerDirectionBadge');
         if (badge) {
-            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Rise';
+            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Hi';
             badge.style.color        = type === 'buy' ? '#22c55e' : '#ef4444';
             badge.style.background   = type === 'buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
         }
@@ -479,19 +479,19 @@ const Trading = {
         } else {
             const assetBalance = State.selectedAsset.balance || 0;
             const cryptoQty    = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
-            const receiveUsdc  = parseFloat((cryptoQty * triggerPrice).toFixed(2));
+            const receiveAud   = parseFloat((cryptoQty * audTrigger).toFixed(2));
 
-            if (receiveUsdc < MINIMUM_ORDER_USDC_LIMIT) {
-                alert(`Minimum trigger order is ~$${MINIMUM_ORDER_USDC_LIMIT} USDC. Your sell is worth ~$${receiveUsdc.toFixed(2)}. Try increasing the amount slider.`);
+            if (receiveAud < 10) {
+                alert(`Minimum trigger sell is ~A$10. Your sell is worth ~A$${receiveAud.toFixed(2)}. Try increasing the amount slider.`);
                 return;
             }
 
-            // Express sell quantity in USDC — avoids per-asset crypto minimums
-            // that cause MinimumOrderError on small holdings.
-            quantity       = receiveUsdc;                       // USDC amount
+            // Sell triggers use AUD primary (Swyftx only supports fiat for limit sells).
+            // Quantity in crypto, trigger in AUD.
+            quantity       = cryptoQty;
             spendDisplay   = `${Assets.formatNumber(cryptoQty)} ${State.selectedAsset.code}`;
-            receiveDisplay = `${Assets.formatCurrency(receiveUsdc)} USDC`;
-            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → $${receiveUsdc} USDC (qty sent as USDC), trigger=$${triggerPrice}`, 'info');
+            receiveDisplay = `~A$${receiveAud.toFixed(2)} AUD`;
+            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → A$${receiveAud} AUD, AUD trigger=A$${audTrigger}`, 'info');
         }
 
         const typeEl = document.getElementById('limitModalType');
@@ -505,13 +505,14 @@ const Trading = {
         _setElText('limitModalAmount',  spendDisplay);
         _setElText('limitModalReceive', receiveDisplay);
 
-        // Buy: quantity = crypto amount.  Sell: quantity = USDC amount.
+        // Buy: USDC primary, USD trigger.  Sell: AUD primary, AUD trigger.
         State.pendingOrderType     = orderType;
-        State.pendingTriggerPrice  = triggerPrice;              // USD trigger (USDC ≈ USD)
-        State.pendingQuantity      = quantity;                  // buy → crypto, sell → USDC
+        State.pendingTriggerPrice  = isBuy ? triggerPrice : audTrigger;
+        State.pendingQuantity      = quantity;                  // always crypto amount
         State.pendingAssetCode     = State.selectedAsset.code;
+        State.pendingPrimary       = isBuy ? 'USDC' : 'AUD';
 
-        Logger.log(`Order: USDC primary, qty=${quantity} ${State.selectedAsset.code}, trigger=$${triggerPrice}`, 'info');
+        Logger.log(`Order: ${State.pendingPrimary} primary, qty=${quantity} ${State.selectedAsset.code}, trigger=${isBuy ? '$' + triggerPrice : 'A$' + audTrigger}`, 'info');
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -534,16 +535,14 @@ const Trading = {
             const quantity     = State.pendingQuantity;
             const triggerPrice = State.pendingTriggerPrice;
 
-            // Buy: quantity in crypto, assetQuantity = crypto
-            // Sell: quantity in USDC,   assetQuantity = USDC  (avoids per-asset crypto minimums)
-            const isSell = State.pendingOrderType.includes('SELL');
+            // Buy: USDC primary, USD trigger.  Sell: AUD primary, AUD trigger.
             const orderData = {
-                primary:       'USDC',
+                primary:       State.pendingPrimary,   // 'USDC' for buys, 'AUD' for sells
                 secondary:     assetCode,
-                quantity,
-                assetQuantity: isSell ? 'USDC' : assetCode,
+                quantity,                               // crypto amount
+                assetQuantity: assetCode,               // always crypto
                 orderType:     State.pendingOrderType,
-                trigger:       triggerPrice
+                trigger:       triggerPrice             // USD for buys, AUD for sells
             };
 
             Logger.log(`Sending ${State.pendingOrderType} for ${assetCode}: ${JSON.stringify(orderData)}`, 'info');

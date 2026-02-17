@@ -40,8 +40,9 @@ const CONFIG = {
         'DOGE': { color: '#eab308', icon: 'Ð',  name: 'Dogecoin' },
         'AUD':  { color: '#f59e0b', icon: 'A$', name: 'Australian Dollar' }
     },
+    // Fallback IDs — dynamically overwritten from portfolio data in refreshData().
     CODE_TO_ID: {
-        'AUD':  1,  'BTC':  2,  'ETH':  3,  'XRP':  5,
+        'AUD':  1,  'BTC':  3,  'ETH':  5,
         'ADA':  12, 'USD':  36, 'USDC': 53, 'DOGE': 73,
         'SOL':  130,'LUNA': 405,'LUNC': 406,'NEXO': 407,
         'SUI':  438,'ENA':  496,'POL':  569,'XAUT': 635
@@ -73,6 +74,7 @@ const State = {
     pendingOrderType: null,
     pendingTriggerPrice: 0,
     pendingQuantity: 0,
+    pendingPrimary: 'USDC',
     // Phantom wallet / user tracking
     userAllocation: 0,
     userHoldings: {},
