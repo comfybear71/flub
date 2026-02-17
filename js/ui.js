@@ -661,19 +661,23 @@ const UI = {
         const amountSection  = document.getElementById('amountSection');
         const triggerSection = document.getElementById('triggerSection');
         const autoSection    = document.getElementById('autoSection');
+        const pendingSection = document.getElementById('pendingOrdersSection');
 
         if (type === 'instant') {
             if (amountSection)  amountSection.style.display = '';
             if (triggerSection) triggerSection.style.display = 'none';
+            if (pendingSection) pendingSection.style.display = 'none';
             if (autoSection)    autoSection.style.display = 'none';
         } else if (type === 'trigger') {
             if (amountSection)  amountSection.style.display = 'none';
             if (triggerSection) triggerSection.style.display = 'block';
+            if (pendingSection) pendingSection.style.display = '';
             if (autoSection)    autoSection.style.display = 'none';
             Trading.resetTrigger();
         } else if (type === 'auto') {
             if (amountSection)  amountSection.style.display = 'none';
             if (triggerSection) triggerSection.style.display = 'none';
+            if (pendingSection) pendingSection.style.display = 'none';
             if (autoSection)    autoSection.style.display = 'block';
         }
 
