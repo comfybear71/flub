@@ -437,8 +437,9 @@ const AutoTrader = {
         this.tradeLog.unshift(entry); // newest first
         if (this.tradeLog.length > 50) this.tradeLog.pop();
 
-        // Persist
+        // Persist locally + server
         localStorage.setItem('auto_trade_log', JSON.stringify(this.tradeLog));
+        if (typeof ServerState !== 'undefined') ServerState.saveTradeLog();
 
         this._renderTradeLog();
     },
@@ -481,6 +482,7 @@ const AutoTrader = {
         const expiresAt = Date.now() + (this.COOLDOWN_HOURS * 60 * 60 * 1000);
         this.cooldowns[coin] = expiresAt;
         localStorage.setItem('auto_cooldowns', JSON.stringify(this.cooldowns));
+        if (typeof ServerState !== 'undefined') ServerState.saveCooldowns();
         Logger.log(`${coin} on cooldown for ${this.COOLDOWN_HOURS}h`, 'info');
     },
 
@@ -513,6 +515,7 @@ const AutoTrader = {
             tier1: this.tier1,
             tier2: this.tier2
         }));
+        if (typeof ServerState !== 'undefined') ServerState.saveTiers();
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -592,6 +595,7 @@ const AutoTrader = {
     clearTradeLog() {
         this.tradeLog = [];
         localStorage.removeItem('auto_trade_log');
+        if (typeof ServerState !== 'undefined') ServerState.saveTradeLog();
         this._renderTradeLog();
     }
 };

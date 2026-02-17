@@ -16,7 +16,9 @@ from database import (
     record_trade,
     get_all_active_users,
     calculate_pool_allocations,
-    is_admin
+    is_admin,
+    get_trader_state,
+    save_trader_state
 )
 
 
@@ -53,6 +55,14 @@ class handler(BaseHTTPRequestHandler):
                     return
                 users = get_all_active_users()
                 self._send_json(200, {"users": users, "count": len(users)})
+
+            elif path == '/api/state':
+                wallet = params.get('admin_wallet')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+                state = get_trader_state()
+                self._send_json(200, state)
 
             elif path == '/api/pool/allocations':
                 wallet = params.get('admin_wallet')
@@ -98,6 +108,23 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 result = record_deposit(wallet_address, float(amount), tx_hash, currency)
+                self._send_json(200, result)
+
+            elif path == '/api/state':
+                admin_wallet = body.get('adminWallet')
+                if not admin_wallet or not is_admin(admin_wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+
+                # Accept partial updates — only overwrite keys that are sent
+                allowed_keys = {'pendingOrders', 'autoTiers', 'autoCooldowns', 'autoTradeLog'}
+                update = {k: v for k, v in body.items() if k in allowed_keys}
+
+                if not update:
+                    self._send_json(400, {"error": "No valid state keys provided"})
+                    return
+
+                result = save_trader_state(update)
                 self._send_json(200, result)
 
             elif path == '/api/trade':

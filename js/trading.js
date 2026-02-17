@@ -18,16 +18,20 @@ const Trading = {
         orders.push(order);
         localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
         Logger.log(`Saved pending order locally: ${order.assetCode} ${order.orderType}`, 'info');
+        // Sync to server immediately (survives device switch)
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrdersNow();
     },
 
     removeLocalPendingOrder(id) {
         const orders = this.getLocalPendingOrders().filter(o => o.id !== id);
         localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
         API.fetchPendingOrders();
     },
 
     clearLocalPendingOrders() {
         localStorage.removeItem(this._LOCAL_KEY);
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
         API.fetchPendingOrders();
     },
 

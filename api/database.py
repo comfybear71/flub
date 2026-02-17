@@ -25,6 +25,7 @@ users_collection = db["users"]
 trades_collection = db["trades"]
 deposits_collection = db["deposits"]
 withdrawals_collection = db["withdrawals"]
+trader_state_collection = db["trader_state"]
 
 # Create indexes
 users_collection.create_index("walletAddress", unique=True)
@@ -222,6 +223,35 @@ def get_all_active_users() -> List[Dict]:
     """Get all active users with their allocations"""
     users = users_collection.find({"isActive": True})
     return [format_user_data(user) for user in users]
+
+
+# ── Persistent Trader State ──────────────────────────────────────────────────
+# Stores auto-trader config, cooldowns, trade log, and pending orders
+# so they sync across devices (iPad / iPhone / desktop).
+
+def get_trader_state() -> Dict:
+    """Get the shared trader state document"""
+    doc = trader_state_collection.find_one({"_id": "admin_state"})
+    if not doc:
+        return {
+            "pendingOrders": [],
+            "autoTiers": {"tier1": {"deviation": 2, "allocation": 10}, "tier2": {"deviation": 5, "allocation": 5}},
+            "autoCooldowns": {},
+            "autoTradeLog": []
+        }
+    # Remove MongoDB _id for JSON serialisation
+    doc.pop("_id", None)
+    return doc
+
+
+def save_trader_state(state: Dict) -> Dict:
+    """Save/update the shared trader state document"""
+    trader_state_collection.update_one(
+        {"_id": "admin_state"},
+        {"$set": state},
+        upsert=True
+    )
+    return {"success": True}
 
 
 def calculate_pool_allocations() -> Dict[str, float]:
