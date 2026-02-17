@@ -4,6 +4,10 @@
     box-sizing: border-box;
 }
 
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #0f172a;
@@ -82,6 +86,11 @@ body {
     border-radius: 16px;
 }
 
+/* When trading panel is open, allow it to grow so content is never clipped */
+.chart-section.trading-open {
+    overflow: visible;
+}
+
 .chart-slider {
     display: flex;
     transition: transform 0.3s ease;
@@ -92,14 +101,14 @@ body {
     transform: translateX(-50%);
 }
 
-/* Portfolio view — hide when trading panel is open */
 .portfolio-view {
     width: 50%;
-    padding: 20px;
+    padding: 12px 20px 8px;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
     border-radius: 16px;
     text-align: center;
     transition: opacity 0.3s ease;
+    overflow: hidden;
 }
 
 .chart-section.trading-open .portfolio-view {
@@ -109,8 +118,8 @@ body {
 
 .doughnut-container {
     position: relative;
-    width: 200px;
-    height: 200px;
+    width: 180px;
+    height: 180px;
     margin: 0 auto;
 }
 
@@ -122,17 +131,21 @@ body {
     text-align: center;
 }
 
-/* Trading View — scrollable so trigger panel is never clipped */
+/* Trading View */
 .trading-view {
     width: 50%;
     padding: 16px;
-    padding-bottom: 32px;
+    padding-bottom: 24px;
     background: rgba(30, 41, 59, 0.5);
     border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.05);
-    overflow-y: scroll;
-    max-height: 75vh;
-    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+    max-height: 80vh;
+    visibility: hidden;
+}
+
+.chart-section.trading-open .trading-view {
+    visibility: visible;
 }
 
 .trade-header-compact {
@@ -294,6 +307,90 @@ body {
     display: none;
 }
 
+/* Instant Buy/Sell Toggle */
+.instant-side-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 3px;
+}
+
+.instant-side-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+    color: #64748b;
+}
+
+.instant-side-btn.buy.active {
+    background: #22c55e;
+    color: white;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.instant-side-btn.sell.active {
+    background: #ef4444;
+    color: white;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.instant-balance-info {
+    text-align: center;
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 12px;
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+}
+
+.instant-balance-info span {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.instant-confirm-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: all 0.2s;
+    color: white;
+}
+
+.instant-confirm-btn.buy {
+    background: #22c55e;
+}
+
+.instant-confirm-btn.buy:hover {
+    background: #16a34a;
+}
+
+.instant-confirm-btn.sell {
+    background: #ef4444;
+}
+
+.instant-confirm-btn.sell:hover {
+    background: #dc2626;
+}
+
+.instant-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .cash-toggle {
     display: flex;
     gap: 8px;
@@ -390,9 +487,45 @@ input[type="range"] {
     position: relative;
     width: 100%;
     height: 40px;
-    opacity: 0;
     cursor: pointer;
     z-index: 2;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    background: transparent;
+    border-radius: 3px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    margin-top: -11px;
+}
+
+input[type="range"]::-moz-range-track {
+    height: 6px;
+    background: transparent;
+    border-radius: 3px;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    border: none;
 }
 
 .slider-labels {
@@ -687,6 +820,34 @@ input[type="range"] {
 .cash-amount {
     color: white;
     font-weight: 600;
+}
+
+/* Holdings segmented toggle */
+.holdings-toggle {
+    display: inline-flex;
+    background: rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.holdings-tab {
+    padding: 5px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.3;
+}
+
+.holdings-tab.active {
+    background: rgba(59,130,246,0.9);
+    color: white;
+    box-shadow: 0 1px 4px rgba(59,130,246,0.3);
 }
 
 .sort-btn {
@@ -1076,4 +1237,192 @@ input[type="range"] {
     font-size: 14px;
     font-weight: bold;
     line-height: 1;
+}
+
+/* Phantom Wallet Button */
+.phantom-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(171, 159, 242, 0.2), rgba(110, 86, 207, 0.2));
+    border: 1px solid rgba(171, 159, 242, 0.3);
+    color: #ab9ff2;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.phantom-btn:hover {
+    background: linear-gradient(135deg, rgba(171, 159, 242, 0.3), rgba(110, 86, 207, 0.3));
+    border-color: rgba(171, 159, 242, 0.5);
+}
+
+.phantom-btn.phantom-connected {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+
+.phantom-btn.phantom-connected:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+
+/* ══════════════════════════════════════════
+   Wallet Panel (slide-down overlay)
+   ══════════════════════════════════════════ */
+.wallet-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 500;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+.wallet-panel-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.wallet-panel-content {
+    position: absolute;
+    top: 56px;
+    right: 12px;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    transform: translateY(-10px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    -webkit-overflow-scrolling: touch;
+}
+
+.wallet-panel-overlay.show .wallet-panel-content {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.wallet-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.wallet-panel-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(171,159,242,0.2), rgba(110,86,207,0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ab9ff2;
+}
+
+.wallet-panel-role-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.wallet-panel-role-badge.admin {
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+}
+
+.wallet-panel-role-badge.user {
+    background: rgba(59,130,246,0.15);
+    color: #60a5fa;
+}
+
+.wallet-panel-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.wallet-panel-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.wallet-panel-stat-label {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.wallet-panel-stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.wallet-panel-holdings {
+    padding: 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.wallet-panel-deposit-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: #22c55e;
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s;
+    margin-bottom: 8px;
+}
+
+.wallet-panel-deposit-btn:hover {
+    background: #16a34a;
+}
+
+.wallet-panel-disconnect-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(239,68,68,0.3);
+    background: rgba(239,68,68,0.1);
+    color: #ef4444;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.wallet-panel-disconnect-btn:hover {
+    background: rgba(239,68,68,0.2);
 }

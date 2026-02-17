@@ -38,7 +38,7 @@ const Trading = {
 
         const badge = document.getElementById('triggerDirectionBadge');
         if (badge) {
-            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Rise';
+            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Hi';
             badge.style.color        = type === 'buy' ? '#22c55e' : '#ef4444';
             badge.style.background   = type === 'buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
         }
@@ -253,6 +253,7 @@ const Trading = {
     // ── Order preparation & confirmation ─────────────────────────────────────
 
     prepareTrade(side) {
+        if (!side) side = State.pendingTradeSide || 'buy';
         State.pendingTradeSide = side;
 
         if (!State.selectedAsset) return;
@@ -368,8 +369,8 @@ const Trading = {
 
         document.getElementById('tradeModal')?.classList.remove('show');
 
-        const btn = document.getElementById(side === 'buy' ? 'buyBtn' : 'sellBtn');
-        if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
+        const btn = document.getElementById('instantConfirmBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Placing order...'; }
 
         try {
             const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
@@ -399,11 +400,28 @@ const Trading = {
             if (State.orderType === 'trigger') this.updateTriggerButtonBalances();
 
         } catch (error) {
-            Logger.log(`❌ Trade failed: ${error.message}`, 'error');
-            alert(`Trade failed: ${error.message}`);
+            let msg = error.message;
+            // Parse Swyftx JSON error bodies for a readable message
+            try {
+                const parsed = JSON.parse(msg);
+                const inner  = parsed.error || parsed;
+                if (inner.error === 'MinimumOrderError') {
+                    msg = 'Order too small — Swyftx requires a minimum of ~$10 AUD (~$6.50 USDC). Try increasing the amount slider.';
+                } else {
+                    msg = inner.message || inner.error || msg;
+                }
+            } catch (_) { /* not JSON, use raw message */ }
+            Logger.log(`❌ Trade failed: ${msg}`, 'error');
+            alert(`Trade failed: ${msg}`);
         } finally {
-            if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
-            if (State.orderType !== 'trigger') State.pendingTradeSide = null;
+            if (btn) {
+                btn.disabled = false;
+                const side = State.pendingTradeSide || 'buy';
+                btn.innerHTML = `<span id="instantConfirmText">Confirm ${side === 'buy' ? 'Buy' : 'Sell'}</span>`;
+            }
+            if (State.orderType !== 'trigger') {
+                // Keep the side selection but allow new trades
+            }
         }
     },
 
@@ -413,44 +431,73 @@ const Trading = {
         if (!State.selectedAsset) { alert('No asset selected'); return; }
         if (State.triggerAmountPercent === 0) { alert('Please select an amount'); return; }
 
-        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);
-        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-      
-      
+        // Refresh portfolio to get latest prices before calculating trigger
+        Logger.log('Refreshing prices before order...', 'info');
+        try { await API.refreshData(); } catch (e) { Logger.log('Price refresh failed, using cached: ' + e.message, 'error'); }
+        // Re-read the asset after refresh (balance/price may have updated)
+        const freshAsset = State.portfolioData.assets.find(a => a.code === State.selectedAsset.code);
+        if (freshAsset) State.selectedAsset = freshAsset;
+
+        const realtimePrice = API.getRealtimePrice(State.selectedAsset.code);   // USD for display & qty calc
+        const audPrice      = State.selectedAsset.price;                         // AUD price
+        const triggerPrice  = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2)); // USD display
+        const audTrigger    = parseFloat((audPrice * (1 + State.triggerOffset / 100)).toFixed(2));      // AUD
+
+        Logger.log(`─── TRIGGER DEBUG ───`, 'info');
+        Logger.log(`Asset: ${State.selectedAsset.code} (id: ${State.selectedAsset.asset_id})`, 'info');
+        Logger.log(`USD price: $${realtimePrice}, AUD price: A$${audPrice}`, 'info');
+        Logger.log(`Offset: ${State.triggerOffset}%, USD trigger: $${triggerPrice}, AUD trigger: A$${audTrigger}`, 'info');
+        Logger.log(`Balance: ${State.selectedAsset.balance}, Amount %: ${State.triggerAmountPercent}%`, 'info');
+
         // Determine order type based on trigger vs market price
-        // Buy below market = STOP_LIMIT_BUY (triggers when price drops TO this level)
-        // Sell above market = STOP_LIMIT_SELL (triggers when price rises TO this level)
+        // LIMIT_BUY  (3): pending until price DROPS to trigger (Buy Dip)
+        // LIMIT_SELL  (4): pending until price RISES to trigger (Sell Rise)
+        // STOP_LIMIT_BUY  (5): triggers when price RISES above trigger
+        // STOP_LIMIT_SELL (6): triggers when price DROPS below trigger
         let orderType;
         if (State.selectedLimitType === 'buy') {
-            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
+            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY';
         } else {
-            orderType = triggerPrice > realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
+            orderType = triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL';
         }
-      
-        // Sliders are constrained so buy is always below market, sell always above
-        const orderType = State.selectedLimitType === 'buy' ? 'LIMIT_BUY' : 'LIMIT_SELL';
-
 
         let spendDisplay, receiveDisplay, quantity;
+        const isBuy = State.selectedLimitType === 'buy';
 
-        if (State.selectedLimitType === 'buy') {
+        if (isBuy) {
             const usdcBalance = this.getTriggerCashBalance('USDC');
             const spendAmount = parseFloat((usdcBalance * State.triggerAmountPercent / 100).toFixed(2));
+
+            if (spendAmount < MINIMUM_ORDER_USDC_LIMIT) {
+                alert(`Minimum trigger order is ~$${MINIMUM_ORDER_USDC_LIMIT} USDC. You selected $${spendAmount.toFixed(2)}.`);
+                return;
+            }
+
             quantity          = parseFloat((spendAmount / triggerPrice).toFixed(8));
             spendDisplay      = `${Assets.formatCurrency(spendAmount)} USDC`;
             receiveDisplay    = `${quantity} ${State.selectedAsset.code}`;
         } else {
             const assetBalance = State.selectedAsset.balance || 0;
-            quantity           = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
-            const receiveUsdc  = parseFloat((quantity * triggerPrice).toFixed(2));
-            spendDisplay       = `${Assets.formatNumber(quantity)} ${State.selectedAsset.code}`;
-            receiveDisplay     = `${Assets.formatCurrency(receiveUsdc)} USDC`;
+            const cryptoQty    = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
+            const receiveAud   = parseFloat((cryptoQty * audTrigger).toFixed(2));
+
+            if (receiveAud < 10) {
+                alert(`Minimum trigger sell is ~A$10. Your sell is worth ~A$${receiveAud.toFixed(2)}. Try increasing the amount slider.`);
+                return;
+            }
+
+            // Sell triggers use AUD primary (Swyftx only supports fiat for limit sells).
+            // Quantity in crypto, trigger in AUD.
+            quantity       = cryptoQty;
+            spendDisplay   = `${Assets.formatNumber(cryptoQty)} ${State.selectedAsset.code}`;
+            receiveDisplay = `~A$${receiveAud.toFixed(2)} AUD`;
+            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → A$${receiveAud} AUD, AUD trigger=A$${audTrigger}`, 'info');
         }
 
         const typeEl = document.getElementById('limitModalType');
         if (typeEl) {
             typeEl.textContent = orderType.replace(/_/g, ' ');
-            typeEl.style.color = State.selectedLimitType === 'buy' ? '#22c55e' : '#ef4444';
+            typeEl.style.color = isBuy ? '#22c55e' : '#ef4444';
         }
 
         _setElText('limitModalAsset',   State.selectedAsset.code);
@@ -458,9 +505,14 @@ const Trading = {
         _setElText('limitModalAmount',  spendDisplay);
         _setElText('limitModalReceive', receiveDisplay);
 
-        State.pendingOrderType    = orderType;
-        State.pendingTriggerPrice = triggerPrice;
-        State.pendingQuantity     = quantity;
+        // Buy: USDC primary, USD trigger.  Sell: AUD primary, AUD trigger.
+        State.pendingOrderType     = orderType;
+        State.pendingTriggerPrice  = isBuy ? triggerPrice : audTrigger;
+        State.pendingQuantity      = quantity;                  // always crypto amount
+        State.pendingAssetCode     = State.selectedAsset.code;
+        State.pendingPrimary       = isBuy ? 'USDC' : 'AUD';
+
+        Logger.log(`Order: ${State.pendingPrimary} primary, qty=${quantity} ${State.selectedAsset.code}, trigger=${isBuy ? '$' + triggerPrice : 'A$' + audTrigger}`, 'info');
 
         document.getElementById('limitConfirmModal')?.classList.add('show');
     },
@@ -478,21 +530,22 @@ const Trading = {
         btn.textContent = 'Submitting...';
 
         try {
-            // Use the quantity pre-calculated in showConfirmModal
+            // Use values pre-calculated and locked in showConfirmModal
+            const assetCode    = State.pendingAssetCode;
             const quantity     = State.pendingQuantity;
             const triggerPrice = State.pendingTriggerPrice;
 
+            // Buy: USDC primary, USD trigger.  Sell: AUD primary, AUD trigger.
             const orderData = {
-                primary:       State.selectedAsset.code,
-                secondary:     'USDC',
-                quantity,
-                assetQuantity: State.selectedAsset.code,
+                primary:       State.pendingPrimary,   // 'USDC' for buys, 'AUD' for sells
+                secondary:     assetCode,
+                quantity,                               // crypto amount
+                assetQuantity: assetCode,               // always crypto
                 orderType:     State.pendingOrderType,
-                trigger:       triggerPrice
+                trigger:       triggerPrice             // USD for buys, AUD for sells
             };
 
-            Logger.log(`Sending ${State.pendingOrderType} order:`, 'info');
-            Logger.log(`Asset: ${orderData.primary}, Qty: ${orderData.quantity}, Trigger: ${orderData.trigger}`, 'info');
+            Logger.log(`Sending ${State.pendingOrderType} for ${assetCode}: ${JSON.stringify(orderData)}`, 'info');
 
             const res = await API.placeOrder(orderData);
             if (!res.ok) {
@@ -510,8 +563,18 @@ const Trading = {
             this.updateTriggerButtonBalances();
 
         } catch (error) {
-            Logger.log(`❌ Order failed: ${error.message}`, 'error');
-            alert(`Order failed: ${error.message}`);
+            let msg = error.message;
+            try {
+                const parsed = JSON.parse(msg);
+                const inner  = parsed.error || parsed;
+                if (inner.error === 'MinimumOrderError') {
+                    msg = 'Order too small — Swyftx requires a minimum of ~$10 AUD (~$6.50 USDC). Try increasing the amount.';
+                } else {
+                    msg = inner.message || inner.error || msg;
+                }
+            } catch (_) { /* not JSON */ }
+            Logger.log(`❌ Order failed: ${msg}`, 'error');
+            alert(`Order failed: ${msg}`);
             document.getElementById('limitConfirmModal')?.classList.remove('show');
         } finally {
             btn.disabled    = false;
@@ -546,7 +609,15 @@ function _applyOffsetStyle(el, value) {
     }
 }
 
+// Swyftx minimums differ by order type:
+//   MARKET (instant) orders: ~$10 AUD ≈ $7 USDC
+//   LIMIT  (trigger) orders: ~$75 AUD ≈ $50 USDC  (confirmed via testing)
+const MINIMUM_ORDER_USDC_MARKET = 7;
+const MINIMUM_ORDER_USDC_LIMIT  = 50;
+
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
+    // All orders: USDC primary, crypto secondary
+
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
         const deviationMultiplier = 1 + State.autoTradeConfig.deviation / 100;
@@ -557,19 +628,25 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
         const quantity = side === 'buy'
             ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
             : parseFloat((allocationAmount / realtimePrice).toFixed(8));
-        return { primary: State.selectedAsset.code, secondary: 'USDC', quantity,
+        return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
                  assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
     }
 
     if (side === 'buy') {
         const cashAmount = (State.amountSliderValue / 100) * cashBalance;
         if (State.orderType === 'instant') {
-            return { primary: State.selectedAsset.code, secondary: 'USDC',
-                     quantity: parseFloat((cashAmount / realtimePrice).toFixed(8)),
-                     orderType: 'MARKET_BUY', assetQuantity: State.selectedAsset.code };
+            // MARKET_BUY: express quantity in USDC (the amount we're spending).
+            // Swyftx validates minimum order on market orders — USDC amounts
+            // are larger numbers and match what the user actually selected.
+            if (cashAmount < MINIMUM_ORDER_USDC_MARKET) {
+                throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC_MARKET} USDC. You selected $${cashAmount.toFixed(2)}.`);
+            }
+            return { primary: 'USDC', secondary: State.selectedAsset.code,
+                     quantity: parseFloat(cashAmount.toFixed(2)),
+                     orderType: 'MARKET_BUY', assetQuantity: 'USDC' };
         }
         const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-        return { primary: State.selectedAsset.code, secondary: 'USDC',
+        return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: parseFloat((cashAmount / triggerPrice).toFixed(8)),
                  assetQuantity: State.selectedAsset.code,
                  orderType: triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY' : 'LIMIT_BUY',
@@ -579,12 +656,18 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     // sell
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
     if (State.orderType === 'instant') {
-        return { primary: State.selectedAsset.code, secondary: 'USDC',
-                 quantity: sellQty, orderType: 'MARKET_SELL',
-                 assetQuantity: State.selectedAsset.code };
+        // MARKET_SELL: express quantity in USDC (value we expect to receive).
+        // Avoids tiny crypto numbers that may trip Swyftx minimum-order check.
+        const sellValueUsdc = parseFloat((sellQty * realtimePrice).toFixed(2));
+        if (sellValueUsdc < MINIMUM_ORDER_USDC_MARKET) {
+            throw new Error(`Minimum order is $${MINIMUM_ORDER_USDC_MARKET} USDC. Your sell is worth ~$${sellValueUsdc.toFixed(2)}.`);
+        }
+        return { primary: 'USDC', secondary: State.selectedAsset.code,
+                 quantity: sellValueUsdc, orderType: 'MARKET_SELL',
+                 assetQuantity: 'USDC' };
     }
     const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-    return { primary: State.selectedAsset.code, secondary: 'USDC',
+    return { primary: 'USDC', secondary: State.selectedAsset.code,
              quantity: sellQty, assetQuantity: State.selectedAsset.code,
              orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
              trigger: triggerPrice };

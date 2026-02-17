@@ -5,6 +5,11 @@ const App = {
     init() {
         UI.init();
         API.connect();
+
+        // Initialize Phantom wallet
+        if (typeof PhantomWallet !== 'undefined') {
+            PhantomWallet.init();
+        }
     },
 
     refreshData() {
@@ -15,6 +20,19 @@ const App = {
         UI.unlockTrading();
     }
 };
+
+// ==========================================
+// Expose to global scope for inline handlers
+// ==========================================
+window.App = App;
+window.UI = UI;
+window.Trading = Trading;
+window.API = API;
+window.Assets = Assets;
+/// Only expose AutoTrader if it loaded successfully
+if (typeof AutoTrader !== 'undefined') {
+    window.AutoTrader = AutoTrader;
+}
 
 // ==========================================
 // INITIALIZE

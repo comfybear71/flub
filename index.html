@@ -1,12 +1,16 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portfolio</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=20260217c">
 </head>
 <body class="pb-20">
 
@@ -16,13 +20,23 @@
             <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
             Connecting...
         </div>
-        <button onclick="App.refreshData()" class="wallet-btn" id="refreshBtn">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
-                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
-                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
-            </svg>
-        </button>
+        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <button onclick="PhantomWallet.isConnected ? PhantomWallet.toggleWalletPanel() : PhantomWallet.connect()" class="phantom-btn" id="phantomBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span id="phantomBtnText">Connect</span>
+            </button>
+            <button onclick="App.refreshData()" class="wallet-btn" id="refreshBtn">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+                    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+                    <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+                </svg>
+            </button>
+        </div>
     </div>
 </header>
 
@@ -35,15 +49,20 @@
                 <div class="doughnut-container">
                     <canvas id="portfolioChart"></canvas>
                     <div class="doughnut-center">
-                        <p class="text-xs text-slate-400 mb-1 font-medium">Total</p>
+                        <p class="text-xs text-slate-400 mb-1 font-medium" id="chartLabel">Total</p>
                         <p class="text-xl font-bold" id="total-value">$0</p>
                         <p class="text-xs text-blue-400 mt-1 font-semibold" id="asset-count">0 assets</p>
                     </div>
                 </div>
-                <p class="text-xs text-slate-500 mt-2 font-medium">Tap coin to trade</p>
-                
-                <!-- Cash balances moved here from holdings header -->
-                <div class="cash-balances-header" style="position:relative;transform:none;left:auto;margin-top:12px;">
+                <!-- Swipe indicator dots -->
+                <div id="chartDots" style="display:none;text-align:center;margin-top:4px;">
+                    <span id="dot-user" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3b82f6;margin:0 3px;transition:all 0.2s;cursor:pointer;"></span>
+                    <span id="dot-pool" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.2);margin:0 3px;transition:all 0.2s;cursor:pointer;"></span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1 font-medium" id="portfolioHint">Tap coin to trade</p>
+
+                <!-- Cash balances: admin sees USDC+AUD, user sees deposited USDC -->
+                <div class="cash-balances-header admin-only" style="margin-top:8px;justify-content:center;">
                     <div class="cash-balance-item">
                         <div class="cash-dot usdc-dot"></div>
                         <span class="cash-label">USDC</span>
@@ -55,8 +74,26 @@
                         <span class="cash-amount" id="headerAudBalance">$0.00</span>
                     </div>
                 </div>
+
+                <!-- User deposited + wallet balance (user-only) -->
+                <div class="user-only" id="userDepositedBanner" style="display:none;margin-top:6px;text-align:center;">
+                    <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;flex-wrap:nowrap;">
+                        <span style="font-size:11px;color:#64748b;">Deposited</span>
+                        <span style="font-size:12px;font-weight:700;color:#22c55e;" id="userDepositedAmount">$0.00</span>
+                        <span style="width:1px;height:12px;background:rgba(255,255,255,0.1);"></span>
+                        <span style="font-size:11px;color:#64748b;">Wallet</span>
+                        <span style="font-size:12px;font-weight:700;color:#ab9ff2;" id="userWalletUsdc">$0.00</span>
+                    </div>
+                    <div id="lowWalletWarning" style="display:none;margin-top:5px;">
+                        <a href="#" onclick="UI.showDepositModal();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.2);border-radius:16px;font-size:11px;color:#eab308;text-decoration:none;font-weight:600;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                            Deposit More Funds
+                        </a>
+                    </div>
+                </div>
+
             </div>
-            
+
             <div class="trading-view" id="tradingView">
                 
                 <div class="trade-header-compact">
@@ -71,29 +108,12 @@
                             <span id="tradeName">BTC</span>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 3v18h18"/>
-                                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
-                            </svg>
-                        </button>
-                        
-                        <div class="header-actions">
-                            <button class="action-btn-mini sell" id="sellBtn" onclick="Trading.prepareTrade('sell')">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                    <path d="M5 12h14"/>
-                                </svg>
-                                Sell
-                            </button>
-                            <button class="action-btn-mini buy" id="buyBtn" onclick="Trading.prepareTrade('buy')">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                    <path d="M12 5v14M5 12h14"/>
-                                </svg>
-                                Buy
-                            </button>
-                        </div>
-                    </div>
+                    <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3v18h18"/>
+                            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+                        </svg>
+                    </button>
                 </div>
                 
                 <div class="mini-chart-container" id="miniChartContainer">
@@ -116,7 +136,7 @@
                         </svg>
                         Trigger
                     </button>
-                    <button class="order-btn" id="btnAuto" onclick="UI.setOrderType('auto')">
+                    <button class="order-btn admin-only" id="btnAuto" onclick="UI.setOrderType('auto')">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                         </svg>
@@ -125,11 +145,22 @@
                 </div>
                 
                 <div class="amount-compact" id="amountSection">
+                    <!-- Buy / Sell toggle -->
+                    <div class="instant-side-toggle" id="instantSideToggle">
+                        <button class="instant-side-btn buy active" id="instantBuyBtn" onclick="UI.setInstantSide('buy')">Buy</button>
+                        <button class="instant-side-btn sell" id="instantSellBtn" onclick="UI.setInstantSide('sell')">Sell</button>
+                    </div>
+
+                    <!-- Balance context -->
+                    <div class="instant-balance-info" id="instantBalanceInfo">
+                        Available: <span id="instantAvailable">$0.00 USDC</span>
+                    </div>
+
                     <div class="amount-display">
                         <div class="amount-value" id="amountValue">$0.00</div>
                         <div class="amount-conversion" id="conversionText">≈ 0 BTC</div>
                     </div>
-                    
+
                     <div class="slider-box">
                         <div class="slider-track"></div>
                         <div class="slider-fill" id="amountFill" style="width: 0%;"></div>
@@ -140,6 +171,11 @@
                         <span id="amountPercent">0%</span>
                         <span>100%</span>
                     </div>
+
+                    <!-- Confirm button -->
+                    <button class="instant-confirm-btn buy" id="instantConfirmBtn" onclick="Trading.prepareTrade(State.pendingTradeSide || 'buy')">
+                        <span id="instantConfirmText">Confirm Buy</span>
+                    </button>
                 </div>
                 
                                 <div class="trigger-compact" id="triggerSection">
@@ -156,7 +192,7 @@
                         </button>
                         <button class="limit-btn sell-limit" id="btnSellLimit" onclick="Trading.selectLimitType('sell')">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
-                            Sell Rise
+                            Sell Hi
                         </button>
                     </div>
 
@@ -220,56 +256,94 @@
                     <div id="triggerError" class="error-message" style="display:none;margin-top:8px;"></div>
                 </div>
 
-                
-                <div class="auto-compact" id="autoSection">
-                    <div class="auto-header">
-                        <span class="auto-title">Auto Trade Settings</span>
-                        <span class="auto-reset" onclick="Trading.resetAutoTrade()">Reset</span>
+                <!-- ═══ Auto Trading Section (inside trading panel) ═══ -->
+                <div class="auto-compact admin-only" id="autoSection" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span style="font-size:13px; font-weight:700; color:#a855f7;">Auto Trade</span>
+                        <div id="autoStatusBadge" style="display:none; font-size:10px; font-weight:700; padding:3px 8px; border-radius:12px; background:rgba(168,85,247,0.2); color:#a855f7;">ACTIVE</div>
                     </div>
-                    
-                    <div style="margin-bottom: 10px;">
-                        <div class="auto-price-row">
-                            <div class="auto-price" id="autoPrice">$0.00</div>
-                            <div class="auto-deviation" id="autoDeviation">0%</div>
+
+                    <!-- Tier 1: Blue Chips -->
+                    <div style="margin-bottom:10px; padding:10px; background:rgba(59,130,246,0.06); border-radius:8px; border:1px solid rgba(59,130,246,0.15);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:700; color:#3b82f6;">Tier 1 – Blue Chips</span>
                         </div>
-                        
-                        <div id="autoGuide" style="text-align: center; margin-bottom: 6px; font-size: 11px; color: #64748b;">
-                            <span id="autoGuideText">Set price deviation</span>
+                        <div id="tier1Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
+                            <span style="font-size:10px; color:#64748b;">Loading...</span>
                         </div>
-                        
-                        <div id="autoError" class="error-message" style="display: none; margin-bottom: 6px;"></div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoDevFill" style="width: 50%; background: #a855f7;"></div>
-                            <input type="range" id="autoDevSlider" min="-20" max="20" value="0" step="1" oninput="Trading.updateAutoDevSlider(this.value)">
-                        </div>
-                        <div class="slider-labels" id="autoDevLabels">
-                            <span>-20%</span>
-                            <span>Current</span>
-                            <span>+20%</span>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-                        <div class="auto-allocation-row">
-                            <span class="auto-allocation-label">Portfolio Allocation</span>
-                            <span class="auto-allocation-value" id="autoAllocationValue">0% of 0 USDC</span>
-                        </div>
-                        
-                        <div class="slider-box">
-                            <div class="slider-track"></div>
-                            <div class="slider-fill" id="autoAllocFill" style="width: 0%; background: #22c55e;"></div>
-                            <input type="range" id="autoAllocSlider" min="0" max="100" value="0" step="1" oninput="Trading.updateAutoAllocSlider(this.value)">
-                        </div>
-                        <div class="slider-labels">
-                            <span>0%</span>
-                            <span id="autoAllocPercent">0%</span>
-                            <span>100%</span>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
+                                    <span>Dev</span>
+                                    <span id="t1DevValue" style="color:#3b82f6; font-weight:600;">2%</span>
+                                </div>
+                                <div class="slider-box" style="height:28px;">
+                                    <div class="slider-track"></div>
+                                    <div class="slider-fill" id="t1DevFill" style="width:10%; background:#3b82f6;"></div>
+                                    <input type="range" id="t1DevSlider" min="1" max="15" value="2" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
+                                </div>
+                            </div>
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
+                                    <span>Alloc</span>
+                                    <span id="t1AllocValue" style="color:#22c55e; font-weight:600;">10%</span>
+                                </div>
+                                <div class="slider-box" style="height:28px;">
+                                    <div class="slider-track"></div>
+                                    <div class="slider-fill" id="t1AllocFill" style="width:40%; background:#22c55e;"></div>
+                                    <input type="range" id="t1AllocSlider" min="1" max="25" value="10" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Tier 2: Alts -->
+                    <div style="margin-bottom:10px; padding:10px; background:rgba(234,179,8,0.06); border-radius:8px; border:1px solid rgba(234,179,8,0.15);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:700; color:#eab308;">Tier 2 – Alts</span>
+                        </div>
+                        <div id="tier2Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
+                            <span style="font-size:10px; color:#64748b;">Loading...</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
+                                    <span>Dev</span>
+                                    <span id="t2DevValue" style="color:#eab308; font-weight:600;">5%</span>
+                                </div>
+                                <div class="slider-box" style="height:28px;">
+                                    <div class="slider-track"></div>
+                                    <div class="slider-fill" id="t2DevFill" style="width:16%; background:#eab308;"></div>
+                                    <input type="range" id="t2DevSlider" min="2" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
+                                </div>
+                            </div>
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
+                                    <span>Alloc</span>
+                                    <span id="t2AllocValue" style="color:#22c55e; font-weight:600;">5%</span>
+                                </div>
+                                <div class="slider-box" style="height:28px;">
+                                    <div class="slider-track"></div>
+                                    <div class="slider-fill" id="t2AllocFill" style="width:25%; background:#22c55e;"></div>
+                                    <input type="range" id="t2AllocSlider" min="1" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error display -->
+                    <div id="autoError" class="error-message" style="display:none; margin-bottom:8px;"></div>
+
+                    <!-- Live status -->
+                    <div id="autoStatus" style="display:none; padding:8px; border-radius:8px; margin-bottom:8px; font-size:10px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.4;"></div>
+
+                    <!-- Start / Stop button -->
+                    <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; color:white; background:#a855f7; transition:all 0.2s;">
+                        <span id="autoToggleBtnText">Start Auto Trading</span>
+                    </button>
                 </div>
-                
+
+
             </div>
             
         </div>
@@ -278,25 +352,31 @@
     <div class="holdings-container" id="holdingsContainer">
         <div class="holdings-header">
             <h2 class="text-lg font-bold holdings-title">Holdings</h2>
-            
-            
-            <button onclick="UI.toggleSort()" class="sort-btn">
-                <span id="currentSortLabel">Sort: Value</span>
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="m6 9 6 6 6-6"/>
-                </svg>
-            </button>
+
+            <div style="display:flex;align-items:center;gap:6px;">
+                <!-- Holdings toggle for users: Mine / Pool -->
+                <div id="holdingsToggle" class="holdings-toggle user-only" style="display:none;">
+                    <button id="btnMyHoldings" class="holdings-tab active" onclick="UI.setHoldingsView('mine')">Mine</button>
+                    <button id="btnProjectHoldings" class="holdings-tab" onclick="UI.setHoldingsView('project')">Pool</button>
+                </div>
+                <button onclick="UI.toggleSort()" class="sort-btn">
+                    <span id="currentSortLabel">Sort: Value</span>
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m6 9 6 6 6-6"/>
+                    </svg>
+                </button>
+            </div>
         </div>
-        
+
         <div id="holdings-list">
             <div style="text-align: center; color: #64748b; padding: 40px;">
                 Connecting to Swyftx...
             </div>
         </div>
-        
+
         <div class="last-updated" id="last-updated">Last updated: --</div>
-        
-        <div class="card" style="margin-top: 20px;">
+
+        <div class="card admin-only" style="margin-top: 20px;">
             <div class="section-title">Activity Log</div>
             <div id="log-container" class="log-container">
                 <div class="log-entry">
@@ -309,7 +389,7 @@
 
 </div>
 
-<div id="pinModal" class="pin-modal-overlay">
+<div id="pinModal" class="pin-modal-overlay admin-only">
     <div class="pin-modal-content">
         <div class="pin-title">Trading PIN Required</div>
         <div class="pin-subtitle">Enter PIN to enable trading</div>
@@ -462,12 +542,158 @@
     </div>
 </nav>
 
-<script src="js/config.js"></script>
-<script src="js/logger.js"></script>
-<script src="js/assets.js"></script>
-<script src="js/api.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/trading.js"></script>
-<script src="js/app.js"></script>
+<!-- Wallet Panel (slide-down when wallet button clicked while connected) -->
+<div id="walletPanel" class="wallet-panel-overlay">
+    <div class="wallet-panel-content">
+        <div class="wallet-panel-header">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div class="wallet-panel-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Wallet</div>
+                    <div id="walletPanelAddress" style="font-size:12px;color:#e2e8f0;font-weight:600;word-break:break-all;"></div>
+                </div>
+            </div>
+            <span id="walletPanelRole" class="wallet-panel-role-badge user">User</span>
+        </div>
+
+        <!-- On-Chain Wallet Balances -->
+        <div style="margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Wallet Balances</div>
+            <div style="display:flex;gap:6px;">
+                <div style="flex:1;padding:8px 6px;background:rgba(168,85,247,0.1);border-radius:10px;border:1px solid rgba(168,85,247,0.2);text-align:center;">
+                    <div style="font-size:10px;color:#a855f7;font-weight:600;margin-bottom:4px;">SOL</div>
+                    <div id="walletPanelSol" style="font-size:13px;font-weight:700;color:#e2e8f0;">0.0000</div>
+                </div>
+                <div style="flex:1;padding:8px 6px;background:rgba(34,197,94,0.1);border-radius:10px;border:1px solid rgba(34,197,94,0.2);text-align:center;">
+                    <div style="font-size:10px;color:#22c55e;font-weight:600;margin-bottom:4px;">USDC</div>
+                    <div id="walletPanelUsdc" style="font-size:13px;font-weight:700;color:#e2e8f0;">0.00</div>
+                </div>
+                <div style="flex:1;padding:8px 6px;background:rgba(236,72,153,0.1);border-radius:10px;border:1px solid rgba(236,72,153,0.2);text-align:center;">
+                    <div style="font-size:10px;color:#ec4899;font-weight:600;margin-bottom:4px;">BUDJU</div>
+                    <div id="walletPanelBudju" style="font-size:13px;font-weight:700;color:#e2e8f0;">0</div>
+                </div>
+            </div>
+            <div id="budjuRequirement" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.15);border-radius:8px;font-size:10px;color:#ec4899;text-align:center;">
+                1,000,000 BUDJU required to use Flub (coming soon)
+            </div>
+        </div>
+
+        <!-- Pool Stats -->
+        <div class="wallet-panel-stats">
+            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Flub Pool</div>
+            <div class="wallet-panel-stat">
+                <span class="wallet-panel-stat-label">Pool Allocation</span>
+                <span class="wallet-panel-stat-value" id="walletPanelAllocation">0%</span>
+            </div>
+            <div class="wallet-panel-stat">
+                <span class="wallet-panel-stat-label">Total Deposited</span>
+                <span class="wallet-panel-stat-value" id="walletPanelDeposited">$0.00</span>
+            </div>
+            <div class="wallet-panel-stat">
+                <span class="wallet-panel-stat-label">Current Value</span>
+                <span class="wallet-panel-stat-value" id="walletPanelValue">$0.00</span>
+            </div>
+        </div>
+
+        <!-- User Holdings (their share of the pool) -->
+        <div id="walletPanelHoldings" class="wallet-panel-holdings">
+            <div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Pool Holdings</div>
+            <div id="walletPanelHoldingsList" style="font-size:12px;color:#64748b;">No holdings yet</div>
+        </div>
+
+        <!-- Deposit USDC button -->
+        <button onclick="UI.showDepositModal()" class="wallet-panel-deposit-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Deposit USDC
+        </button>
+
+        <!-- Disconnect button -->
+        <button onclick="PhantomWallet.disconnect(); document.getElementById('walletPanel').classList.remove('show');" class="wallet-panel-disconnect-btn">
+            Disconnect Wallet
+        </button>
+    </div>
+</div>
+
+<!-- Deposit USDC Modal -->
+<div id="depositModal" class="trade-modal-overlay">
+    <div class="trade-modal-content" style="text-align:center;">
+        <div style="width:50px;height:50px;background:rgba(34,197,94,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+        </div>
+        <div class="trade-modal-title" style="color:#22c55e;">Deposit USDC</div>
+        <p style="color:#94a3b8;font-size:13px;margin-bottom:12px;line-height:1.5;">
+            Send USDC from your Phantom wallet to the Flub pool. Your allocation is based on your deposit percentage of the total pool.
+        </p>
+        <!-- Wallet USDC balance -->
+        <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
+            Available: <span id="depositAvailableUsdc" style="color:#22c55e;font-weight:700;">0.00</span> USDC
+        </div>
+        <input type="number" id="depositAmount" placeholder="Amount (USDC)" style="width:100%;padding:14px;font-size:16px;text-align:center;background:rgba(0,0,0,0.3);border:2px solid rgba(255,255,255,0.1);border-radius:12px;color:white;margin-bottom:8px;" min="1" step="1">
+        <!-- Deposit address -->
+        <div style="font-size:10px;color:#64748b;margin-bottom:4px;">Sending to Flub Pool:</div>
+        <div style="font-size:11px;color:#94a3b8;word-break:break-all;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px;margin-bottom:12px;font-family:monospace;" id="depositAddressDisplay">
+            2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Minimum deposit: $1 USDC</div>
+        <!-- Loading spinner (hidden by default) -->
+        <div id="depositLoading" style="display:none;padding:16px;text-align:center;">
+            <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#22c55e;border-radius:50%;margin:0 auto 10px;animation:spin 0.8s linear infinite;"></div>
+            <div style="font-size:13px;color:#94a3b8;">Waiting for Phantom approval...</div>
+        </div>
+        <div id="depositButtons" class="trade-modal-buttons">
+            <button onclick="UI.closeDepositModal()" class="trade-modal-btn cancel">Cancel</button>
+            <button onclick="UI.submitDeposit()" class="trade-modal-btn confirm" id="depositSendBtn" style="background:#22c55e;">Send USDC</button>
+        </div>
+    </div>
+</div>
+
+<!-- Phantom Install Modal -->
+<div id="phantomInstallModal" class="trade-modal-overlay">
+    <div class="trade-modal-content" style="text-align: center;">
+        <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #ab9ff2, #6e56cf); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+            </svg>
+        </div>
+        <div class="trade-modal-title" style="color: #ab9ff2;">Phantom Wallet Required</div>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px; line-height: 1.5;">
+            To sign in and track your portfolio allocation, you need the Phantom wallet browser extension.
+        </p>
+        <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer"
+           style="display:block; width:100%; padding:14px; background:#ab9ff2; color:white; border:none; border-radius:10px; font-size:15px; font-weight:700; text-decoration:none; margin-bottom:10px;">
+            Install Phantom
+        </a>
+        <button onclick="document.getElementById('phantomInstallModal').classList.remove('show')"
+                class="trade-modal-btn cancel" style="width:100%;">
+            Close
+        </button>
+    </div>
+</div>
+
+<script>
+// Dynamic script loader — defeats Phantom/Safari aggressive caching
+(function() {
+    var t = Date.now();
+    var scripts = [
+        'js/config.js','js/logger.js','js/assets.js','js/api.js',
+        'js/phantom-wallet.js','js/ui.js','js/autotrader.js',
+        'js/trading.js','js/app.js'
+    ];
+    scripts.forEach(function(src) {
+        document.write('<script src="' + src + '?t=' + t + '"><\/script>');
+    });
+    console.log('FLUB v7.1 aud-sell-fix, built ' + new Date().toISOString());
+})();
+</script>
 </body>
 </html>

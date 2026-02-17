@@ -109,14 +109,19 @@ export default async function handler(req, res) {
                 'User-Agent': 'SwyftxTrader/1.0'
             }
         };
-        
+
         if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
             fetchOptions.body = JSON.stringify(body);
+            console.log(`Proxy → Swyftx ${method} ${endpoint}`, JSON.stringify(body));
         }
-        
+
         const response = await fetch(url, fetchOptions);
         const data = await response.json();
-        
+
+        if (!response.ok) {
+            console.log(`Swyftx error ${response.status}:`, JSON.stringify(data));
+        }
+
         return res.status(response.status).json(data);
         
     } catch (error) {
