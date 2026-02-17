@@ -19,11 +19,16 @@ const ServerState = {
         try {
             const res = await fetch(`/api/state?admin_wallet=${encodeURIComponent(wallet)}`);
             if (!res.ok) {
-                Logger.log(`ServerState load: HTTP ${res.status}`, 'error');
+                const errBody = await res.text();
+                Logger.log(`ServerState load: HTTP ${res.status} — ${errBody}`, 'error');
                 return;
             }
 
             const data = await res.json();
+            if (data.error) {
+                Logger.log(`ServerState load: ${data.error}`, 'error');
+                return;
+            }
             this._loaded = true;
 
             // ── Apply to AutoTrader ──
@@ -88,7 +93,10 @@ const ServerState = {
             });
 
             if (!res.ok) {
-                Logger.log(`ServerState save: HTTP ${res.status}`, 'error');
+                const errBody = await res.text();
+                Logger.log(`ServerState save: HTTP ${res.status} — ${errBody}`, 'error');
+            } else {
+                Logger.log('ServerState: saved to server', 'info');
             }
         } catch (err) {
             Logger.log(`ServerState save error: ${err.message}`, 'error');

@@ -118,8 +118,53 @@ const API = {
 
     async fetchPendingOrders() {
         try {
-            // ── 1) Load locally-tracked trigger orders ──────────────────
-            const localOrders = Trading.getLocalPendingOrders();
+            // ── 0) Cross-reference: remove locally-tracked orders that Swyftx has filled ──
+            let localOrders = Trading.getLocalPendingOrders();
+
+            if (localOrders.length > 0) {
+                try {
+                    await this._ensureToken();
+                    const histRes = await _fetchWithRetry('/api/proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint: '/orders/?limit=20', method: 'GET', authToken: State.jwtToken })
+                    });
+                    if (histRes.ok) {
+                        const histData = await histRes.json();
+                        const filled = (histData.orders ?? histData ?? []).filter(o => parseInt(o.status) === 4);
+                        // Build a set of (assetId, approx trigger) from filled orders
+                        const idToCode = {};
+                        for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) idToCode[String(id)] = code;
+
+                        const filledKeys = new Set();
+                        for (const o of filled) {
+                            const code = idToCode[String(o.secondary_asset)] ?? '';
+                            const trigger = parseFloat(o.trigger ?? 0);
+                            if (code && trigger > 0) {
+                                filledKeys.add(`${code}_${trigger.toFixed(4)}`);
+                            }
+                        }
+
+                        // Remove local orders whose asset+trigger match a filled order
+                        const before = localOrders.length;
+                        localOrders = localOrders.filter(lo => {
+                            const key = `${lo.assetCode}_${parseFloat(lo.trigger ?? 0).toFixed(4)}`;
+                            return !filledKeys.has(key);
+                        });
+
+                        if (localOrders.length < before) {
+                            const removed = before - localOrders.length;
+                            Logger.log(`Auto-removed ${removed} filled order(s) from pending list`, 'success');
+                            localStorage.setItem(Trading._LOCAL_KEY, JSON.stringify(localOrders));
+                            if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
+                        }
+                    }
+                } catch (e) {
+                    // Non-critical — just skip cross-reference
+                }
+            }
+
+            // ── 1) Normalise locally-tracked trigger orders ──────────────────
 
             // Map order type strings to numeric + buy/sell
             const TYPE_MAP = {
