@@ -452,7 +452,6 @@ const Trading = {
 
         let spendDisplay, receiveDisplay, quantity;
         const isBuy = State.selectedLimitType === 'buy';
-        let apiQuantity, apiAssetQuantity;
 
         if (isBuy) {
             const usdcBalance = this.getTriggerCashBalance('USDC');
@@ -460,17 +459,12 @@ const Trading = {
             quantity          = parseFloat((spendAmount / triggerPrice).toFixed(8));
             spendDisplay      = `${Assets.formatCurrency(spendAmount)} USDC`;
             receiveDisplay    = `${quantity} ${State.selectedAsset.code}`;
-            apiQuantity       = quantity;                         // crypto amount
-            apiAssetQuantity  = State.selectedAsset.code;         // denominated in crypto
         } else {
             const assetBalance = State.selectedAsset.balance || 0;
             quantity           = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
             const receiveUsdc  = parseFloat((quantity * triggerPrice).toFixed(2));
             spendDisplay       = `${Assets.formatNumber(quantity)} ${State.selectedAsset.code}`;
             receiveDisplay     = `${Assets.formatCurrency(receiveUsdc)} USDC`;
-            // For sells: express quantity in USDC (primary) to satisfy minimum_order check
-            apiQuantity        = receiveUsdc;                     // USDC amount
-            apiAssetQuantity   = 'USDC';                          // denominated in USDC
             Logger.log(`Sell: ${quantity} ${State.selectedAsset.code} → $${receiveUsdc} USDC, trigger=$${triggerPrice}`, 'info');
         }
 
@@ -485,10 +479,10 @@ const Trading = {
         _setElText('limitModalAmount',  spendDisplay);
         _setElText('limitModalReceive', receiveDisplay);
 
+        // Both buy and sell: same format — USDC primary, crypto quantity, USD trigger
         State.pendingOrderType     = orderType;
         State.pendingTriggerPrice  = triggerPrice;              // USD trigger (USDC ≈ USD)
-        State.pendingQuantity      = apiQuantity;               // crypto (buy) or USDC (sell)
-        State.pendingAssetQuantity = apiAssetQuantity;          // crypto code (buy) or 'USDC' (sell)
+        State.pendingQuantity      = quantity;                  // always crypto amount
         State.pendingAssetCode     = State.selectedAsset.code;
 
         Logger.log(`Order: USDC primary, qty=${apiQuantity} ${apiAssetQuantity}, trigger=$${triggerPrice}`, 'info');
@@ -514,11 +508,12 @@ const Trading = {
             const quantity     = State.pendingQuantity;
             const triggerPrice = State.pendingTriggerPrice;
 
+            // Same format for buy AND sell: USDC primary, crypto qty, crypto assetQuantity
             const orderData = {
                 primary:       'USDC',
                 secondary:     assetCode,
                 quantity,
-                assetQuantity: State.pendingAssetQuantity || assetCode,
+                assetQuantity: assetCode,
                 orderType:     State.pendingOrderType,
                 trigger:       triggerPrice
             };
@@ -578,9 +573,7 @@ function _applyOffsetStyle(el, value) {
 }
 
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
-    // Swyftx: all orders use USDC primary.
-    // Buy: quantity in crypto (assetQuantity = crypto)
-    // Sell trigger: quantity in USDC (assetQuantity = USDC) to satisfy minimum_order
+    // All orders: USDC primary, crypto quantity, crypto assetQuantity, USD trigger
 
     if (State.orderType === 'auto') {
         const allocationAmount    = (State.autoTradeConfig.allocation / 100) * cashBalance;
@@ -589,16 +582,11 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
         const orderType = side === 'buy'
             ? (triggerPrice > realtimePrice ? 'STOP_LIMIT_BUY'  : 'LIMIT_BUY')
             : (triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL');
-        if (side === 'buy') {
-            const quantity = parseFloat((allocationAmount / triggerPrice).toFixed(8));
-            return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
-                     assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
-        } else {
-            const sellQty = parseFloat((allocationAmount / realtimePrice).toFixed(8));
-            const usdcAmount = parseFloat((sellQty * triggerPrice).toFixed(2));
-            return { primary: 'USDC', secondary: State.selectedAsset.code, quantity: usdcAmount,
-                     assetQuantity: 'USDC', orderType, trigger: triggerPrice };
-        }
+        const quantity = side === 'buy'
+            ? parseFloat((allocationAmount / triggerPrice).toFixed(8))
+            : parseFloat((allocationAmount / realtimePrice).toFixed(8));
+        return { primary: 'USDC', secondary: State.selectedAsset.code, quantity,
+                 assetQuantity: State.selectedAsset.code, orderType, trigger: triggerPrice };
     }
 
     if (side === 'buy') {
@@ -616,18 +604,16 @@ function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
                  trigger: triggerPrice };
     }
 
-    // sell
+    // sell — same format as buy
     const sellQty = parseFloat(((State.amountSliderValue / 100) * assetBalance).toFixed(8));
     if (State.orderType === 'instant') {
         return { primary: 'USDC', secondary: State.selectedAsset.code,
                  quantity: sellQty, orderType: 'MARKET_SELL',
                  assetQuantity: State.selectedAsset.code };
     }
-    // Sell trigger: express quantity in USDC to satisfy minimum_order
     const triggerPrice = parseFloat((realtimePrice * (1 + State.triggerOffset / 100)).toFixed(2));
-    const usdcAmount   = parseFloat((sellQty * triggerPrice).toFixed(2));
     return { primary: 'USDC', secondary: State.selectedAsset.code,
-             quantity: usdcAmount, assetQuantity: 'USDC',
+             quantity: sellQty, assetQuantity: State.selectedAsset.code,
              orderType: triggerPrice < realtimePrice ? 'STOP_LIMIT_SELL' : 'LIMIT_SELL',
              trigger: triggerPrice };
 }
