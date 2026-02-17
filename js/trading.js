@@ -604,8 +604,8 @@ function _applyOffsetStyle(el, value) {
     }
 }
 
-// Swyftx minimum order ≈ $10 AUD ≈ $6.50 USD.  Use $5 USDC as safe floor.
-const MINIMUM_ORDER_USDC = 5;
+// Swyftx minimum order ≈ $10 AUD ≈ $6.50 USD.  Use $7 USDC as safe floor.
+const MINIMUM_ORDER_USDC = 7;
 
 function _buildOrderData(side, realtimePrice, cashBalance, assetBalance) {
     // All orders: USDC primary, crypto secondary
