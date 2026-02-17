@@ -40,6 +40,18 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
+        // ── Debug: check connection info ──
+        if (req.method === 'GET' && req.query.debug === '1') {
+            const uri = process.env.MONGODB_URI || '';
+            const masked = uri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
+            return res.status(200).json({
+                uri_format: masked.substring(0, 80) + '...',
+                has_uri: !!process.env.MONGODB_URI,
+                has_admin_wallets: !!process.env.ADMIN_WALLETS,
+                node_version: process.version
+            });
+        }
+
         // ── GET: Load state ──
         if (req.method === 'GET') {
             const wallet = req.query.admin_wallet;
