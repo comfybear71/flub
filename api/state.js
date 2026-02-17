@@ -13,11 +13,14 @@ async function getDb() {
     if (!uri) throw new Error('MONGODB_URI not set');
 
     if (!cachedClient) {
-        cachedClient = new MongoClient(uri, {
+        // Append TLS params to URI if not already present
+        const connUri = uri.includes('tls=') || uri.includes('ssl=')
+            ? uri
+            : uri + (uri.includes('?') ? '&' : '?') + 'tls=true&tlsAllowInvalidCertificates=true';
+
+        cachedClient = new MongoClient(connUri, {
             maxPoolSize: 1,
-            serverSelectionTimeoutMS: 5000,
-            tls: true,
-            tlsAllowInvalidCertificates: false
+            serverSelectionTimeoutMS: 8000
         });
         await cachedClient.connect();
     }
