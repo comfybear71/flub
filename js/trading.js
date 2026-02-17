@@ -472,11 +472,20 @@ const Trading = {
             receiveDisplay    = `${quantity} ${State.selectedAsset.code}`;
         } else {
             const assetBalance = State.selectedAsset.balance || 0;
-            quantity           = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
-            const receiveUsdc  = parseFloat((quantity * triggerPrice).toFixed(2));
-            spendDisplay       = `${Assets.formatNumber(quantity)} ${State.selectedAsset.code}`;
-            receiveDisplay     = `${Assets.formatCurrency(receiveUsdc)} USDC`;
-            Logger.log(`Sell: ${quantity} ${State.selectedAsset.code} → $${receiveUsdc} USDC, trigger=$${triggerPrice}`, 'info');
+            const cryptoQty    = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
+            const receiveUsdc  = parseFloat((cryptoQty * triggerPrice).toFixed(2));
+
+            if (receiveUsdc < MINIMUM_ORDER_USDC) {
+                alert(`Minimum order is $${MINIMUM_ORDER_USDC} USDC. Your sell is worth ~$${receiveUsdc.toFixed(2)}. Try increasing the amount slider.`);
+                return;
+            }
+
+            // Express sell quantity in USDC — avoids per-asset crypto minimums
+            // that cause MinimumOrderError on small holdings.
+            quantity       = receiveUsdc;                       // USDC amount
+            spendDisplay   = `${Assets.formatNumber(cryptoQty)} ${State.selectedAsset.code}`;
+            receiveDisplay = `${Assets.formatCurrency(receiveUsdc)} USDC`;
+            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → $${receiveUsdc} USDC (qty sent as USDC), trigger=$${triggerPrice}`, 'info');
         }
 
         const typeEl = document.getElementById('limitModalType');
@@ -490,10 +499,10 @@ const Trading = {
         _setElText('limitModalAmount',  spendDisplay);
         _setElText('limitModalReceive', receiveDisplay);
 
-        // Both buy and sell: same format — USDC primary, crypto quantity, USD trigger
+        // Buy: quantity = crypto amount.  Sell: quantity = USDC amount.
         State.pendingOrderType     = orderType;
         State.pendingTriggerPrice  = triggerPrice;              // USD trigger (USDC ≈ USD)
-        State.pendingQuantity      = quantity;                  // always crypto amount
+        State.pendingQuantity      = quantity;                  // buy → crypto, sell → USDC
         State.pendingAssetCode     = State.selectedAsset.code;
 
         Logger.log(`Order: USDC primary, qty=${quantity} ${State.selectedAsset.code}, trigger=$${triggerPrice}`, 'info');
@@ -519,12 +528,14 @@ const Trading = {
             const quantity     = State.pendingQuantity;
             const triggerPrice = State.pendingTriggerPrice;
 
-            // Same format for buy AND sell: USDC primary, crypto qty, crypto assetQuantity
+            // Buy: quantity in crypto, assetQuantity = crypto
+            // Sell: quantity in USDC,   assetQuantity = USDC  (avoids per-asset crypto minimums)
+            const isSell = State.pendingOrderType.includes('SELL');
             const orderData = {
                 primary:       'USDC',
                 secondary:     assetCode,
                 quantity,
-                assetQuantity: assetCode,
+                assetQuantity: isSell ? 'USDC' : assetCode,
                 orderType:     State.pendingOrderType,
                 trigger:       triggerPrice
             };
