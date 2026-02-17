@@ -123,7 +123,8 @@ const API = {
 
         Logger.log(`API Response: ${res.status} ${res.statusText}`, res.ok ? 'success' : 'error');
         if (!res.ok) {
-            const errorBody = await res.text();
+            // Clone before reading so callers can still read the original body
+            const errorBody = await res.clone().text();
             Logger.log('Error response: ' + errorBody, 'error');
         }
         return res;
