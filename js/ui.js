@@ -25,6 +25,9 @@ const UI = {
             // Hide swipe dots for admin
             const dots = document.getElementById('chartDots');
             if (dots) dots.style.display = 'none';
+            // Re-enforce order type visibility (applyRole shows ALL admin-only,
+            // so we need to re-hide sections that don't belong to the active tab)
+            this.setOrderType(State.orderType || 'instant');
             // Show PIN modal if no PIN set
             this.checkPin();
             Logger.log('Admin mode active', 'success');
