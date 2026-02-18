@@ -966,9 +966,40 @@ const UI = {
         const countEl = document.getElementById('userPendingCount');
         if (countEl) countEl.textContent = count === 0 ? 'No orders' : `${count} order${count !== 1 ? 's' : ''}`;
 
-        // Auto trader status
+        // Auto trader status — fetch from server since state is in admin's memory
+        this._fetchUserBotStatus();
+    },
+
+    async _fetchUserBotStatus() {
         const statusEl = document.getElementById('userBotStatus');
-        if (statusEl) {
+        if (!statusEl) return;
+
+        try {
+            const adminWallet = CONFIG.ADMIN_WALLETS[0];
+            if (!adminWallet) return;
+
+            const res = await fetch(`/api/state?admin_wallet=${encodeURIComponent(adminWallet)}`);
+            if (!res.ok) return;
+
+            const data = await res.json();
+            if (data.error) return;
+
+            const isActive = data.autoActive?.isActive || false;
+            const targets = data.autoActive?.targets || data.autoActive?.basePrices || {};
+            const cooldowns = data.autoCooldowns || {};
+            const now = Date.now();
+
+            if (isActive) {
+                const allCoins = Object.keys(targets);
+                const activeCoins = allCoins.filter(c => !(cooldowns[c] && cooldowns[c] > now));
+                statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                statusEl.style.color = '#22c55e';
+            } else {
+                statusEl.textContent = 'Inactive';
+                statusEl.style.color = '#64748b';
+            }
+        } catch (err) {
+            // Fallback to local state
             if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
                 const activeCoins = Object.keys(AutoTrader.targets).filter(c => !AutoTrader._isOnCooldown(c));
                 statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
