@@ -158,8 +158,8 @@ const AutoTrader = {
         this._updateUI();
         this._saveActiveState();
 
-        // Monitor every 60 seconds
-        this.monitorInterval = setInterval(() => this._checkPrices(), 60000);
+        // Monitor every 180 seconds (3 minutes)
+        this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
         this._checkPrices();
     },
 
@@ -198,8 +198,8 @@ const AutoTrader = {
 
         this._updateUI();
 
-        // Monitor every 60 seconds
-        this.monitorInterval = setInterval(() => this._checkPrices(), 60000);
+        // Monitor every 180 seconds (3 minutes)
+        this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
         this._checkPrices();
     },
 

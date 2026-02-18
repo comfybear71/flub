@@ -14,7 +14,7 @@ const CONFIG = {
     BUDJU_REQUIRED: 1_000_000,
     DEPOSIT_ADDRESS: '2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD',
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
-    HELIUS_API_KEY: 'b81f2789-b697-4987-83f5-6f7e0d24538e',
+    RPC_PROXY: '/api/rpc',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },

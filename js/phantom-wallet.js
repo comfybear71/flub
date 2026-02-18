@@ -190,11 +190,8 @@ const PhantomWallet = {
     },
 
     _getRpcUrl() {
-        // Use Helius if API key is configured, otherwise fall back to public RPC
-        if (CONFIG.HELIUS_API_KEY) {
-            return `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`;
-        }
-        return CONFIG.SOLANA_RPC;
+        // Route through server-side proxy so the Helius key stays secret
+        return CONFIG.RPC_PROXY || CONFIG.SOLANA_RPC;
     },
 
     async _getSolBalance(rpcUrl) {
