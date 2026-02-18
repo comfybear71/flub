@@ -156,6 +156,47 @@ const AutoTrader = {
         });
 
         this._updateUI();
+        this._saveActiveState();
+
+        // Monitor every 60 seconds
+        this.monitorInterval = setInterval(() => this._checkPrices(), 60000);
+        this._checkPrices();
+    },
+
+    // Resume auto-trading from saved state (called on page load)
+    resume(savedBasePrices) {
+        if (this.isActive) return; // Already running
+
+        // Use saved base prices instead of recording new ones
+        this.basePrices = savedBasePrices;
+
+        // Remove any coins that are now on cooldown
+        for (const code of Object.keys(this.basePrices)) {
+            if (this._isOnCooldown(code)) {
+                delete this.basePrices[code];
+            }
+        }
+
+        const activeCoins = Object.keys(this.basePrices);
+        if (activeCoins.length === 0) {
+            Logger.log('Auto-trade resume: all coins on cooldown — stopping', 'info');
+            this.isActive = false;
+            this._saveActiveState();
+            this._updateUI();
+            return;
+        }
+
+        this.isActive = true;
+        this.checkCount = 0;
+
+        Logger.log(`Auto-trading resumed: monitoring ${activeCoins.length} coins`, 'success');
+        activeCoins.forEach(code => {
+            const s = this.getSettings(code);
+            const t = this.getTier(code);
+            Logger.log(`  ${code} (Tier ${t}): ±${s.deviation}% dev, base $${this.basePrices[code].toFixed(2)}`, 'info');
+        });
+
+        this._updateUI();
 
         // Monitor every 60 seconds
         this.monitorInterval = setInterval(() => this._checkPrices(), 60000);
@@ -173,6 +214,7 @@ const AutoTrader = {
 
         Logger.log('Auto-trading stopped', 'info');
         this._updateUI();
+        this._saveActiveState();
         this.renderTierBadges();
     },
 
@@ -224,6 +266,7 @@ const AutoTrader = {
         if (tradeExecuted) {
             await API.refreshData();
             this.renderTierBadges();
+            this._saveActiveState();
         }
 
         // Update status display with visual indicators + thresholds
@@ -516,6 +559,12 @@ const AutoTrader = {
             tier2: this.tier2
         }));
         if (typeof ServerState !== 'undefined') ServerState.saveTiers();
+    },
+
+    _saveActiveState() {
+        const state = { isActive: this.isActive, basePrices: this.basePrices };
+        localStorage.setItem('auto_active', JSON.stringify(state));
+        if (typeof ServerState !== 'undefined') ServerState.saveAutoActive();
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────────

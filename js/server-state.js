@@ -59,6 +59,17 @@ const ServerState = {
                 API.fetchPendingOrders();
             }
 
+            // ── Resume auto-trading if it was active ──
+            if (data.autoActive && data.autoActive.isActive && data.autoActive.basePrices) {
+                const basePrices = data.autoActive.basePrices;
+                const coinCount = Object.keys(basePrices).length;
+                if (coinCount > 0) {
+                    Logger.log(`ServerState: auto-trading was active (${coinCount} coins) — resuming...`, 'info');
+                    // Delay resume slightly to let portfolio data finish loading
+                    setTimeout(() => AutoTrader.resume(basePrices), 2000);
+                }
+            }
+
             Logger.log(`ServerState: loaded (${data.pendingOrders?.length ?? 0} orders, ${data.autoTradeLog?.length ?? 0} trades)`, 'info');
 
         } catch (err) {
@@ -125,5 +136,9 @@ const ServerState = {
 
     saveTradeLog() {
         this.save({ autoTradeLog: AutoTrader.tradeLog });
+    },
+
+    saveAutoActive() {
+        this.save({ autoActive: { isActive: AutoTrader.isActive, basePrices: AutoTrader.basePrices } });
     }
 };
