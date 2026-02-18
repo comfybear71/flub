@@ -123,11 +123,14 @@ const API = {
     },
 
     // Start background CoinGecko price ticker (every 60s)
+    PRICE_TICK_INTERVAL: 60,  // seconds
+
     startPriceTicker() {
-        // Fetch immediately, then every 60 seconds
         this._tickPrices();
-        this._priceTickerInterval = setInterval(() => this._tickPrices(), 60000);
-        Logger.log('CoinGecko price ticker started (60s interval)', 'info');
+        this._priceTickerInterval = setInterval(() => this._tickPrices(), this.PRICE_TICK_INTERVAL * 1000);
+        // 1-second countdown updater
+        this._countdownInterval = setInterval(() => this._updatePriceCountdown(), 1000);
+        Logger.log(`CoinGecko price ticker started (${this.PRICE_TICK_INTERVAL}s interval)`, 'info');
     },
 
     stopPriceTicker() {
@@ -135,12 +138,23 @@ const API = {
             clearInterval(this._priceTickerInterval);
             this._priceTickerInterval = null;
         }
+        if (this._countdownInterval) {
+            clearInterval(this._countdownInterval);
+            this._countdownInterval = null;
+        }
+    },
+
+    _updatePriceCountdown() {
+        const el = document.getElementById('priceCountdown');
+        if (!el || !State.lastPriceTick) return;
+        const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
+        const remaining = Math.max(0, this.PRICE_TICK_INTERVAL - elapsed);
+        el.textContent = `${remaining}s`;
     },
 
     async _tickPrices() {
         try {
             const codeToGeckoId = CONFIG.COINGECKO_IDS || {};
-            // Get codes from portfolio assets + any coins the auto-trader is monitoring
             const portfolioCodes = (State.portfolioData.assets || []).map(a => a.code);
             const autoTraderCodes = typeof AutoTrader !== 'undefined' ? Object.keys(AutoTrader.targets || {}) : [];
             const allCodes = [...new Set([...portfolioCodes, ...autoTraderCodes])].filter(c => codeToGeckoId[c]);
@@ -154,6 +168,7 @@ const API = {
             if (!res.ok) return;
 
             const data = await res.json();
+            State.lastPriceTick = Date.now();
 
             // Build code → geckoId reverse map
             const geckoIdToCode = {};

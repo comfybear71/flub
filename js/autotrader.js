@@ -424,8 +424,11 @@ const AutoTrader = {
         const activeCoins = coins.filter(c => !this._isOnCooldown(c));
         const cdCoins     = coins.filter(c => this._isOnCooldown(c));
 
-        let html = `<div style="font-weight:600; margin-bottom:6px;">Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
-        if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;">(${cdCoins.length} on cooldown)</span>`;
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; font-weight:600; margin-bottom:6px;">`;
+        html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+        if (cdCoins.length > 0) html += ` <span style="color:#94a3b8; font-weight:400;">(${cdCoins.length} on cooldown)</span>`;
+        html += `</span>`;
+        html += `<span id="priceCountdown" style="font-size:9px; font-weight:400; color:#64748b;"></span>`;
         html += '</div>';
 
         // ── Per-coin threshold table ──
