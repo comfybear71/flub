@@ -1045,11 +1045,11 @@ const UI = {
         const modal = document.getElementById('userAutoTraderModal');
         if (!modal) return;
 
-        // Render content immediately
-        this._renderUserAutoTrader();
+        // Fetch state from server then render
+        this._fetchAndRenderUserAutoTrader();
 
-        // Auto-refresh every 5 seconds while modal is open
-        this._userAutoTraderInterval = setInterval(() => this._renderUserAutoTrader(), 5000);
+        // Auto-refresh every 10 seconds while modal is open
+        this._userAutoTraderInterval = setInterval(() => this._fetchAndRenderUserAutoTrader(), 10000);
 
         modal.classList.add('show');
     },
@@ -1061,6 +1061,53 @@ const UI = {
             clearInterval(this._userAutoTraderInterval);
             this._userAutoTraderInterval = null;
         }
+    },
+
+    async _fetchAndRenderUserAutoTrader() {
+        // Fetch auto-trader state from server (users don't have local state)
+        try {
+            const adminWallet = CONFIG.ADMIN_WALLETS[0];
+            if (!adminWallet) throw new Error('No admin wallet configured');
+
+            const res = await fetch(`/api/state?admin_wallet=${encodeURIComponent(adminWallet)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (!data.error) {
+                    // Apply active state
+                    if (data.autoActive) {
+                        AutoTrader.isActive = data.autoActive.isActive || false;
+                        AutoTrader.targets = data.autoActive.targets || data.autoActive.basePrices || {};
+                    } else {
+                        AutoTrader.isActive = false;
+                    }
+
+                    // Apply tier settings
+                    if (data.autoTiers) {
+                        if (data.autoTiers.tier1) AutoTrader.tier1 = data.autoTiers.tier1;
+                        if (data.autoTiers.tier2) AutoTrader.tier2 = data.autoTiers.tier2;
+                    }
+
+                    // Apply cooldowns (remove expired)
+                    if (data.autoCooldowns && typeof data.autoCooldowns === 'object') {
+                        const now = Date.now();
+                        AutoTrader.cooldowns = {};
+                        for (const [coin, ts] of Object.entries(data.autoCooldowns)) {
+                            if (ts > now) AutoTrader.cooldowns[coin] = ts;
+                        }
+                    }
+
+                    // Apply trade log
+                    if (Array.isArray(data.autoTradeLog)) {
+                        AutoTrader.tradeLog = data.autoTradeLog;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to fetch auto-trader state:', err.message);
+        }
+
+        // Now render with the synced state
+        this._renderUserAutoTrader();
     },
 
     _renderUserAutoTrader() {
