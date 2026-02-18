@@ -33,6 +33,9 @@ window.Assets = Assets;
 if (typeof AutoTrader !== 'undefined') {
     window.AutoTrader = AutoTrader;
 }
+if (typeof ServerState !== 'undefined') {
+    window.ServerState = ServerState;
+}
 
 // ==========================================
 // INITIALIZE

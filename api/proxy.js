@@ -92,9 +92,9 @@ export default async function handler(req, res) {
             return res.status(401).json({ error: 'No authToken provided' });
         }
 
-        // SECURITY: Check PIN for trading endpoints
+        // SECURITY: Check PIN for trading endpoints (POST only — GET reads are safe)
         const TRADING_ENDPOINTS = ['/orders/'];
-        if (TRADING_ENDPOINTS.includes(endpoint)) {
+        if (TRADING_ENDPOINTS.includes(endpoint) && method === 'POST') {
             if (pin !== process.env.TRADE_PIN) {
                 return res.status(403).json({ error: 'Invalid PIN' });
             }

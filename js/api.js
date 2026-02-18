@@ -93,6 +93,9 @@ const API = {
             UI.updateLastUpdated();
             Logger.log(`Loaded ${State.portfolioData.assets.length} assets`, 'success');
 
+            // Fetch pending orders in background
+            this.fetchPendingOrders();
+
         } catch (error) {
             Logger.log(`Refresh error: ${error.message}`, 'error');
             const list = document.getElementById('holdings-list');
@@ -111,6 +114,153 @@ const API = {
 
     getRealtimePrice(assetCode) {
         return State.portfolioData.assets.find(a => a.code === assetCode)?.usd_price ?? 0;
+    },
+
+    async fetchPendingOrders() {
+        try {
+            // ── 0) Cross-reference: remove locally-tracked orders that Swyftx has filled ──
+            let localOrders = Trading.getLocalPendingOrders();
+
+            if (localOrders.length > 0) {
+                try {
+                    await this._ensureToken();
+                    const histRes = await _fetchWithRetry('/api/proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint: '/orders/?limit=20', method: 'GET', authToken: State.jwtToken })
+                    });
+                    if (histRes.ok) {
+                        const histData = await histRes.json();
+                        const filled = (histData.orders ?? histData ?? []).filter(o => parseInt(o.status) === 4);
+                        // Build a set of (assetId, approx trigger) from filled orders
+                        const idToCode = {};
+                        for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) idToCode[String(id)] = code;
+
+                        const filledKeys = new Set();
+                        for (const o of filled) {
+                            const code = idToCode[String(o.secondary_asset)] ?? '';
+                            const trigger = parseFloat(o.trigger ?? 0);
+                            if (code && trigger > 0) {
+                                filledKeys.add(`${code}_${trigger.toFixed(4)}`);
+                            }
+                        }
+
+                        // Remove local orders whose asset+trigger match a filled order
+                        const before = localOrders.length;
+                        localOrders = localOrders.filter(lo => {
+                            const key = `${lo.assetCode}_${parseFloat(lo.trigger ?? 0).toFixed(4)}`;
+                            return !filledKeys.has(key);
+                        });
+
+                        if (localOrders.length < before) {
+                            const removed = before - localOrders.length;
+                            Logger.log(`Auto-removed ${removed} filled order(s) from pending list`, 'success');
+                            localStorage.setItem(Trading._LOCAL_KEY, JSON.stringify(localOrders));
+                            if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
+                        }
+                    }
+                } catch (e) {
+                    // Non-critical — just skip cross-reference
+                }
+            }
+
+            // ── 1) Normalise locally-tracked trigger orders ──────────────────
+
+            // Map order type strings to numeric + buy/sell
+            const TYPE_MAP = {
+                'LIMIT_BUY': 3, 'LIMIT_SELL': 4, 'STOP_LIMIT_BUY': 5, 'STOP_LIMIT_SELL': 6,
+                'MARKET_BUY': 1, 'MARKET_SELL': 2
+            };
+
+            const normalised = localOrders.map(o => {
+                const ot       = typeof o.orderType === 'string' ? (TYPE_MAP[o.orderType] ?? 0) : parseInt(o.orderType ?? 0);
+                const isBuy    = ot === 1 || ot === 3 || ot === 5;
+                const trigger  = parseFloat(o.trigger ?? 0);
+                const quantity = parseFloat(o.quantity ?? 0);
+                const priCode  = o.priCode ?? 'USDC';
+
+                // Current price in the same currency as the trigger
+                const asset      = State.portfolioData.assets.find(a => a.code === o.assetCode);
+                const currentPrice = priCode === 'AUD'
+                    ? (asset?.price ?? 0)
+                    : (asset?.usd_price ?? 0);
+
+                const distance = currentPrice > 0 && trigger > 0
+                    ? Math.abs(currentPrice - trigger) / currentPrice * 100
+                    : 100;
+
+                return {
+                    id:           o.id ?? '',
+                    orderType:    ot,
+                    status:       0,   // 0 = locally tracked (pending)
+                    isBuy,
+                    assetCode:    o.assetCode ?? '',
+                    priCode,
+                    trigger,
+                    quantity,
+                    currentPrice,
+                    distance:     Math.round(distance * 100) / 100,
+                    created:      o.created ?? '',
+                    local:        true
+                };
+            }).filter(o => o.trigger > 0);
+
+            // ── 2) Also try Swyftx API for any server-side pending orders ─
+            let apiOrders = [];
+            try {
+                await this._ensureToken();
+                const openRes = await _fetchWithRetry('/api/proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint: '/orders/open', method: 'GET', authToken: State.jwtToken })
+                });
+                if (openRes.ok) {
+                    const openData = await openRes.json();
+                    if (!openData.error) {
+                        const raw = Array.isArray(openData) ? openData : (openData.orders ?? []);
+                        const idToCode = {};
+                        for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
+                            idToCode[String(id)] = code;
+                        }
+                        apiOrders = raw.map(o => {
+                            const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                            const isBuy = ot === 1 || ot === 3 || ot === 5;
+                            const secId = String(o.secondary_asset ?? '');
+                            const priId = String(o.primary_asset ?? '');
+                            const assetCode = idToCode[secId] ?? secId;
+                            const priCode   = idToCode[priId] ?? priId;
+                            const trigger   = parseFloat(o.trigger ?? 0);
+                            const quantity  = parseFloat(o.quantity ?? 0);
+                            const asset     = State.portfolioData.assets.find(a => a.code === assetCode);
+                            const currentPrice = priCode === 'AUD' ? (asset?.price ?? 0) : (asset?.usd_price ?? 0);
+                            const distance = currentPrice > 0 && trigger > 0
+                                ? Math.abs(currentPrice - trigger) / currentPrice * 100 : 100;
+                            return {
+                                id: o.orderUuid ?? o.id ?? '', orderType: ot,
+                                status: parseInt(o.status ?? 0), isBuy, assetCode, priCode,
+                                trigger, quantity, currentPrice,
+                                distance: Math.round(distance * 100) / 100,
+                                created: o.created_time ?? '', local: false
+                            };
+                        }).filter(o => o.trigger > 0);
+                    }
+                }
+            } catch (e) {
+                Logger.log(`API pending orders check: ${e.message}`, 'info');
+            }
+
+            // ── 3) Merge: local + API (dedupe by id) ──────────────────
+            const seen = new Set(apiOrders.map(o => o.id));
+            const merged = [...apiOrders, ...normalised.filter(o => !seen.has(o.id))];
+
+            State.pendingOrders = merged.sort((a, b) => a.distance - b.distance);
+
+            Logger.log(`Pending orders: ${normalised.length} local + ${apiOrders.length} API = ${State.pendingOrders.length} total`, 'info');
+            UI.renderPendingOrders();
+
+        } catch (error) {
+            Logger.log(`Pending orders error: ${error.message}`, 'error');
+        }
     },
 
     async placeOrder(orderData) {

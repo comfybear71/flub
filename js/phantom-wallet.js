@@ -87,6 +87,11 @@ const PhantomWallet = {
             // Determine role immediately from config
             this.determineRole();
 
+            // Load server-synced state (auto-trader config, pending orders, etc.)
+            if (typeof ServerState !== 'undefined' && State.userRole === 'admin') {
+                ServerState.load();
+            }
+
             // Load deposit history from localStorage
             UI.loadDeposits(this.walletAddress);
 
@@ -120,6 +125,11 @@ const PhantomWallet = {
 
             // Determine role immediately from config
             this.determineRole();
+
+            // Load server-synced state
+            if (typeof ServerState !== 'undefined' && State.userRole === 'admin') {
+                ServerState.load();
+            }
 
             // Load deposit history from localStorage
             UI.loadDeposits(this.walletAddress);

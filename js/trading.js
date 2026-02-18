@@ -3,6 +3,38 @@
 // ==========================================
 const Trading = {
 
+    // ── Local pending orders (localStorage) ─────────────────────────────────
+
+    _LOCAL_KEY: 'flub_pending_orders',
+
+    getLocalPendingOrders() {
+        try {
+            return JSON.parse(localStorage.getItem(this._LOCAL_KEY) || '[]');
+        } catch { return []; }
+    },
+
+    saveLocalPendingOrder(order) {
+        const orders = this.getLocalPendingOrders();
+        orders.push(order);
+        localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
+        Logger.log(`Saved pending order locally: ${order.assetCode} ${order.orderType}`, 'info');
+        // Sync to server immediately (survives device switch)
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrdersNow();
+    },
+
+    removeLocalPendingOrder(id) {
+        const orders = this.getLocalPendingOrders().filter(o => o.id !== id);
+        localStorage.setItem(this._LOCAL_KEY, JSON.stringify(orders));
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
+        API.fetchPendingOrders();
+    },
+
+    clearLocalPendingOrders() {
+        localStorage.removeItem(this._LOCAL_KEY);
+        if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
+        API.fetchPendingOrders();
+    },
+
     // ── Trigger balance helpers ───────────────────────────────────────────────
 
     getTriggerCashBalance(currency) {
@@ -38,7 +70,7 @@ const Trading = {
 
         const badge = document.getElementById('triggerDirectionBadge');
         if (badge) {
-            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Hi';
+            badge.textContent        = type === 'buy' ? '\u2193 Buy Dip' : '\u2191 Sell Rise';
             badge.style.color        = type === 'buy' ? '#22c55e' : '#ef4444';
             badge.style.background   = type === 'buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
         }
@@ -479,19 +511,19 @@ const Trading = {
         } else {
             const assetBalance = State.selectedAsset.balance || 0;
             const cryptoQty    = parseFloat((assetBalance * State.triggerAmountPercent / 100).toFixed(8));
-            const receiveAud   = parseFloat((cryptoQty * audTrigger).toFixed(2));
+            const receiveUsdc  = parseFloat((cryptoQty * triggerPrice).toFixed(2));
 
-            if (receiveAud < 10) {
-                alert(`Minimum trigger sell is ~A$10. Your sell is worth ~A$${receiveAud.toFixed(2)}. Try increasing the amount slider.`);
+            if (receiveUsdc < MINIMUM_ORDER_USDC_LIMIT) {
+                alert(`Minimum trigger sell is ~$${MINIMUM_ORDER_USDC_LIMIT} USDC. Your sell is worth ~$${receiveUsdc.toFixed(2)}. Try increasing the amount slider.`);
                 return;
             }
 
-            // Sell triggers use AUD primary (Swyftx only supports fiat for limit sells).
-            // Quantity in crypto, trigger in AUD.
+            // Sell triggers: USDC primary (same as buys) — consistent and avoids AUD conversion issues.
+            // Quantity in crypto, trigger in USD.
             quantity       = cryptoQty;
             spendDisplay   = `${Assets.formatNumber(cryptoQty)} ${State.selectedAsset.code}`;
-            receiveDisplay = `~A$${receiveAud.toFixed(2)} AUD`;
-            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → A$${receiveAud} AUD, AUD trigger=A$${audTrigger}`, 'info');
+            receiveDisplay = `~${Assets.formatCurrency(receiveUsdc)} USDC`;
+            Logger.log(`Sell: ${cryptoQty} ${State.selectedAsset.code} → $${receiveUsdc} USDC, USD trigger=$${triggerPrice}`, 'info');
         }
 
         const typeEl = document.getElementById('limitModalType');
@@ -505,12 +537,12 @@ const Trading = {
         _setElText('limitModalAmount',  spendDisplay);
         _setElText('limitModalReceive', receiveDisplay);
 
-        // Buy: USDC primary, USD trigger.  Sell: AUD primary, AUD trigger.
+        // Both buys and sells use USDC primary with USD trigger price
         State.pendingOrderType     = orderType;
-        State.pendingTriggerPrice  = isBuy ? triggerPrice : audTrigger;
+        State.pendingTriggerPrice  = triggerPrice;
         State.pendingQuantity      = quantity;                  // always crypto amount
         State.pendingAssetCode     = State.selectedAsset.code;
-        State.pendingPrimary       = isBuy ? 'USDC' : 'AUD';
+        State.pendingPrimary       = 'USDC';
 
         Logger.log(`Order: ${State.pendingPrimary} primary, qty=${quantity} ${State.selectedAsset.code}, trigger=${isBuy ? '$' + triggerPrice : 'A$' + audTrigger}`, 'info');
 
@@ -558,6 +590,17 @@ const Trading = {
 
             document.getElementById('limitConfirmModal')?.classList.remove('show');
             document.getElementById('successModal')?.classList.add('show');
+
+            // Save to local pending orders tracker
+            Trading.saveLocalPendingOrder({
+                id:        data.orderUuid ?? data.id ?? Date.now().toString(),
+                orderType: State.pendingOrderType,
+                assetCode: assetCode,
+                priCode:   State.pendingPrimary,
+                trigger:   triggerPrice,
+                quantity:  quantity,
+                created:   new Date().toISOString()
+            });
 
             await API.refreshData();
             this.updateTriggerButtonBalances();

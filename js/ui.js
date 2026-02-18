@@ -25,6 +25,9 @@ const UI = {
             // Hide swipe dots for admin
             const dots = document.getElementById('chartDots');
             if (dots) dots.style.display = 'none';
+            // Re-enforce order type visibility (applyRole shows ALL admin-only,
+            // so we need to re-hide sections that don't belong to the active tab)
+            this.setOrderType(State.orderType || 'instant');
             // Show PIN modal if no PIN set
             this.checkPin();
             Logger.log('Admin mode active', 'success');
@@ -441,6 +444,96 @@ const UI = {
         }
     },
 
+    // ── Pending Orders ──────────────────────────────────────────────────────
+
+    renderPendingOrders() {
+        const container = document.getElementById('pendingOrdersList');
+        const countEl   = document.getElementById('pendingOrdersCount');
+        if (!container) return;
+
+        const orders = State.pendingOrders || [];
+        if (countEl) countEl.textContent = orders.length;
+
+        if (orders.length === 0) {
+            container.innerHTML = '<div class="pending-orders-empty">No pending trigger orders</div>';
+            return;
+        }
+
+        const ORDER_TYPE_LABELS = {
+            1: 'Market Buy',
+            2: 'Market Sell',
+            3: 'Limit Buy',
+            4: 'Limit Sell',
+            5: 'Stop Buy',
+            6: 'Stop Sell'
+        };
+
+        const STATUS_LABELS = {
+            1: 'Open',
+            2: 'Partial',
+            3: 'Cancelled',
+            4: 'Filled'
+        };
+
+        container.innerHTML = orders.map(order => {
+            const side       = order.isBuy ? 'buy' : 'sell';
+            const style      = CONFIG.ASSET_STYLES[order.assetCode] ?? { color: '#666', icon: order.assetCode?.[0] ?? '?' };
+            const typeLabel  = ORDER_TYPE_LABELS[order.orderType] ?? 'Trigger';
+            const statusLabel = STATUS_LABELS[order.status] ?? '';
+            const currSymbol = order.priCode === 'AUD' ? 'A$' : '$';
+
+            // Proximity: how full the bar is (closer = fuller)
+            // Cap at 30% max distance for the visual
+            const maxDist    = 30;
+            const clampedDist = Math.min(order.distance, maxDist);
+            const proximity  = Math.max(0, ((maxDist - clampedDist) / maxDist) * 100);
+
+            // Classify distance for label styling
+            let distClass = 'far';
+            if (order.distance < 2)       distClass = 'very-close';
+            else if (order.distance < 5)  distClass = 'close';
+
+            const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger);
+            const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
+            const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity);
+
+            // Dismiss button only for locally-tracked orders
+            const dismissBtn = order.local
+                ? `<button onclick="Trading.removeLocalPendingOrder('${order.id}')" class="pending-order-dismiss" title="Remove">&times;</button>`
+                : '';
+
+            return `
+            <div class="pending-order-card ${side}">
+                <div class="pending-order-top">
+                    <div class="pending-order-left">
+                        <div class="coin-icon-wrapper" style="width:28px;height:28px;background:${style.color}20;color:${style.color};font-size:12px;">
+                            <span class="coin-icon-letter" style="font-size:12px;">${style.icon}</span>
+                        </div>
+                        <span class="pending-order-asset">${order.assetCode}</span>
+                        <span class="pending-order-badge ${side}">${typeLabel}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="pending-order-right">
+                            <div class="pending-order-trigger">${triggerFormatted}</div>
+                            <div class="pending-order-qty">${qtyDisplay} ${order.priCode}</div>
+                        </div>
+                        ${dismissBtn}
+                    </div>
+                </div>
+                <div class="pending-order-proximity">
+                    <div class="proximity-bar-track">
+                        <div class="proximity-bar-fill ${side}" style="width:${proximity}%;"></div>
+                    </div>
+                    <span class="proximity-label ${distClass}">${order.distance.toFixed(1)}% away</span>
+                </div>
+                <div class="pending-order-current">
+                    <span>Now: ${currentFormatted}</span>
+                    <span>Trigger: ${triggerFormatted}</span>
+                </div>
+            </div>`;
+        }).join('');
+    },
+
     // ── Trading Panel (Admin Only) ───────────────────────────────────────────
 
     openTrade(code) {
@@ -571,19 +664,23 @@ const UI = {
         const amountSection  = document.getElementById('amountSection');
         const triggerSection = document.getElementById('triggerSection');
         const autoSection    = document.getElementById('autoSection');
+        const pendingSection = document.getElementById('pendingOrdersSection');
 
         if (type === 'instant') {
             if (amountSection)  amountSection.style.display = '';
             if (triggerSection) triggerSection.style.display = 'none';
+            if (pendingSection) pendingSection.style.display = 'none';
             if (autoSection)    autoSection.style.display = 'none';
         } else if (type === 'trigger') {
             if (amountSection)  amountSection.style.display = 'none';
             if (triggerSection) triggerSection.style.display = 'block';
+            if (pendingSection) pendingSection.style.display = '';
             if (autoSection)    autoSection.style.display = 'none';
             Trading.resetTrigger();
         } else if (type === 'auto') {
             if (amountSection)  amountSection.style.display = 'none';
             if (triggerSection) triggerSection.style.display = 'none';
+            if (pendingSection) pendingSection.style.display = 'none';
             if (autoSection)    autoSection.style.display = 'block';
         }
 
