@@ -1045,6 +1045,25 @@ const UI = {
         const modal = document.getElementById('userAutoTraderModal');
         if (!modal) return;
 
+        // Render content immediately
+        this._renderUserAutoTrader();
+
+        // Auto-refresh every 5 seconds while modal is open
+        this._userAutoTraderInterval = setInterval(() => this._renderUserAutoTrader(), 5000);
+
+        modal.classList.add('show');
+    },
+
+    closeUserAutoTrader() {
+        const modal = document.getElementById('userAutoTraderModal');
+        if (modal) modal.classList.remove('show');
+        if (this._userAutoTraderInterval) {
+            clearInterval(this._userAutoTraderInterval);
+            this._userAutoTraderInterval = null;
+        }
+    },
+
+    _renderUserAutoTrader() {
         const badge = document.getElementById('userBotBadge');
         const settingsEl = document.getElementById('userBotSettings');
         const monitorEl = document.getElementById('userBotMonitor');
@@ -1087,7 +1106,7 @@ const UI = {
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                 <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Cooldown: ${AutoTrader.COOLDOWN_HOURS}h</span>
                 <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Reserve: $${AutoTrader.MIN_USDC_RESERVE}</span>
-                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Check: 3 min</span>
+                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Prices: 60s</span>
             </div>`;
         }
 
@@ -1100,10 +1119,21 @@ const UI = {
                 const activeCoins = coins.filter(c => !AutoTrader._isOnCooldown(c));
                 const cdCoins = coins.filter(c => AutoTrader._isOnCooldown(c));
 
+                // Countdown
+                let countdownText = '';
+                if (State.lastPriceTick && typeof API !== 'undefined') {
+                    const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
+                    const remaining = Math.max(0, (API.PRICE_TICK_INTERVAL || 60) - elapsed);
+                    countdownText = `${remaining}s`;
+                }
+
                 let html = '<div style="display:flex;flex-direction:column;gap:4px;">';
-                html += `<div style="font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
-                if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;">(${cdCoins.length} on cooldown)</span>`;
-                html += '</div>';
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">`;
+                html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;font-weight:400;">(${cdCoins.length} on cooldown)</span>`;
+                html += `</span>`;
+                html += `<span style="font-size:9px;font-weight:400;color:#64748b;">${countdownText}</span>`;
+                html += `</div>`;
 
                 for (const code of activeCoins) {
                     const currentPrice = typeof API !== 'undefined' ? API.getRealtimePrice(code) : 0;
@@ -1199,8 +1229,6 @@ const UI = {
                 logEl.innerHTML = html;
             }
         }
-
-        modal.classList.add('show');
     },
 
     loadDeposits(wallet) {
