@@ -32,6 +32,7 @@ const CONFIG = {
         'ADA':  { color: '#3b82f6', icon: 'A',  name: 'Cardano' },
         'POL':  { color: '#8b5cf6', icon: 'P',  name: 'Polygon' },
         'DOGE': { color: '#eab308', icon: 'Ð',  name: 'Dogecoin' },
+        'HYPE': { color: '#00e5a0', icon: 'H',  name: 'Hyperliquid' },
         'AUD':  { color: '#f59e0b', icon: 'A$', name: 'Australian Dollar' }
     },
     // Fallback IDs — dynamically overwritten from portfolio data in refreshData().
@@ -59,7 +60,8 @@ const CONFIG = {
         'ENA':  'ethena',
         'NEXO': 'nexo',
         'POL':  'polygon-ecosystem-token',
-        'USDC': 'usd-coin'
+        'USDC': 'usd-coin',
+        'HYPE': 'hyperliquid'
     }
 };
 
