@@ -1659,7 +1659,12 @@ input[type="range"]::-moz-range-thumb {
     display: flex;
     gap: 10px;
     margin-top: 12px;
-    padding: 0 4px;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 340px;
+    width: 100%;
+    justify-content: center;
+    text-align: left;
 }
 
 .insight-card {
