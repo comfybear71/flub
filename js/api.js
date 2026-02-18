@@ -87,6 +87,9 @@ const API = {
             State.portfolioData.assets = normalized
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
 
+            // Fetch real USD prices from CoinGecko and overlay
+            await _applyCoinGeckoPrices(State.portfolioData.assets);
+
             Assets.sort(State.currentSort);
             UI.renderPortfolio();
             UI.renderHoldings();
@@ -376,4 +379,46 @@ function _normalizeAsset(asset) {
         change_24h: parseFloat(asset.change_24h ?? asset.change ?? 0),
         asset_id:   asset.asset_id ?? asset.id
     };
+}
+
+// Fetch real USD prices from CoinGecko and update asset usd_price/usd_value
+async function _applyCoinGeckoPrices(assets) {
+    try {
+        // Build list of CoinGecko IDs for assets we hold
+        const codeToGeckoId = CONFIG.COINGECKO_IDS || {};
+        const codes = assets.map(a => a.code).filter(c => codeToGeckoId[c]);
+        if (codes.length === 0) return;
+
+        const geckoIds = codes.map(c => codeToGeckoId[c]).join(',');
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd`;
+
+        const res = await fetch(url);
+        if (!res.ok) {
+            Logger.log(`CoinGecko: HTTP ${res.status} — using AUD fallback`, 'info');
+            return;
+        }
+
+        const data = await res.json();
+
+        // Build reverse map: geckoId → usd price
+        const geckoIdToUsd = {};
+        for (const [geckoId, prices] of Object.entries(data)) {
+            if (prices.usd) geckoIdToUsd[geckoId] = prices.usd;
+        }
+
+        // Overlay real USD prices onto assets
+        let updated = 0;
+        for (const asset of assets) {
+            const geckoId = codeToGeckoId[asset.code];
+            if (geckoId && geckoIdToUsd[geckoId]) {
+                asset.usd_price = geckoIdToUsd[geckoId];
+                asset.usd_value = asset.balance * asset.usd_price;
+                updated++;
+            }
+        }
+
+        Logger.log(`CoinGecko: updated ${updated} coin prices in USD`, 'success');
+    } catch (err) {
+        Logger.log(`CoinGecko error: ${err.message} — using AUD fallback`, 'info');
+    }
 }

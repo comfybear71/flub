@@ -5,7 +5,7 @@
 const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
-    AUD_TO_USD_RATE: 0.65,
+    AUD_TO_USD_RATE: 0.70,
     ADMIN_WALLETS: [
         'AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq'
     ],
@@ -40,6 +40,26 @@ const CONFIG = {
         'ADA':  12, 'USD':  36, 'USDC': 53, 'DOGE': 73,
         'SOL':  130,'LUNA': 405,'LUNC': 406,'NEXO': 407,
         'SUI':  438,'ENA':  496,'POL':  569,'XAUT': 635
+    },
+    // CoinGecko IDs for real-time USD prices
+    COINGECKO_IDS: {
+        'BTC':  'bitcoin',
+        'ETH':  'ethereum',
+        'SOL':  'solana',
+        'XRP':  'ripple',
+        'BNB':  'binancecoin',
+        'ADA':  'cardano',
+        'SUI':  'sui',
+        'LUNA': 'terra-luna-2',
+        'DOGE': 'dogecoin',
+        'XAUT': 'tether-gold',
+        'NEO':  'neo',
+        'TRX':  'tron',
+        'BCH':  'bitcoin-cash',
+        'ENA':  'ethena',
+        'NEXO': 'nexo',
+        'POL':  'polygon-ecosystem-token',
+        'USDC': 'usd-coin'
     }
 };
 
