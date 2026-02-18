@@ -702,7 +702,7 @@ const AutoTrader = {
         this._renderTradeLog();
     },
 
-    // One-shot override: clear all cooldowns so bot can trade immediately
+    // One-shot override: clear all cooldowns and add any missing coins
     overrideCooldowns() {
         const cdCount = Object.keys(this.cooldowns).length;
         if (cdCount === 0) {
@@ -714,7 +714,28 @@ const AutoTrader = {
         localStorage.setItem('auto_cooldowns', JSON.stringify(this.cooldowns));
         if (typeof ServerState !== 'undefined') ServerState.saveCooldowns();
 
-        Logger.log(`Cooldowns overridden — ${cdCount} coin(s) can trade again immediately`, 'success');
+        // Add any portfolio coins that weren't in targets (they were skipped at start due to cooldown)
+        const cryptoHoldings = State.portfolioData.assets.filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+        );
+        let added = 0;
+        for (const asset of cryptoHoldings) {
+            if (!this.targets[asset.code]) {
+                const price = API.getRealtimePrice(asset.code) || asset.usd_price;
+                const dev = this.getSettings(asset.code).deviation;
+                this.targets[asset.code] = {
+                    buy:  price * (1 - dev / 100),
+                    sell: price * (1 + dev / 100)
+                };
+                added++;
+                Logger.log(`  Added ${asset.code}: buy < $${this.targets[asset.code].buy.toFixed(2)}, sell > $${this.targets[asset.code].sell.toFixed(2)}`, 'info');
+            }
+        }
+
+        Logger.log(`Cooldowns overridden — ${cdCount} cleared, ${added} coin(s) added`, 'success');
+
+        // Save updated targets
+        this._saveActiveState();
 
         // Update displays
         this._updateStatus();
