@@ -389,6 +389,11 @@
                     <!-- Live status -->
                     <div id="autoStatus" style="display:none; padding:8px; border-radius:8px; margin-bottom:8px; font-size:10px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.4;"></div>
 
+                    <!-- Override cooldowns button (only visible when bot active & coins on cooldown) -->
+                    <button id="autoCooldownOverride" onclick="AutoTrader.overrideCooldowns()" style="display:none; width:100%; padding:8px; border-radius:8px; border:1px solid rgba(239,68,68,0.3); font-size:11px; font-weight:600; cursor:pointer; color:#ef4444; background:rgba(239,68,68,0.08); margin-bottom:8px; transition:all 0.2s;">
+                        Override Cooldowns
+                    </button>
+
                     <!-- Trade Log -->
                     <div style="margin-bottom:8px; border-radius:8px; border:1px solid rgba(168,85,247,0.15); overflow:hidden;">
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(168,85,247,0.08);">

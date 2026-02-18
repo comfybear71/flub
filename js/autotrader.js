@@ -411,6 +411,9 @@ const AutoTrader = {
 
         // Keep user insight cards in sync
         if (typeof UI !== 'undefined') UI.updateUserInsightCards();
+
+        // Show/hide override button
+        this._updateOverrideButton();
     },
 
     _updateStatus() {
@@ -509,6 +512,9 @@ const AutoTrader = {
         html += '</div>';
 
         status.innerHTML = html;
+
+        // Show/hide override button based on cooldown state
+        this._updateOverrideButton();
 
         // ── Update trade log panel ──
         this._renderTradeLog();
@@ -694,6 +700,39 @@ const AutoTrader = {
         localStorage.removeItem('auto_trade_log');
         if (typeof ServerState !== 'undefined') ServerState.saveTradeLog();
         this._renderTradeLog();
+    },
+
+    // One-shot override: clear all cooldowns so bot can trade immediately
+    overrideCooldowns() {
+        const cdCount = Object.keys(this.cooldowns).length;
+        if (cdCount === 0) {
+            Logger.log('No cooldowns to override', 'info');
+            return;
+        }
+
+        this.cooldowns = {};
+        localStorage.setItem('auto_cooldowns', JSON.stringify(this.cooldowns));
+        if (typeof ServerState !== 'undefined') ServerState.saveCooldowns();
+
+        Logger.log(`Cooldowns overridden — ${cdCount} coin(s) can trade again immediately`, 'success');
+
+        // Update displays
+        this._updateStatus();
+        this._updateOverrideButton();
+        this.renderTierBadges();
+
+        // Run a price check right away so trades can trigger
+        if (this.isActive) {
+            this._checkPrices();
+        }
+    },
+
+    _updateOverrideButton() {
+        const btn = document.getElementById('autoCooldownOverride');
+        if (!btn) return;
+
+        const hasCooldowns = Object.keys(this.cooldowns).some(c => this._isOnCooldown(c));
+        btn.style.display = (this.isActive && hasCooldowns) ? 'block' : 'none';
     }
 };
 
