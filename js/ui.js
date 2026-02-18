@@ -964,7 +964,7 @@ const UI = {
         // Pending orders count
         const count = (State.pendingOrders || []).length;
         const countEl = document.getElementById('userPendingCount');
-        if (countEl) countEl.textContent = count === 0 ? 'No orders' : `${count} order${count !== 1 ? 's' : ''}`;
+        if (countEl) countEl.textContent = count === 0 ? 'None' : `${count} order${count !== 1 ? 's' : ''}`;
 
         // Auto trader status — fetch from server since state is in admin's memory
         this._fetchUserBotStatus();
@@ -990,9 +990,7 @@ const UI = {
             const now = Date.now();
 
             if (isActive) {
-                const allCoins = Object.keys(targets);
-                const activeCoins = allCoins.filter(c => !(cooldowns[c] && cooldowns[c] > now));
-                statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                statusEl.textContent = 'Active';
                 statusEl.style.color = '#22c55e';
             } else {
                 statusEl.textContent = 'Inactive';
@@ -1001,8 +999,7 @@ const UI = {
         } catch (err) {
             // Fallback to local state
             if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
-                const activeCoins = Object.keys(AutoTrader.targets).filter(c => !AutoTrader._isOnCooldown(c));
-                statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                statusEl.textContent = 'Active';
                 statusEl.style.color = '#22c55e';
             } else {
                 statusEl.textContent = 'Inactive';
@@ -1079,8 +1076,11 @@ const UI = {
         // Fetch state from server then render
         this._fetchAndRenderUserAutoTrader();
 
-        // Auto-refresh every 10 seconds while modal is open
+        // Fetch fresh state from server every 10 seconds
         this._userAutoTraderInterval = setInterval(() => this._fetchAndRenderUserAutoTrader(), 10000);
+
+        // 1-second countdown ticker (matches admin monitoring)
+        this._userCountdownInterval = setInterval(() => this._updateUserCountdown(), 1000);
 
         modal.classList.add('show');
     },
@@ -1092,6 +1092,18 @@ const UI = {
             clearInterval(this._userAutoTraderInterval);
             this._userAutoTraderInterval = null;
         }
+        if (this._userCountdownInterval) {
+            clearInterval(this._userCountdownInterval);
+            this._userCountdownInterval = null;
+        }
+    },
+
+    _updateUserCountdown() {
+        const el = document.getElementById('userPriceCountdown');
+        if (!el || !State.lastPriceTick) return;
+        const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
+        const remaining = Math.max(0, (API.PRICE_TICK_INTERVAL || 60) - elapsed);
+        el.textContent = `${remaining}s`;
     },
 
     async _fetchAndRenderUserAutoTrader() {
@@ -1197,20 +1209,12 @@ const UI = {
                 const activeCoins = coins.filter(c => !AutoTrader._isOnCooldown(c));
                 const cdCoins = coins.filter(c => AutoTrader._isOnCooldown(c));
 
-                // Countdown
-                let countdownText = '';
-                if (State.lastPriceTick && typeof API !== 'undefined') {
-                    const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
-                    const remaining = Math.max(0, (API.PRICE_TICK_INTERVAL || 60) - elapsed);
-                    countdownText = `${remaining}s`;
-                }
-
                 let html = '<div style="display:flex;flex-direction:column;gap:4px;">';
                 html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">`;
                 html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
                 if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;font-weight:400;">(${cdCoins.length} on cooldown)</span>`;
                 html += `</span>`;
-                html += `<span style="font-size:9px;font-weight:400;color:#64748b;">${countdownText}</span>`;
+                html += `<span id="userPriceCountdown" style="font-size:9px;font-weight:400;color:#64748b;"></span>`;
                 html += `</div>`;
 
                 for (const code of activeCoins) {

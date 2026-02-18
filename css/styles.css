@@ -1657,11 +1657,11 @@ input[type="range"]::-moz-range-thumb {
    ══════════════════════════════════════════ */
 .user-insight-cards {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     margin-top: 12px;
     margin-left: auto;
     margin-right: auto;
-    max-width: 340px;
+    max-width: 280px;
     width: 100%;
     justify-content: center;
     text-align: left;
@@ -1671,9 +1671,9 @@ input[type="range"]::-moz-range-thumb {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 14px;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
     border: 1px solid transparent;
@@ -1704,9 +1704,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .insight-card-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1729,28 +1729,17 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .insight-card-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: #94a3b8;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }
 
 .insight-card-value {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     color: #e2e8f0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.insight-card-arrow {
-    color: #475569;
-    flex-shrink: 0;
-    transition: transform 0.2s;
-}
-
-.insight-card:hover .insight-card-arrow {
-    transform: translateX(2px);
-    color: #94a3b8;
 }
