@@ -16,6 +16,7 @@ const API = {
             Logger.log('Connected!', 'success');
             UI.updateStatus('connected');
             await this.refreshData();
+            this.startPriceTicker();
             return true;
 
         } catch (error) {
@@ -116,7 +117,68 @@ const API = {
     },
 
     getRealtimePrice(assetCode) {
+        // Use live CoinGecko price if available, fall back to portfolio data
+        if (State.liveRates[assetCode]) return State.liveRates[assetCode];
         return State.portfolioData.assets.find(a => a.code === assetCode)?.usd_price ?? 0;
+    },
+
+    // Start background CoinGecko price ticker (every 60s)
+    startPriceTicker() {
+        // Fetch immediately, then every 60 seconds
+        this._tickPrices();
+        this._priceTickerInterval = setInterval(() => this._tickPrices(), 60000);
+        Logger.log('CoinGecko price ticker started (60s interval)', 'info');
+    },
+
+    stopPriceTicker() {
+        if (this._priceTickerInterval) {
+            clearInterval(this._priceTickerInterval);
+            this._priceTickerInterval = null;
+        }
+    },
+
+    async _tickPrices() {
+        try {
+            const codeToGeckoId = CONFIG.COINGECKO_IDS || {};
+            // Get codes from portfolio assets + any coins the auto-trader is monitoring
+            const portfolioCodes = (State.portfolioData.assets || []).map(a => a.code);
+            const autoTraderCodes = typeof AutoTrader !== 'undefined' ? Object.keys(AutoTrader.targets || {}) : [];
+            const allCodes = [...new Set([...portfolioCodes, ...autoTraderCodes])].filter(c => codeToGeckoId[c]);
+
+            if (allCodes.length === 0) return;
+
+            const geckoIds = allCodes.map(c => codeToGeckoId[c]).join(',');
+            const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd`;
+
+            const res = await fetch(url);
+            if (!res.ok) return;
+
+            const data = await res.json();
+
+            // Build code → geckoId reverse map
+            const geckoIdToCode = {};
+            for (const [code, geckoId] of Object.entries(codeToGeckoId)) {
+                geckoIdToCode[geckoId] = code;
+            }
+
+            // Update live rates
+            for (const [geckoId, prices] of Object.entries(data)) {
+                if (prices.usd) {
+                    const code = geckoIdToCode[geckoId];
+                    if (code) {
+                        State.liveRates[code] = prices.usd;
+                        // Also update portfolio asset if it exists
+                        const asset = State.portfolioData.assets.find(a => a.code === code);
+                        if (asset) {
+                            asset.usd_price = prices.usd;
+                            asset.usd_value = asset.balance * prices.usd;
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            // Silent fail — prices will use last known or AUD fallback
+        }
     },
 
     async fetchPendingOrders() {
