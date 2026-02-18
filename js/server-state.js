@@ -60,13 +60,14 @@ const ServerState = {
             }
 
             // ── Resume auto-trading if it was active ──
-            if (data.autoActive && data.autoActive.isActive && data.autoActive.basePrices) {
-                const basePrices = data.autoActive.basePrices;
-                const coinCount = Object.keys(basePrices).length;
-                if (coinCount > 0) {
+            if (data.autoActive && data.autoActive.isActive) {
+                // Support new targets format and old basePrices format
+                const savedTargets = data.autoActive.targets || data.autoActive.basePrices;
+                if (savedTargets && Object.keys(savedTargets).length > 0) {
+                    const coinCount = Object.keys(savedTargets).length;
                     Logger.log(`ServerState: auto-trading was active (${coinCount} coins) — resuming...`, 'info');
                     // Delay resume slightly to let portfolio data finish loading
-                    setTimeout(() => AutoTrader.resume(basePrices), 2000);
+                    setTimeout(() => AutoTrader.resume(savedTargets), 2000);
                 }
             }
 
@@ -139,6 +140,6 @@ const ServerState = {
     },
 
     saveAutoActive() {
-        this.save({ autoActive: { isActive: AutoTrader.isActive, basePrices: AutoTrader.basePrices } });
+        this.save({ autoActive: { isActive: AutoTrader.isActive, targets: AutoTrader.targets } });
     }
 };

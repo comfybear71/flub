@@ -970,7 +970,7 @@ const UI = {
         const statusEl = document.getElementById('userBotStatus');
         if (statusEl) {
             if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
-                const activeCoins = Object.keys(AutoTrader.basePrices).filter(c => !AutoTrader._isOnCooldown(c));
+                const activeCoins = Object.keys(AutoTrader.targets).filter(c => !AutoTrader._isOnCooldown(c));
                 statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
                 statusEl.style.color = '#22c55e';
             } else {
@@ -1096,7 +1096,7 @@ const UI = {
             if (!isActive) {
                 monitorEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:11px;padding:12px;background:rgba(0,0,0,0.15);border-radius:8px;">Bot is not currently running.</div>';
             } else {
-                const coins = Object.keys(AutoTrader.basePrices);
+                const coins = Object.keys(AutoTrader.targets);
                 const activeCoins = coins.filter(c => !AutoTrader._isOnCooldown(c));
                 const cdCoins = coins.filter(c => AutoTrader._isOnCooldown(c));
 
@@ -1106,17 +1106,23 @@ const UI = {
                 html += '</div>';
 
                 for (const code of activeCoins) {
-                    const settings = AutoTrader.getSettings(code);
                     const currentPrice = typeof API !== 'undefined' ? API.getRealtimePrice(code) : 0;
-                    const basePrice = AutoTrader.basePrices[code];
-                    if (!basePrice || !currentPrice) continue;
+                    const tgt = AutoTrader.targets[code];
+                    if (!tgt || !currentPrice) continue;
 
-                    const change = ((currentPrice - basePrice) / basePrice) * 100;
-                    const deviation = settings.deviation;
-                    const progress = Math.min(Math.abs(change) / deviation, 1);
                     const tier = AutoTrader.getTier(code);
-                    const buyTrigger = basePrice * (1 - deviation / 100);
-                    const sellTrigger = basePrice * (1 + deviation / 100);
+                    const midPrice = (tgt.buy + tgt.sell) / 2;
+                    const halfRange = (tgt.sell - tgt.buy) / 2;
+                    let progress;
+                    if (currentPrice <= tgt.buy || currentPrice >= tgt.sell) {
+                        progress = 1;
+                    } else if (currentPrice < midPrice) {
+                        progress = (midPrice - currentPrice) / halfRange;
+                    } else {
+                        progress = (currentPrice - midPrice) / halfRange;
+                    }
+                    progress = Math.max(0, Math.min(1, progress));
+                    const change = ((currentPrice - midPrice) / midPrice) * 100;
 
                     let barColor;
                     if (progress < 0.5) barColor = '#3b82f6';
@@ -1136,15 +1142,29 @@ const UI = {
                     html += `<span style="font-size:11px;font-weight:600;color:${barColor};min-width:50px;text-align:right;">${sign}${change.toFixed(2)}%</span>`;
                     html += `</div>`;
                     html += `<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;">`;
-                    html += `<span>Buy &lt; $${buyTrigger.toFixed(2)}</span>`;
+                    html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
                     html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
-                    html += `<span>Sell &gt; $${sellTrigger.toFixed(2)}</span></div></div>`;
+                    html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span></div></div>`;
                 }
 
                 if (cdCoins.length > 0) {
-                    html += `<div style="padding:4px 8px;font-size:9px;color:#64748b;">`;
-                    html += cdCoins.map(c => `${c} (cd: ${AutoTrader._getCooldownRemaining(c)})`).join(' &bull; ');
-                    html += `</div>`;
+                    for (const code of cdCoins) {
+                        const tgt = AutoTrader.targets[code];
+                        const currentPrice = typeof API !== 'undefined' ? API.getRealtimePrice(code) : 0;
+                        const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
+                        const remaining = AutoTrader._getCooldownRemaining(code);
+                        html += `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);opacity:0.5;">`;
+                        html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">`;
+                        html += `<span style="font-size:11px;font-weight:700;color:${style.color};min-width:42px;">${code}</span>`;
+                        html += `<span style="font-size:10px;color:#64748b;">cooldown ${remaining}</span></div>`;
+                        if (tgt && currentPrice) {
+                            html += `<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;">`;
+                            html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
+                            html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+                            html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span></div>`;
+                        }
+                        html += `</div>`;
+                    }
                 }
                 html += '</div>';
                 monitorEl.innerHTML = html;

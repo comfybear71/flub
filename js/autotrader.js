@@ -9,17 +9,18 @@
 //     - Higher deviation (e.g., 5%), lower allocation (e.g., 5%)
 //
 // Logic:
-//   - Records base price for every coin when started
-//   - Checks every 60s if any coin moved ± its tier's deviation%
-//   - Price drops → BUY (allocation% of USDC)
-//   - Price rises → SELL (83% of allocation — accumulation bias)
-//   - 24h cooldown per coin after each trade
+//   - Records buy/sell targets for every coin when started
+//   - Buy target = startPrice - deviation%, Sell target = startPrice + deviation%
+//   - When a BUY triggers: new buy target moves down, sell target stays
+//   - When a SELL triggers: new sell target moves up, buy target stays
+//   - 24h cooldown per coin after each trade (one trade per day max)
+//   - Bot keeps running even when all coins on cooldown
 //   - Always keeps $100 USDC minimum reserve
 
 const AutoTrader = {
     isActive: false,
     monitorInterval: null,
-    basePrices: {},       // { BTC: 98000, ETH: 3500, ... }
+    targets: {},          // { BTC: { buy: 65660, sell: 68340 }, ... }
     cooldowns: {},
     checkCount: 0,
     tradeLog: [],         // { time, coin, side, qty, price, amount }
@@ -131,15 +132,20 @@ const AutoTrader = {
             return;
         }
 
-        // Record base prices for all non-cooldown coins
-        this.basePrices = {};
+        // Record buy/sell targets for all non-cooldown coins
+        this.targets = {};
         cryptoHoldings.forEach(asset => {
             if (!this._isOnCooldown(asset.code)) {
-                this.basePrices[asset.code] = asset.usd_price;
+                const price = asset.usd_price;
+                const dev = this.getSettings(asset.code).deviation;
+                this.targets[asset.code] = {
+                    buy:  price * (1 - dev / 100),
+                    sell: price * (1 + dev / 100)
+                };
             }
         });
 
-        const activeCoins = Object.keys(this.basePrices);
+        const activeCoins = Object.keys(this.targets);
         if (activeCoins.length === 0) {
             this._showError('All coins on cooldown — try again later');
             return;
@@ -152,7 +158,8 @@ const AutoTrader = {
         activeCoins.forEach(code => {
             const s = this.getSettings(code);
             const t = this.getTier(code);
-            Logger.log(`  ${code} (Tier ${t}): ±${s.deviation}% dev, ${s.allocation}% alloc, base $${this.basePrices[code].toFixed(2)}`, 'info');
+            const tgt = this.targets[code];
+            Logger.log(`  ${code} (Tier ${t}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)} (±${s.deviation}%, ${s.allocation}% alloc)`, 'info');
         });
 
         this._updateUI();
@@ -164,25 +171,39 @@ const AutoTrader = {
     },
 
     // Resume auto-trading from saved state (called on page load)
-    resume(savedBasePrices) {
+    resume(savedTargets) {
         if (this.isActive) return; // Already running
 
-        // Use saved base prices instead of recording new ones
-        this.basePrices = savedBasePrices;
-
-        // Remove any coins that are now on cooldown
-        for (const code of Object.keys(this.basePrices)) {
-            if (this._isOnCooldown(code)) {
-                delete this.basePrices[code];
+        // Handle backward compat: old format was { BTC: 67000 }, new is { BTC: { buy, sell } }
+        this.targets = {};
+        for (const [code, val] of Object.entries(savedTargets)) {
+            if (typeof val === 'object' && val.buy && val.sell) {
+                this.targets[code] = val;
+            } else if (typeof val === 'number') {
+                // Old basePrices format — convert using current tier deviation
+                const dev = this.getSettings(code).deviation;
+                this.targets[code] = {
+                    buy:  val * (1 - dev / 100),
+                    sell: val * (1 + dev / 100)
+                };
             }
         }
 
-        const activeCoins = Object.keys(this.basePrices);
+        // Remove any coins that are now on cooldown
+        for (const code of Object.keys(this.targets)) {
+            if (this._isOnCooldown(code)) {
+                delete this.targets[code];
+            }
+        }
+
+        const activeCoins = Object.keys(this.targets);
         if (activeCoins.length === 0) {
-            Logger.log('Auto-trade resume: all coins on cooldown — stopping', 'info');
-            this.isActive = false;
-            this._saveActiveState();
+            Logger.log('Auto-trade resume: all coins on cooldown — waiting...', 'info');
+            // Still mark as active so bot keeps running and resumes when cooldowns expire
+            this.isActive = true;
+            this.checkCount = 0;
             this._updateUI();
+            this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
             return;
         }
 
@@ -193,7 +214,8 @@ const AutoTrader = {
         activeCoins.forEach(code => {
             const s = this.getSettings(code);
             const t = this.getTier(code);
-            Logger.log(`  ${code} (Tier ${t}): ±${s.deviation}% dev, base $${this.basePrices[code].toFixed(2)}`, 'info');
+            const tgt = this.targets[code];
+            Logger.log(`  ${code} (Tier ${t}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)}`, 'info');
         });
 
         this._updateUI();
@@ -228,7 +250,7 @@ const AutoTrader = {
 
         this.checkCount++;
 
-        // Refresh portfolio data every 2 minutes for fresh prices
+        // Refresh portfolio data every 2 checks for fresh prices
         if (this.checkCount % 2 === 0) {
             Logger.log('Refreshing prices...', 'info');
             await API.refreshData();
@@ -236,29 +258,26 @@ const AutoTrader = {
 
         let tradeExecuted = false;
 
-        for (const code of Object.keys(this.basePrices)) {
+        for (const code of Object.keys(this.targets)) {
             if (this._isOnCooldown(code)) continue;
 
             const settings = this.getSettings(code);
             const currentPrice = API.getRealtimePrice(code);
-            const basePrice = this.basePrices[code];
+            const tgt = this.targets[code];
 
-            if (!basePrice || !currentPrice) continue;
+            if (!tgt || !currentPrice) continue;
 
-            const change = ((currentPrice - basePrice) / basePrice) * 100;
-            const tier = this.getTier(code);
-
-            // Check if deviation threshold hit
-            if (Math.abs(change) >= settings.deviation) {
-                if (change <= -settings.deviation) {
-                    Logger.log(`${code} dropped ${change.toFixed(2)}% (Tier ${tier}, target ±${settings.deviation}%) — BUY`, 'success');
-                    await this._executeBuy(code, currentPrice, settings);
-                    tradeExecuted = true;
-                } else {
-                    Logger.log(`${code} rose +${change.toFixed(2)}% (Tier ${tier}, target ±${settings.deviation}%) — SELL`, 'success');
-                    await this._executeSell(code, currentPrice, settings);
-                    tradeExecuted = true;
-                }
+            // Check buy target (price dropped below)
+            if (currentPrice <= tgt.buy) {
+                Logger.log(`${code} hit buy target $${tgt.buy.toFixed(2)} (price: $${currentPrice.toFixed(2)}) — BUY`, 'success');
+                await this._executeBuy(code, currentPrice, settings);
+                tradeExecuted = true;
+            }
+            // Check sell target (price rose above)
+            else if (currentPrice >= tgt.sell) {
+                Logger.log(`${code} hit sell target $${tgt.sell.toFixed(2)} (price: $${currentPrice.toFixed(2)}) — SELL`, 'success');
+                await this._executeSell(code, currentPrice, settings);
+                tradeExecuted = true;
             }
         }
 
@@ -272,11 +291,11 @@ const AutoTrader = {
         // Update status display with visual indicators + thresholds
         this._updateStatus();
 
-        // Check if all coins are now on cooldown
-        const remaining = Object.keys(this.basePrices).filter(c => !this._isOnCooldown(c));
-        if (remaining.length === 0) {
-            Logger.log('All coins on cooldown — auto-trading complete', 'info');
-            this.stop();
+        // Log cooldown status (bot keeps running — coins resume when cooldowns expire)
+        const remaining = Object.keys(this.targets).filter(c => !this._isOnCooldown(c));
+        const onCooldown = Object.keys(this.targets).length - remaining.length;
+        if (remaining.length === 0 && onCooldown > 0) {
+            Logger.log(`All ${onCooldown} coins on cooldown — waiting for cooldowns to expire...`, 'info');
         }
     },
 
@@ -308,7 +327,10 @@ const AutoTrader = {
                 Logger.log(`${code} buy executed!`, 'success');
                 this._addTradeLog(code, 'BUY', quantity, currentPrice, tradeAmount);
                 this._setCooldown(code);
-                delete this.basePrices[code];
+                // Move buy target down — sell target stays where it is
+                const oldBuy = this.targets[code].buy;
+                this.targets[code].buy = currentPrice * (1 - settings.deviation / 100);
+                Logger.log(`${code} buy target: $${oldBuy.toFixed(2)} → $${this.targets[code].buy.toFixed(2)} (sell stays $${this.targets[code].sell.toFixed(2)})`, 'info');
             } else {
                 const error = await response.text();
                 Logger.log(`${code} buy failed: ${error}`, 'error');
@@ -350,7 +372,10 @@ const AutoTrader = {
                 Logger.log(`${code} sell executed!`, 'success');
                 this._addTradeLog(code, 'SELL', quantity, currentPrice, sellValue);
                 this._setCooldown(code);
-                delete this.basePrices[code];
+                // Move sell target up — buy target stays where it is
+                const oldSell = this.targets[code].sell;
+                this.targets[code].sell = currentPrice * (1 + settings.deviation / 100);
+                Logger.log(`${code} sell target: $${oldSell.toFixed(2)} → $${this.targets[code].sell.toFixed(2)} (buy stays $${this.targets[code].buy.toFixed(2)})`, 'info');
             } else {
                 const error = await response.text();
                 Logger.log(`${code} sell failed: ${error}`, 'error');
@@ -374,7 +399,7 @@ const AutoTrader = {
             if (badge) { badge.style.display = 'inline-block'; badge.textContent = 'ACTIVE'; }
             if (status) {
                 status.style.display = 'block';
-                const count = Object.keys(this.basePrices).filter(c => !this._isOnCooldown(c)).length;
+                const count = Object.keys(this.targets).filter(c => !this._isOnCooldown(c)).length;
                 status.textContent = `Monitoring ${count} coins every 3 min...`;
             }
         } else {
@@ -392,7 +417,7 @@ const AutoTrader = {
         const status = document.getElementById('autoStatus');
         if (!status) return;
 
-        const coins = Object.keys(this.basePrices);
+        const coins = Object.keys(this.targets);
         const activeCoins = coins.filter(c => !this._isOnCooldown(c));
         const cdCoins     = coins.filter(c => this._isOnCooldown(c));
 
@@ -403,35 +428,38 @@ const AutoTrader = {
         // ── Per-coin threshold table ──
         html += '<div style="display:flex; flex-direction:column; gap:4px;">';
         for (const code of activeCoins) {
-            const settings     = this.getSettings(code);
             const currentPrice = API.getRealtimePrice(code);
-            const basePrice    = this.basePrices[code];
-            if (!basePrice || !currentPrice) continue;
+            const tgt = this.targets[code];
+            if (!tgt || !currentPrice) continue;
 
-            const change    = ((currentPrice - basePrice) / basePrice) * 100;
-            const deviation = settings.deviation;
-            const progress  = Math.min(Math.abs(change) / deviation, 1); // 0..1 how close to trigger
-            const tier      = this.getTier(code);
+            const tier = this.getTier(code);
 
-            // Buy trigger (price drops) / Sell trigger (price rises)
-            const buyTrigger  = basePrice * (1 - deviation / 100);
-            const sellTrigger = basePrice * (1 + deviation / 100);
-
-            // Color gradient: grey → yellow → orange → red based on proximity
-            let barColor, textColor;
-            if (progress < 0.5) {
-                barColor  = '#3b82f6';  // blue — calm
-                textColor = '#94a3b8';
-            } else if (progress < 0.75) {
-                barColor  = '#eab308';  // yellow — warming up
-                textColor = '#eab308';
-            } else if (progress < 0.95) {
-                barColor  = '#f97316';  // orange — close
-                textColor = '#f97316';
+            // Progress: how close to the nearest target (0 = midpoint, 1 = at target)
+            const midPrice = (tgt.buy + tgt.sell) / 2;
+            const halfRange = (tgt.sell - tgt.buy) / 2;
+            let progress, direction;
+            if (currentPrice <= tgt.buy) {
+                progress = 1; direction = 'buy';
+            } else if (currentPrice >= tgt.sell) {
+                progress = 1; direction = 'sell';
+            } else if (currentPrice < midPrice) {
+                progress = (midPrice - currentPrice) / halfRange;
+                direction = 'buy';
             } else {
-                barColor  = '#ef4444';  // red — about to trigger
-                textColor = '#ef4444';
+                progress = (currentPrice - midPrice) / halfRange;
+                direction = 'sell';
             }
+            progress = Math.max(0, Math.min(1, progress));
+
+            // Change % from midpoint
+            const change = ((currentPrice - midPrice) / midPrice) * 100;
+
+            // Color gradient based on proximity
+            let barColor;
+            if (progress < 0.5)      barColor = '#3b82f6';  // blue — calm
+            else if (progress < 0.75) barColor = '#eab308';  // yellow — warming up
+            else if (progress < 0.95) barColor = '#f97316';  // orange — close
+            else                      barColor = '#ef4444';  // red — about to trigger
 
             const sign = change >= 0 ? '+' : '';
             const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
@@ -444,22 +472,39 @@ const AutoTrader = {
             html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
             html += `<div style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.5s;"></div>`;
             html += `</div>`;
-            html += `<span style="font-size:11px; font-weight:600; color:${textColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
+            html += `<span style="font-size:11px; font-weight:600; color:${barColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
             html += `</div>`;
             // Row 2: Price thresholds
             html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
-            html += `<span>Buy &lt; $${buyTrigger.toFixed(2)}</span>`;
+            html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
             html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
-            html += `<span>Sell &gt; $${sellTrigger.toFixed(2)}</span>`;
+            html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
             html += `</div>`;
             html += `</div>`;
         }
 
-        // Cooldown coins (compact)
+        // Cooldown coins (show their targets too)
         if (cdCoins.length > 0) {
-            html += `<div style="padding:4px 8px; font-size:9px; color:#64748b;">`;
-            html += cdCoins.map(c => `${c} (cd: ${this._getCooldownRemaining(c)})`).join(' &bull; ');
-            html += `</div>`;
+            for (const code of cdCoins) {
+                const tgt = this.targets[code];
+                const currentPrice = API.getRealtimePrice(code);
+                const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
+                const remaining = this._getCooldownRemaining(code);
+
+                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); opacity:0.5;">`;
+                html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
+                html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
+                html += `<span style="font-size:10px; color:#64748b;">cooldown ${remaining}</span>`;
+                html += `</div>`;
+                if (tgt && currentPrice) {
+                    html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
+                    html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
+                    html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+                    html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
+                    html += `</div>`;
+                }
+                html += `</div>`;
+            }
         }
         html += '</div>';
 
@@ -565,7 +610,7 @@ const AutoTrader = {
     },
 
     _saveActiveState() {
-        const state = { isActive: this.isActive, basePrices: this.basePrices };
+        const state = { isActive: this.isActive, targets: this.targets };
         localStorage.setItem('auto_active', JSON.stringify(state));
         if (typeof ServerState !== 'undefined') ServerState.saveAutoActive();
     },
