@@ -1651,3 +1651,101 @@ input[type="range"]::-moz-range-thumb {
     display: flex;
     justify-content: space-between;
 }
+
+/* ══════════════════════════════════════════
+   User Insight Cards (read-only)
+   ══════════════════════════════════════════ */
+.user-insight-cards {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 0 4px;
+}
+
+.insight-card {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.insight-card:active {
+    transform: scale(0.97);
+}
+
+.insight-card.pending-card {
+    background: linear-gradient(135deg, rgba(168,85,247,0.12), rgba(168,85,247,0.04));
+    border-color: rgba(168,85,247,0.2);
+}
+
+.insight-card.pending-card:hover {
+    background: linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.08));
+    border-color: rgba(168,85,247,0.35);
+}
+
+.insight-card.bot-card {
+    background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0.04));
+    border-color: rgba(59,130,246,0.2);
+}
+
+.insight-card.bot-card:hover {
+    background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(59,130,246,0.08));
+    border-color: rgba(59,130,246,0.35);
+}
+
+.insight-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.insight-card-icon.pending-icon {
+    background: rgba(168,85,247,0.15);
+    color: #a855f7;
+}
+
+.insight-card-icon.bot-icon {
+    background: rgba(59,130,246,0.15);
+    color: #3b82f6;
+}
+
+.insight-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.insight-card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 2px;
+}
+
+.insight-card-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.insight-card-arrow {
+    color: #475569;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.insight-card:hover .insight-card-arrow {
+    transform: translateX(2px);
+    color: #94a3b8;
+}

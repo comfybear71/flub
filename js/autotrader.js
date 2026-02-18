@@ -375,7 +375,7 @@ const AutoTrader = {
             if (status) {
                 status.style.display = 'block';
                 const count = Object.keys(this.basePrices).filter(c => !this._isOnCooldown(c)).length;
-                status.textContent = `Monitoring ${count} coins every 60s...`;
+                status.textContent = `Monitoring ${count} coins every 3 min...`;
             }
         } else {
             if (btn) btn.style.background = '#a855f7';
@@ -383,6 +383,9 @@ const AutoTrader = {
             if (badge) badge.style.display = 'none';
             if (status) status.style.display = 'none';
         }
+
+        // Keep user insight cards in sync
+        if (typeof UI !== 'undefined') UI.updateUserInsightCards();
     },
 
     _updateStatus() {

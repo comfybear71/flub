@@ -38,6 +38,10 @@ const UI = {
             // Show swipe dots for user
             const dots = document.getElementById('chartDots');
             if (dots) dots.style.display = 'block';
+            // Show insight cards
+            const cards = document.getElementById('userInsightCards');
+            if (cards) cards.style.display = 'flex';
+            this.updateUserInsightCards();
             // Init swipe gestures
             this._initChartSwipe();
             // Close any open trading panel
@@ -474,6 +478,9 @@ const UI = {
             3: 'Cancelled',
             4: 'Filled'
         };
+
+        // Also update user insight cards
+        this.updateUserInsightCards();
 
         container.innerHTML = orders.map(order => {
             const side       = order.isBuy ? 'buy' : 'sell';
@@ -947,6 +954,233 @@ const UI = {
         this.calculateUserAllocation();
 
         Logger.log(`Total deposited: $${total.toFixed(2)} USDC`, 'success');
+    },
+
+    // ── User Insight Cards (read-only views) ───────────────────────────────
+
+    updateUserInsightCards() {
+        if (State.userRole !== 'user') return;
+
+        // Pending orders count
+        const count = (State.pendingOrders || []).length;
+        const countEl = document.getElementById('userPendingCount');
+        if (countEl) countEl.textContent = count === 0 ? 'No orders' : `${count} order${count !== 1 ? 's' : ''}`;
+
+        // Auto trader status
+        const statusEl = document.getElementById('userBotStatus');
+        if (statusEl) {
+            if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
+                const activeCoins = Object.keys(AutoTrader.basePrices).filter(c => !AutoTrader._isOnCooldown(c));
+                statusEl.textContent = `Active · ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                statusEl.style.color = '#22c55e';
+            } else {
+                statusEl.textContent = 'Inactive';
+                statusEl.style.color = '#64748b';
+            }
+        }
+    },
+
+    showUserPendingOrders() {
+        const modal = document.getElementById('userPendingModal');
+        const list = document.getElementById('userPendingList');
+        if (!modal || !list) return;
+
+        const orders = State.pendingOrders || [];
+
+        if (orders.length === 0) {
+            list.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px;">No pending orders right now.</div>';
+        } else {
+            const ORDER_TYPE_LABELS = { 1:'Market Buy', 2:'Market Sell', 3:'Limit Buy', 4:'Limit Sell', 5:'Stop Buy', 6:'Stop Sell' };
+
+            list.innerHTML = orders.map(order => {
+                const side = order.isBuy ? 'buy' : 'sell';
+                const style = CONFIG.ASSET_STYLES[order.assetCode] ?? { color:'#666', icon: order.assetCode?.[0] ?? '?' };
+                const typeLabel = ORDER_TYPE_LABELS[order.orderType] ?? 'Trigger';
+                const currSymbol = order.priCode === 'AUD' ? 'A$' : '$';
+                const maxDist = 30;
+                const clampedDist = Math.min(order.distance, maxDist);
+                const proximity = Math.max(0, ((maxDist - clampedDist) / maxDist) * 100);
+
+                let distClass = 'far';
+                if (order.distance < 2) distClass = 'very-close';
+                else if (order.distance < 5) distClass = 'close';
+
+                const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger);
+                const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
+                const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity);
+
+                return `
+                <div class="pending-order-card ${side}">
+                    <div class="pending-order-top">
+                        <div class="pending-order-left">
+                            <div class="coin-icon-wrapper" style="width:28px;height:28px;background:${style.color}20;color:${style.color};font-size:12px;">
+                                <span class="coin-icon-letter" style="font-size:12px;">${style.icon}</span>
+                            </div>
+                            <span class="pending-order-asset">${order.assetCode}</span>
+                            <span class="pending-order-badge ${side}">${typeLabel}</span>
+                        </div>
+                        <div class="pending-order-right">
+                            <div class="pending-order-trigger">${triggerFormatted}</div>
+                            <div class="pending-order-qty">${qtyDisplay} ${order.priCode}</div>
+                        </div>
+                    </div>
+                    <div class="pending-order-proximity">
+                        <div class="proximity-bar-track">
+                            <div class="proximity-bar-fill ${side}" style="width:${proximity}%;"></div>
+                        </div>
+                        <span class="proximity-label ${distClass}">${order.distance.toFixed(1)}% away</span>
+                    </div>
+                    <div class="pending-order-current">
+                        <span>Now: ${currentFormatted}</span>
+                        <span>Trigger: ${triggerFormatted}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        modal.classList.add('show');
+    },
+
+    showUserAutoTrader() {
+        const modal = document.getElementById('userAutoTraderModal');
+        if (!modal) return;
+
+        const badge = document.getElementById('userBotBadge');
+        const settingsEl = document.getElementById('userBotSettings');
+        const monitorEl = document.getElementById('userBotMonitor');
+        const logEl = document.getElementById('userBotTradeLog');
+
+        const isActive = typeof AutoTrader !== 'undefined' && AutoTrader.isActive;
+
+        // Badge
+        if (badge) {
+            if (isActive) {
+                badge.style.display = 'inline-block';
+                badge.textContent = 'ACTIVE';
+                badge.style.background = 'rgba(34,197,94,0.2)';
+                badge.style.color = '#22c55e';
+            } else {
+                badge.style.display = 'inline-block';
+                badge.textContent = 'INACTIVE';
+                badge.style.background = 'rgba(100,116,139,0.2)';
+                badge.style.color = '#64748b';
+            }
+        }
+
+        // Settings summary
+        if (settingsEl && typeof AutoTrader !== 'undefined') {
+            settingsEl.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div style="padding:10px;border-radius:10px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);">
+                    <div style="font-size:10px;font-weight:700;color:#3b82f6;margin-bottom:6px;">Tier 1 – Blue Chips</div>
+                    <div style="font-size:10px;color:#94a3b8;">Dev: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier1.deviation}%</span></div>
+                    <div style="font-size:10px;color:#94a3b8;">Alloc: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier1.allocation}%</span></div>
+                    <div style="font-size:9px;color:#64748b;margin-top:4px;">${AutoTrader.TIER1_COINS.join(', ')}</div>
+                </div>
+                <div style="padding:10px;border-radius:10px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.15);">
+                    <div style="font-size:10px;font-weight:700;color:#eab308;margin-bottom:6px;">Tier 2 – Alts</div>
+                    <div style="font-size:10px;color:#94a3b8;">Dev: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier2.deviation}%</span></div>
+                    <div style="font-size:10px;color:#94a3b8;">Alloc: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier2.allocation}%</span></div>
+                    <div style="font-size:9px;color:#64748b;margin-top:4px;">All other coins</div>
+                </div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Cooldown: ${AutoTrader.COOLDOWN_HOURS}h</span>
+                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Reserve: $${AutoTrader.MIN_USDC_RESERVE}</span>
+                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Check: 3 min</span>
+            </div>`;
+        }
+
+        // Monitoring status
+        if (monitorEl && typeof AutoTrader !== 'undefined') {
+            if (!isActive) {
+                monitorEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:11px;padding:12px;background:rgba(0,0,0,0.15);border-radius:8px;">Bot is not currently running.</div>';
+            } else {
+                const coins = Object.keys(AutoTrader.basePrices);
+                const activeCoins = coins.filter(c => !AutoTrader._isOnCooldown(c));
+                const cdCoins = coins.filter(c => AutoTrader._isOnCooldown(c));
+
+                let html = '<div style="display:flex;flex-direction:column;gap:4px;">';
+                html += `<div style="font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
+                if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;">(${cdCoins.length} on cooldown)</span>`;
+                html += '</div>';
+
+                for (const code of activeCoins) {
+                    const settings = AutoTrader.getSettings(code);
+                    const currentPrice = typeof API !== 'undefined' ? API.getRealtimePrice(code) : 0;
+                    const basePrice = AutoTrader.basePrices[code];
+                    if (!basePrice || !currentPrice) continue;
+
+                    const change = ((currentPrice - basePrice) / basePrice) * 100;
+                    const deviation = settings.deviation;
+                    const progress = Math.min(Math.abs(change) / deviation, 1);
+                    const tier = AutoTrader.getTier(code);
+                    const buyTrigger = basePrice * (1 - deviation / 100);
+                    const sellTrigger = basePrice * (1 + deviation / 100);
+
+                    let barColor;
+                    if (progress < 0.5) barColor = '#3b82f6';
+                    else if (progress < 0.75) barColor = '#eab308';
+                    else if (progress < 0.95) barColor = '#f97316';
+                    else barColor = '#ef4444';
+
+                    const sign = change >= 0 ? '+' : '';
+                    const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
+
+                    html += `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">`;
+                    html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">`;
+                    html += `<span style="font-size:11px;font-weight:700;color:${style.color};min-width:42px;">${code}</span>`;
+                    html += `<span style="font-size:10px;color:#64748b;">T${tier}</span>`;
+                    html += `<div style="flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">`;
+                    html += `<div style="width:${(progress * 100).toFixed(0)}%;height:100%;background:${barColor};border-radius:2px;"></div></div>`;
+                    html += `<span style="font-size:11px;font-weight:600;color:${barColor};min-width:50px;text-align:right;">${sign}${change.toFixed(2)}%</span>`;
+                    html += `</div>`;
+                    html += `<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;">`;
+                    html += `<span>Buy &lt; $${buyTrigger.toFixed(2)}</span>`;
+                    html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+                    html += `<span>Sell &gt; $${sellTrigger.toFixed(2)}</span></div></div>`;
+                }
+
+                if (cdCoins.length > 0) {
+                    html += `<div style="padding:4px 8px;font-size:9px;color:#64748b;">`;
+                    html += cdCoins.map(c => `${c} (cd: ${AutoTrader._getCooldownRemaining(c)})`).join(' &bull; ');
+                    html += `</div>`;
+                }
+                html += '</div>';
+                monitorEl.innerHTML = html;
+            }
+        }
+
+        // Trade log
+        if (logEl && typeof AutoTrader !== 'undefined') {
+            const log = AutoTrader.tradeLog || [];
+            if (log.length === 0) {
+                logEl.innerHTML = '<div style="font-size:10px;color:#64748b;text-align:center;padding:12px;">No auto-trades yet.</div>';
+            } else {
+                let html = '';
+                for (const entry of log.slice(0, 20)) {
+                    const time = new Date(entry.time);
+                    const timeStr = time.toLocaleDateString('en-AU', { day:'2-digit', month:'short' }) + ' ' +
+                                    time.toLocaleTimeString('en-AU', { hour:'2-digit', minute:'2-digit', hour12:false });
+                    const isBuy = entry.side === 'BUY';
+                    const sideColor = isBuy ? '#22c55e' : '#ef4444';
+                    const sideIcon = isBuy ? '&#9650;' : '&#9660;';
+                    const style = CONFIG.ASSET_STYLES[entry.coin] || { color:'#666' };
+
+                    html += `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:10px;">`;
+                    html += `<span style="color:${sideColor};font-weight:700;font-size:11px;">${sideIcon}</span>`;
+                    html += `<span style="color:${style.color};font-weight:600;min-width:36px;">${entry.coin}</span>`;
+                    html += `<span style="color:${sideColor};font-weight:600;">${entry.side}</span>`;
+                    html += `<span style="color:#94a3b8;flex:1;">${entry.quantity} @ $${entry.price.toFixed(2)}</span>`;
+                    html += `<span style="color:#c4b5fd;font-weight:600;">$${entry.amount.toFixed(2)}</span>`;
+                    html += `<span style="color:#64748b;font-size:9px;min-width:75px;text-align:right;">${timeStr}</span>`;
+                    html += `</div>`;
+                }
+                logEl.innerHTML = html;
+            }
+        }
+
+        modal.classList.add('show');
     },
 
     loadDeposits(wallet) {
