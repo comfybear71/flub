@@ -752,6 +752,18 @@ const UI = {
         document.getElementById('chartToggleBtn')?.classList.remove('active');
     },
 
+    /** Quick-nav: open trading view with the top asset and switch to the given order type */
+    quickNav(type) {
+        if (State.userRole !== 'admin') return;
+        const assets = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC'
+        );
+        if (!assets.length) return;
+        // Pick the top asset (first in list)
+        this.openTrade(assets[0].code);
+        this.setOrderType(type);
+    },
+
     // ── Mini Chart ────────────────────────────────────────────────────────────
 
     toggleMiniChart() {

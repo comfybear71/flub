@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260220a">
+    <link rel="stylesheet" href="css/styles.css?v=20260220b">
 </head>
 <body class="pb-20">
 
@@ -73,6 +73,22 @@
                         <span class="cash-label">AUD</span>
                         <span class="cash-amount" id="headerAudBalance">$0.00</span>
                     </div>
+                </div>
+
+                <!-- Admin quick-nav buttons -->
+                <div class="admin-only" id="adminQuickNav" style="display:flex;justify-content:center;gap:8px;margin-top:10px;">
+                    <button onclick="UI.quickNav('instant')" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:20px;color:#60a5fa;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Instant
+                    </button>
+                    <button onclick="UI.quickNav('trigger')" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.25);border-radius:20px;color:#c084fc;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                        Trigger
+                    </button>
+                    <button onclick="UI.quickNav('auto')" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.25);border-radius:20px;color:#a855f7;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                        Auto
+                    </button>
                 </div>
 
                 <!-- User deposited + wallet balance (user-only) -->

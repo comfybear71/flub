@@ -32,7 +32,7 @@ const PriceAnimator = {
             return;
         }
 
-        // Direction flash
+        // Direction flash (text + card border glow)
         const prevKnown = this._prevValues.get(key);
         if (prevKnown !== undefined && prevKnown !== newVal) {
             const direction = newVal > prevKnown ? 'up' : 'down';
@@ -40,6 +40,16 @@ const PriceAnimator = {
             // Force reflow so animation restarts
             void el.offsetWidth;
             el.classList.add(`price-flash-${direction}`);
+
+            // Bubble glow to parent .card (only once per card per tick)
+            const card = el.closest('.card');
+            if (card && !card.dataset.flashing) {
+                card.dataset.flashing = '1';
+                card.classList.remove('card-flash-up', 'card-flash-down');
+                void card.offsetWidth;
+                card.classList.add(`card-flash-${direction}`);
+                setTimeout(() => { delete card.dataset.flashing; }, 1600);
+            }
         }
         this._prevValues.set(key, newVal);
 
