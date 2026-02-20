@@ -381,7 +381,7 @@ const UI = {
                 const displayValue = asset.usd_value * (State.userAllocation / 100);
 
                 return `
-                <div class="card" style="cursor:default;">
+                <div class="card" data-code="${asset.code}" style="cursor:default;">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-3">
                             <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
@@ -389,12 +389,12 @@ const UI = {
                             </div>
                             <div>
                                 <div class="font-bold text-sm">${asset.code}</div>
-                                <div class="text-xs text-slate-400">${Assets.formatNumber(displayBalance)} ${asset.code}</div>
+                                <div class="text-xs text-slate-400" data-code="${asset.code}" data-field="balance">${Assets.formatNumber(displayBalance)} ${asset.code}</div>
                             </div>
                         </div>
                         <div class="text-right">
-                            <div class="font-bold text-sm">${Assets.formatCurrency(displayValue)}</div>
-                            <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
+                            <div class="font-bold text-sm price-value" data-code="${asset.code}" data-field="value">${Assets.formatCurrency(displayValue)}</div>
+                            <div class="text-xs text-slate-400 price-unit" data-code="${asset.code}" data-field="price">${Assets.formatCurrency(asset.usd_price)} USD</div>
                             <div class="text-xs font-semibold" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
                         </div>
                     </div>
@@ -422,7 +422,7 @@ const UI = {
             const cursorStyle = isAdmin ? '' : 'cursor:default;';
 
             return `
-            <div class="card" ${clickAction} style="${cursorStyle}">
+            <div class="card" data-code="${asset.code}" ${clickAction} style="${cursorStyle}">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
                         <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
@@ -434,8 +434,8 @@ const UI = {
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-bold text-sm">${Assets.formatCurrency(asset.usd_value)}</div>
-                        <div class="text-xs text-slate-400">${Assets.formatCurrency(asset.usd_price)} USD</div>
+                        <div class="font-bold text-sm price-value" data-code="${asset.code}" data-field="value">${Assets.formatCurrency(asset.usd_value)}</div>
+                        <div class="text-xs text-slate-400 price-unit" data-code="${asset.code}" data-field="price">${Assets.formatCurrency(asset.usd_price)} USD</div>
                         <div class="text-xs font-semibold" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
                     </div>
                 </div>
@@ -446,6 +446,117 @@ const UI = {
         if (isAdmin && typeof AutoTrader !== 'undefined') {
             AutoTrader.renderTierBadges();
         }
+    },
+
+    // ── Animated Price Updates ──────────────────────────────────────────────
+
+    /**
+     * Called after each CoinGecko price tick.
+     * Animates holdings card prices, doughnut centre, and header balances.
+     * Display-only — never touches State.liveRates or trading logic.
+     */
+    animatePriceUpdate() {
+        if (typeof PriceAnimator === 'undefined') return;
+
+        const isUser = State.userRole === 'user';
+        const allocation = State.userAllocation / 100;
+        const showUserHoldings = isUser && this.holdingsView === 'mine';
+
+        // ── Holdings card values ──
+        document.querySelectorAll('.price-value[data-code]').forEach(el => {
+            const code = el.dataset.code;
+            const asset = State.portfolioData.assets.find(a => a.code === code);
+            if (!asset) return;
+            const val = showUserHoldings ? (asset.usd_value * allocation) : asset.usd_value;
+            PriceAnimator.animateEl(el, val, v => Assets.formatCurrency(v));
+        });
+
+        // ── Holdings card per-unit prices ──
+        document.querySelectorAll('.price-unit[data-code]').forEach(el => {
+            const code = el.dataset.code;
+            const asset = State.portfolioData.assets.find(a => a.code === code);
+            if (!asset) return;
+            PriceAnimator.animateEl(el, asset.usd_price, v => Assets.formatCurrency(v) + ' USD');
+        });
+
+        // ── Doughnut centre total ──
+        const totalEl = document.getElementById('total-value');
+        if (totalEl) {
+            const cryptoAssets = State.portfolioData.assets.filter(
+                a => a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
+            );
+            const usdcVal = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
+            const audVal = State.portfolioData.assets.find(a => a.code === 'AUD')?.usd_value ?? 0;
+            const cryptoTotal = cryptoAssets.reduce((s, a) => s + (a.usd_value || 0), 0);
+
+            let displayTotal;
+            if (isUser && this.chartView === 'user') {
+                displayTotal = State.userDeposits || 0;
+            } else {
+                displayTotal = cryptoTotal + usdcVal + audVal;
+            }
+            PriceAnimator.animateEl(totalEl, displayTotal, v => Assets.formatCurrency(v));
+        }
+
+        // ── Header cash balances (admin) ──
+        const headerUsdc = document.getElementById('headerUsdcBalance');
+        const headerAud = document.getElementById('headerAudBalance');
+        if (headerUsdc) {
+            const usdcVal = State.portfolioData.assets.find(a => a.code === 'USDC')?.usd_value ?? 0;
+            PriceAnimator.animateEl(headerUsdc, usdcVal, v => Assets.formatCurrency(v));
+        }
+        if (headerAud) {
+            const audVal = State.portfolioData.assets.find(a => a.code === 'AUD')?.usd_value ?? 0;
+            PriceAnimator.animateEl(headerAud, audVal, v => Assets.formatCurrency(v));
+        }
+
+        // ── Update doughnut chart data (silent, no rebuild) ──
+        if (State.portfolioChart) {
+            const cryptoAssets = State.portfolioData.assets.filter(
+                a => a.code !== 'AUD' && a.code !== 'USDC' && a.usd_value > 10
+            );
+            if (isUser && this.chartView === 'user' && allocation > 0) {
+                State.portfolioChart.data.datasets[0].data = cryptoAssets.map(a => (a.usd_value || 0) * allocation);
+            } else {
+                State.portfolioChart.data.datasets[0].data = cryptoAssets.map(a => a.usd_value || 0);
+            }
+            State.portfolioChart.update('none');  // 'none' = no animation, instant
+        }
+    },
+
+    /**
+     * Initial count-up from zero on first portfolio load.
+     */
+    animateInitialPrices() {
+        if (typeof PriceAnimator === 'undefined') return;
+
+        // Doughnut centre
+        const totalEl = document.getElementById('total-value');
+        if (totalEl) {
+            const val = PriceAnimator._parseDisplayed(totalEl.textContent);
+            if (val > 0) PriceAnimator.animateFromZero(totalEl, val, v => Assets.formatCurrency(v));
+        }
+
+        // Header balances
+        ['headerUsdcBalance', 'headerAudBalance'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const val = PriceAnimator._parseDisplayed(el.textContent);
+                if (val > 0) PriceAnimator.animateFromZero(el, val, v => Assets.formatCurrency(v));
+            }
+        });
+
+        // Holdings card values
+        document.querySelectorAll('.price-value[data-code]').forEach(el => {
+            const val = PriceAnimator._parseDisplayed(el.textContent);
+            if (val > 0) PriceAnimator.animateFromZero(el, val, v => Assets.formatCurrency(v));
+        });
+
+        // Holdings card per-unit prices
+        document.querySelectorAll('.price-unit[data-code]').forEach(el => {
+            const val = PriceAnimator._parseDisplayed(el.textContent);
+            if (val > 0) PriceAnimator.animateFromZero(el, val, v => Assets.formatCurrency(v) + ' USD');
+        });
     },
 
     // ── Pending Orders ──────────────────────────────────────────────────────
@@ -1196,7 +1307,7 @@ const UI = {
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                 <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Cooldown: ${AutoTrader.COOLDOWN_HOURS}h</span>
                 <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Reserve: $${AutoTrader.MIN_USDC_RESERVE}</span>
-                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Prices: 60s</span>
+                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Prices: 30s</span>
             </div>`;
         }
 

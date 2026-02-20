@@ -95,6 +95,10 @@ const API = {
             UI.renderPortfolio();
             UI.renderHoldings();
             UI.updateLastUpdated();
+
+            // Trigger count-up from zero on initial load
+            requestAnimationFrame(() => UI.animateInitialPrices());
+
             Logger.log(`Loaded ${State.portfolioData.assets.length} assets`, 'success');
 
             // Fetch pending orders in background
@@ -122,8 +126,8 @@ const API = {
         return State.portfolioData.assets.find(a => a.code === assetCode)?.usd_price ?? 0;
     },
 
-    // Start background CoinGecko price ticker (every 60s)
-    PRICE_TICK_INTERVAL: 60,  // seconds
+    // Start background CoinGecko price ticker (every 30s)
+    PRICE_TICK_INTERVAL: 30,  // seconds
 
     startPriceTicker() {
         this._tickPrices();
@@ -145,11 +149,18 @@ const API = {
     },
 
     _updatePriceCountdown() {
-        const el = document.getElementById('priceCountdown');
-        if (!el || !State.lastPriceTick) return;
+        if (!State.lastPriceTick) return;
         const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
         const remaining = Math.max(0, this.PRICE_TICK_INTERVAL - elapsed);
-        el.textContent = `${remaining}s`;
+        const text = `${remaining}s`;
+
+        // Admin monitoring countdown
+        const el = document.getElementById('priceCountdown');
+        if (el) el.textContent = text;
+
+        // Holdings page countdown
+        const hEl = document.getElementById('holdingsCountdown');
+        if (hEl) hEl.textContent = text;
     },
 
     async _tickPrices() {
@@ -190,6 +201,11 @@ const API = {
                         }
                     }
                 }
+            }
+
+            // Trigger animated price update in UI (display-only, no trading logic)
+            if (typeof UI !== 'undefined') {
+                UI.animatePriceUpdate();
             }
         } catch (err) {
             // Silent fail — prices will use last known or AUD fallback

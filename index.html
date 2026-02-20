@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260218d">
+    <link rel="stylesheet" href="css/styles.css?v=20260220a">
 </head>
 <body class="pb-20">
 
@@ -20,7 +20,7 @@
             <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
             Connecting...
         </div>
-        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7.4</div>
+        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7.5</div>
         <div style="display:flex; align-items:center; gap:8px;">
             <button onclick="PhantomWallet.isConnected ? PhantomWallet.toggleWalletPanel() : PhantomWallet.connect()" class="phantom-btn" id="phantomBtn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -417,7 +417,10 @@
 
     <div class="holdings-container" id="holdingsContainer">
         <div class="holdings-header">
-            <h2 class="text-lg font-bold holdings-title">Holdings</h2>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <h2 class="text-lg font-bold holdings-title">Holdings</h2>
+                <span id="holdingsCountdown" style="font-size:9px;font-weight:500;color:#475569;background:rgba(255,255,255,0.04);padding:2px 7px;border-radius:8px;"></span>
+            </div>
 
             <div style="display:flex;align-items:center;gap:6px;">
                 <!-- Holdings toggle for users: Mine / Pool -->
@@ -805,14 +808,14 @@
 (function() {
     var t = Date.now();
     var scripts = [
-        'js/config.js','js/logger.js','js/assets.js','js/api.js',
-        'js/phantom-wallet.js','js/ui.js','js/autotrader.js',
+        'js/config.js','js/logger.js','js/assets.js','js/price-animator.js',
+        'js/api.js','js/phantom-wallet.js','js/ui.js','js/autotrader.js',
         'js/trading.js','js/server-state.js','js/app.js'
     ];
     scripts.forEach(function(src) {
         document.write('<script src="' + src + '?t=' + t + '"><\/script>');
     });
-    console.log('FLUB v7.4 persistent-auto-trading, built ' + new Date().toISOString());
+    console.log('FLUB v7.5 live-price-animation, built ' + new Date().toISOString());
 })();
 </script>
 </body>
