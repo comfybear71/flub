@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260220h">
+    <link rel="stylesheet" href="css/styles.css?v=20260220n">
 </head>
 <body class="pb-20">
 
@@ -20,7 +20,7 @@
             <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
             Connecting...
         </div>
-        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7.5</div>
+        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7.6</div>
         <div style="display:flex; align-items:center; gap:8px;">
             <button onclick="PhantomWallet.isConnected ? PhantomWallet.toggleWalletPanel() : PhantomWallet.connect()" class="phantom-btn" id="phantomBtn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -610,40 +610,110 @@
 </div>
 
 <nav class="bottom-nav">
-    <div class="flex justify-around items-center max-w-lg mx-auto">
-        <a href="#" class="nav-item active">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="14" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <div class="nav-bar-inner">
+        <!-- Leaderboard -->
+        <button class="nav-item" id="navLeaderboard" onclick="UI.showLeaderboard()">
+            <div class="nav-glow"></div>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
             </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 3v18h18"/>
-                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+            <span class="nav-label">Leaders</span>
+        </button>
+
+        <!-- Home (center, raised) -->
+        <button class="nav-item nav-home active" id="navHome" onclick="UI.showHome()">
+            <div class="nav-glow nav-glow-home"></div>
+            <div class="nav-home-ring">
+                <svg class="nav-icon nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/>
+                    <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                </svg>
+            </div>
+            <span class="nav-label">Home</span>
+        </button>
+
+        <!-- Transactions -->
+        <button class="nav-item" id="navTransactions" onclick="UI.showTransactions()">
+            <div class="nav-glow"></div>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                <path d="M14 2v6h6"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+                <path d="M10 9H8"/>
             </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-        </a>
+            <span class="nav-label">Activity</span>
+        </button>
     </div>
 </nav>
+
+<!-- ═══ Leaderboard Overlay ═══ -->
+<div id="leaderboardOverlay" class="page-overlay">
+    <div class="page-overlay-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                    <path d="M4 22h16"/>
+                    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                </svg>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Leaderboard</span>
+            </div>
+            <button onclick="UI.showHome()" class="page-close-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="leaderboardContent" class="page-body">
+            <div class="page-loading">
+                <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+                <span style="font-size:12px;color:#64748b;">Loading leaderboard...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Transactions Overlay ═══ -->
+<div id="transactionsOverlay" class="page-overlay">
+    <div class="page-overlay-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                    <path d="M14 2v6h6"/>
+                    <path d="M16 13H8"/>
+                    <path d="M16 17H8"/>
+                    <path d="M10 9H8"/>
+                </svg>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Activity</span>
+                <span id="txRoleBadge" style="display:none;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,0.2);color:#a78bfa;">ADMIN</span>
+            </div>
+            <button onclick="UI.showHome()" class="page-close-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <!-- Filter tabs (admin gets more) -->
+        <div id="txFilterBar" class="tx-filter-bar">
+            <button class="tx-filter active" data-filter="all" onclick="UI.filterTransactions('all')">All</button>
+            <button class="tx-filter" data-filter="deposits" onclick="UI.filterTransactions('deposits')">Deposits</button>
+            <button class="tx-filter admin-only" data-filter="buys" onclick="UI.filterTransactions('buys')">Buys</button>
+            <button class="tx-filter admin-only" data-filter="sells" onclick="UI.filterTransactions('sells')">Sells</button>
+        </div>
+        <div id="transactionsContent" class="page-body">
+            <div class="page-loading">
+                <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+                <span style="font-size:12px;color:#64748b;">Loading transactions...</span>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Wallet Panel (slide-down when wallet button clicked while connected) -->
 <div id="walletPanel" class="wallet-panel-overlay">
@@ -866,7 +936,7 @@
     scripts.forEach(function(src) {
         document.write('<script src="' + src + '?t=' + t + '"><\/script>');
     });
-    console.log('FLUB v7.5 live-price-animation, built ' + new Date().toISOString());
+    console.log('FLUB v7.6 nav-leaderboard-activity, built ' + new Date().toISOString());
 })();
 </script>
 </body>

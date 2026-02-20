@@ -1740,5 +1740,325 @@ const UI = {
 
         const coinCountEl = document.getElementById('userInfoCoinCount');
         if (coinCountEl) coinCountEl.textContent = alloc > 0 ? cryptoAssets.length : 0;
+    },
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // NAVIGATION — Bottom Nav Switching
+    // ══════════════════════════════════════════════════════════════════════════
+
+    _activeNav: 'home',  // 'home' | 'leaderboard' | 'transactions'
+
+    _setActiveNav(id) {
+        this._activeNav = id;
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        const btn = document.getElementById(id === 'home' ? 'navHome' : id === 'leaderboard' ? 'navLeaderboard' : 'navTransactions');
+        if (btn) btn.classList.add('active');
+    },
+
+    showHome() {
+        this._setActiveNav('home');
+        document.getElementById('leaderboardOverlay')?.classList.remove('show');
+        document.getElementById('transactionsOverlay')?.classList.remove('show');
+    },
+
+    showLeaderboard() {
+        this._setActiveNav('leaderboard');
+        document.getElementById('transactionsOverlay')?.classList.remove('show');
+        document.getElementById('leaderboardOverlay')?.classList.add('show');
+        this._fetchLeaderboard();
+    },
+
+    showTransactions() {
+        this._setActiveNav('transactions');
+        document.getElementById('leaderboardOverlay')?.classList.remove('show');
+        document.getElementById('transactionsOverlay')?.classList.add('show');
+        this._setupTransactionFilters();
+        this._fetchTransactions();
+    },
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // LEADERBOARD
+    // ══════════════════════════════════════════════════════════════════════════
+
+    _leaderboardCache: null,
+    _leaderboardLastFetch: 0,
+
+    async _fetchLeaderboard() {
+        const container = document.getElementById('leaderboardContent');
+        if (!container) return;
+
+        // Use cache if fresh (< 30s)
+        if (this._leaderboardCache && Date.now() - this._leaderboardLastFetch < 30000) {
+            this._renderLeaderboard(this._leaderboardCache);
+            return;
+        }
+
+        // Calculate current pool value from portfolio data
+        const poolValue = this._getPoolValue();
+        if (!poolValue) {
+            container.innerHTML = '<div class="lb-empty">Connect and load portfolio first to view leaderboard.</div>';
+            return;
+        }
+
+        container.innerHTML = `<div class="page-loading">
+            <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+            <span style="font-size:12px;color:#64748b;">Loading leaderboard...</span>
+        </div>`;
+
+        try {
+            const res = await fetch(`/api/leaderboard?poolValue=${poolValue}`);
+            const data = await res.json();
+            if (data.leaderboard) {
+                this._leaderboardCache = data.leaderboard;
+                this._leaderboardLastFetch = Date.now();
+                this._renderLeaderboard(data.leaderboard);
+            } else {
+                container.innerHTML = '<div class="lb-empty">No leaderboard data available.</div>';
+            }
+        } catch (err) {
+            console.error('Leaderboard fetch error:', err);
+            container.innerHTML = '<div class="lb-empty">Failed to load leaderboard. Try again later.</div>';
+        }
+    },
+
+    _renderLeaderboard(board) {
+        const container = document.getElementById('leaderboardContent');
+        if (!container) return;
+
+        if (!board || board.length === 0) {
+            container.innerHTML = `<div class="lb-empty">
+                <div style="font-size:32px;margin-bottom:8px;">🏆</div>
+                No holders yet. Be the first to deposit!
+            </div>`;
+            return;
+        }
+
+        let html = '';
+
+        // Podium for top 3
+        const podium = board.slice(0, 3);
+        if (podium.length > 0) {
+            html += '<div class="lb-podium">';
+            const trophies = [
+                { cls: 'gold', emoji: '🥇', label: '1st' },
+                { cls: 'silver', emoji: '🥈', label: '2nd' },
+                { cls: 'bronze', emoji: '🥉', label: '3rd' }
+            ];
+            for (let i = 0; i < podium.length; i++) {
+                const u = podium[i];
+                const t = trophies[i];
+                const joined = u.joinedDate ? new Date(u.joinedDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '--';
+                html += `<div class="lb-podium-item ${t.cls}">
+                    <div class="lb-trophy">${t.emoji}</div>
+                    <div class="lb-wallet">${u.walletShort}</div>
+                    <div class="lb-value">$${this._fmtNum(u.currentValue)}</div>
+                    <div class="lb-pct">${u.allocation.toFixed(1)}% of pool</div>
+                    <div class="lb-pct">Joined ${joined}</div>
+                </div>`;
+            }
+            html += '</div>';
+        }
+
+        // Summary bar
+        const totalHolders = board.length;
+        const totalValue = board.reduce((s, u) => s + u.currentValue, 0);
+        html += `<div style="display:flex;justify-content:space-between;padding:8px 4px 12px;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:10px;">
+            <span style="font-size:10px;color:#64748b;font-weight:600;">${totalHolders} Holder${totalHolders !== 1 ? 's' : ''}</span>
+            <span style="font-size:10px;color:#64748b;font-weight:600;">Combined: $${this._fmtNum(totalValue)}</span>
+        </div>`;
+
+        // Rest of list (rank 4+)
+        for (let i = 3; i < board.length; i++) {
+            const u = board[i];
+            const joined = u.joinedDate ? new Date(u.joinedDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '--';
+            const lastDep = u.lastDeposit ? new Date(u.lastDeposit).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '--';
+            html += `<div class="lb-list-item">
+                <div class="lb-rank">${u.rank}</div>
+                <div class="lb-list-info">
+                    <div class="lb-list-wallet">${u.walletShort}</div>
+                    <div class="lb-list-meta">Joined ${joined} · Last deposit ${lastDep}</div>
+                </div>
+                <div class="lb-list-right">
+                    <div class="lb-list-value">$${this._fmtNum(u.currentValue)}</div>
+                    <div class="lb-list-pct">${u.allocation.toFixed(1)}%</div>
+                </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    },
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRANSACTIONS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    _txCache: null,
+    _txLastFetch: 0,
+    _txFilter: 'all',
+
+    _setupTransactionFilters() {
+        const isAdmin = State.userRole === 'admin';
+        const badge = document.getElementById('txRoleBadge');
+        if (badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
+
+        // Show/hide admin-only filters
+        document.querySelectorAll('#txFilterBar .admin-only').forEach(el => {
+            el.style.display = isAdmin ? 'inline-block' : 'none';
+        });
+    },
+
+    filterTransactions(filter) {
+        this._txFilter = filter;
+        // Update active tab
+        document.querySelectorAll('.tx-filter').forEach(el => {
+            el.classList.toggle('active', el.dataset.filter === filter);
+        });
+        // Re-render with filter
+        if (this._txCache) {
+            this._renderTransactions(this._txCache);
+        }
+    },
+
+    async _fetchTransactions() {
+        const container = document.getElementById('transactionsContent');
+        if (!container) return;
+
+        const wallet = typeof PhantomWallet !== 'undefined' ? PhantomWallet.walletAddress : null;
+        if (!wallet) {
+            container.innerHTML = '<div class="tx-empty">Connect your wallet to view transaction history.</div>';
+            return;
+        }
+
+        // Use cache if fresh (< 30s)
+        if (this._txCache && Date.now() - this._txLastFetch < 30000) {
+            this._renderTransactions(this._txCache);
+            return;
+        }
+
+        container.innerHTML = `<div class="page-loading">
+            <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+            <span style="font-size:12px;color:#64748b;">Loading transactions...</span>
+        </div>`;
+
+        try {
+            const res = await fetch(`/api/transactions?wallet=${wallet}`);
+            const data = await res.json();
+            if (data.transactions) {
+                this._txCache = data.transactions;
+                this._txLastFetch = Date.now();
+                this._renderTransactions(data.transactions);
+            } else {
+                container.innerHTML = '<div class="tx-empty">No transactions found.</div>';
+            }
+        } catch (err) {
+            console.error('Transactions fetch error:', err);
+            container.innerHTML = '<div class="tx-empty">Failed to load transactions. Try again later.</div>';
+        }
+    },
+
+    _renderTransactions(txns) {
+        const container = document.getElementById('transactionsContent');
+        if (!container) return;
+
+        // Apply filter
+        let filtered = txns;
+        if (this._txFilter === 'deposits') {
+            filtered = txns.filter(t => t.type === 'deposit');
+        } else if (this._txFilter === 'buys') {
+            filtered = txns.filter(t => t.type === 'buy');
+        } else if (this._txFilter === 'sells') {
+            filtered = txns.filter(t => t.type === 'sell');
+        }
+
+        if (filtered.length === 0) {
+            const filterLabel = this._txFilter === 'all' ? '' : ` matching "${this._txFilter}"`;
+            container.innerHTML = `<div class="tx-empty">
+                <div style="font-size:28px;margin-bottom:8px;">📋</div>
+                No transactions${filterLabel} found.
+            </div>`;
+            return;
+        }
+
+        let html = `<div style="font-size:10px;color:#475569;font-weight:600;padding:4px 0 8px;">${filtered.length} transaction${filtered.length !== 1 ? 's' : ''}</div>`;
+
+        for (const tx of filtered) {
+            const date = tx.timestamp ? new Date(tx.timestamp).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '--';
+            const time = tx.timestamp ? new Date(tx.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '';
+
+            if (tx.type === 'deposit') {
+                const walletInfo = tx.walletShort ? `<span style="font-size:9px;color:#475569;margin-left:4px;">${tx.walletShort}</span>` : '';
+                html += `<div class="tx-item">
+                    <div class="tx-icon-box deposit">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 12l7 7 7-7"/></svg>
+                    </div>
+                    <div class="tx-info">
+                        <div class="tx-title">Deposit${walletInfo}</div>
+                        <div class="tx-subtitle">${tx.currency || 'USDC'}${tx.shares ? ' · ' + tx.shares.toFixed(2) + ' shares' : ''}</div>
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount positive">+$${this._fmtNum(tx.amount)}</div>
+                        <div class="tx-date">${date} ${time}</div>
+                    </div>
+                </div>`;
+            } else if (tx.type === 'withdrawal') {
+                const walletInfo = tx.walletShort ? `<span style="font-size:9px;color:#475569;margin-left:4px;">${tx.walletShort}</span>` : '';
+                html += `<div class="tx-item">
+                    <div class="tx-icon-box withdraw">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V3M5 12l7-7 7 7"/></svg>
+                    </div>
+                    <div class="tx-info">
+                        <div class="tx-title">Withdrawal${walletInfo}</div>
+                        <div class="tx-subtitle">${tx.currency || 'USDC'}</div>
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount negative">-$${this._fmtNum(tx.amount)}</div>
+                        <div class="tx-date">${date} ${time}</div>
+                    </div>
+                </div>`;
+            } else if (tx.type === 'buy') {
+                html += `<div class="tx-item">
+                    <div class="tx-icon-box buy">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 12l7 7 7-7"/></svg>
+                    </div>
+                    <div class="tx-info">
+                        <div class="tx-title">Buy ${tx.coin || ''}</div>
+                        <div class="tx-subtitle">${tx.walletShort || 'Pool Trade'} · @ $${this._fmtNum(tx.price)}</div>
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount neutral">${typeof tx.amount === 'number' ? tx.amount.toFixed(6) : tx.amount}</div>
+                        <div class="tx-date">${date} ${time}</div>
+                    </div>
+                </div>`;
+            } else if (tx.type === 'sell') {
+                html += `<div class="tx-item">
+                    <div class="tx-icon-box sell">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V3M5 12l7-7 7 7"/></svg>
+                    </div>
+                    <div class="tx-info">
+                        <div class="tx-title">Sell ${tx.coin || ''}</div>
+                        <div class="tx-subtitle">${tx.walletShort || 'Pool Trade'} · @ $${this._fmtNum(tx.price)}</div>
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount neutral">${typeof tx.amount === 'number' ? tx.amount.toFixed(6) : tx.amount}</div>
+                        <div class="tx-date">${date} ${time}</div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        container.innerHTML = html;
+    },
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    _getPoolValue() {
+        if (!State.portfolioData || !State.portfolioData.assets) return 0;
+        return State.portfolioData.assets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
+    },
+
+    _fmtNum(n) {
+        if (n == null || isNaN(n)) return '0.00';
+        if (n >= 1000) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return Number(n).toFixed(2);
     }
 };

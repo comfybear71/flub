@@ -383,6 +383,139 @@ def get_all_active_users() -> List[Dict]:
     return [format_user_data(user) for user in users]
 
 
+def get_leaderboard(total_pool_value: float) -> List[Dict]:
+    """
+    Get leaderboard of all non-admin users ranked by current holdings value.
+    Excludes admin wallets. Includes truncated wallet, date joined,
+    last deposit info, total holdings value, and pool percentage.
+    """
+    pool = get_pool_state()
+    total_shares = pool["totalShares"]
+    nav = total_pool_value / total_shares if total_shares > 0 else 1.0
+
+    # Get all active non-admin users with shares
+    users = list(users_collection.find({
+        "isActive": True,
+        "walletAddress": {"$nin": ADMIN_WALLETS}
+    }))
+
+    leaderboard = []
+    for user in users:
+        wallet = user["walletAddress"]
+        user_shares = user.get("shares", 0.0)
+        current_value = user_shares * nav
+        allocation = (user_shares / total_shares * 100) if total_shares > 0 else 0
+
+        # Get last deposit for this user
+        last_deposit = deposits_collection.find_one(
+            {"userId": wallet},
+            sort=[("timestamp", -1)]
+        )
+
+        leaderboard.append({
+            "walletAddress": wallet,
+            "walletShort": wallet[:4] + "..." + wallet[-4:],
+            "joinedDate": user.get("joinedDate").isoformat() if user.get("joinedDate") else None,
+            "lastDeposit": last_deposit["timestamp"].isoformat() if last_deposit and last_deposit.get("timestamp") else None,
+            "lastDepositAmount": last_deposit.get("amount", 0) if last_deposit else 0,
+            "totalDeposited": user.get("totalDeposited", 0.0),
+            "currentValue": round(current_value, 2),
+            "allocation": round(allocation, 2),
+            "shares": user_shares
+        })
+
+    # Sort by current value descending
+    leaderboard.sort(key=lambda x: x["currentValue"], reverse=True)
+
+    # Add rank
+    for i, entry in enumerate(leaderboard):
+        entry["rank"] = i + 1
+
+    return leaderboard
+
+
+def get_all_transactions(wallet_address: str = None, is_admin_request: bool = False) -> List[Dict]:
+    """
+    Get transaction history.
+    - If is_admin_request: returns ALL transactions (deposits, trades, withdrawals)
+    - Otherwise: returns only the specified user's deposits/withdrawals
+    """
+    transactions = []
+
+    if is_admin_request:
+        # Get ALL deposits from all users
+        for dep in deposits_collection.find({}).sort("timestamp", -1):
+            user_wallet = dep.get("userId", "")
+            transactions.append({
+                "type": "deposit",
+                "wallet": user_wallet,
+                "walletShort": user_wallet[:4] + "..." + user_wallet[-4:] if len(user_wallet) > 8 else user_wallet,
+                "amount": dep.get("amount", 0),
+                "currency": dep.get("currency", "USDC"),
+                "txHash": dep.get("txHash", ""),
+                "timestamp": dep["timestamp"].isoformat() if dep.get("timestamp") else None,
+                "shares": dep.get("shares", 0),
+                "nav": dep.get("nav", 0),
+                "isAdmin": user_wallet in ADMIN_WALLETS
+            })
+
+        # Get ALL trades
+        for trade in trades_collection.find({}).sort("timestamp", -1):
+            transactions.append({
+                "type": "buy" if trade.get("type") == "buy" else "sell",
+                "coin": trade.get("coin", ""),
+                "amount": trade.get("amount", 0),
+                "price": trade.get("price", 0),
+                "timestamp": trade["timestamp"].isoformat() if trade.get("timestamp") else None,
+                "wallet": "pool",
+                "walletShort": "Pool Trade"
+            })
+
+        # Get ALL withdrawals
+        for wd in withdrawals_collection.find({}).sort("timestamp", -1):
+            user_wallet = wd.get("userId", "")
+            transactions.append({
+                "type": "withdrawal",
+                "wallet": user_wallet,
+                "walletShort": user_wallet[:4] + "..." + user_wallet[-4:] if len(user_wallet) > 8 else user_wallet,
+                "amount": wd.get("amount", 0),
+                "currency": wd.get("currency", "USDC"),
+                "timestamp": wd["timestamp"].isoformat() if wd.get("timestamp") else None,
+                "isAdmin": user_wallet in ADMIN_WALLETS
+            })
+
+        # Sort all by timestamp descending
+        transactions.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
+    else:
+        # User-specific: their deposits and withdrawals only
+        if not wallet_address:
+            return []
+
+        for dep in deposits_collection.find({"userId": wallet_address}).sort("timestamp", -1):
+            transactions.append({
+                "type": "deposit",
+                "amount": dep.get("amount", 0),
+                "currency": dep.get("currency", "USDC"),
+                "txHash": dep.get("txHash", ""),
+                "timestamp": dep["timestamp"].isoformat() if dep.get("timestamp") else None,
+                "shares": dep.get("shares", 0),
+                "nav": dep.get("nav", 0)
+            })
+
+        for wd in withdrawals_collection.find({"userId": wallet_address}).sort("timestamp", -1):
+            transactions.append({
+                "type": "withdrawal",
+                "amount": wd.get("amount", 0),
+                "currency": wd.get("currency", "USDC"),
+                "timestamp": wd["timestamp"].isoformat() if wd.get("timestamp") else None
+            })
+
+        transactions.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
+    return transactions
+
+
 # ── Persistent Trader State ──────────────────────────────────────────────────
 # Stores auto-trader config, cooldowns, trade log, and pending orders
 # so they sync across devices (iPad / iPhone / desktop).

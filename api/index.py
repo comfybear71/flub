@@ -22,7 +22,9 @@ from database import (
     save_trader_state,
     get_pool_state,
     initialize_pool,
-    get_user_position
+    get_user_position,
+    get_leaderboard,
+    get_all_transactions
 )
 
 
@@ -98,6 +100,26 @@ class handler(BaseHTTPRequestHandler):
                     return
                 allocations = calculate_pool_allocations()
                 self._send_json(200, {"allocations": allocations})
+
+            elif path == '/api/leaderboard':
+                pool_value = params.get('poolValue')
+                if not pool_value:
+                    self._send_json(400, {"error": "poolValue parameter required"})
+                    return
+                board = get_leaderboard(float(pool_value))
+                self._send_json(200, {"leaderboard": board, "count": len(board)})
+
+            elif path == '/api/transactions':
+                wallet = params.get('wallet')
+                if not wallet:
+                    self._send_json(400, {"error": "wallet parameter required"})
+                    return
+                admin_req = is_admin(wallet)
+                txns = get_all_transactions(
+                    wallet_address=wallet,
+                    is_admin_request=admin_req
+                )
+                self._send_json(200, {"transactions": txns, "count": len(txns), "isAdmin": admin_req})
 
             else:
                 self._send_json(404, {"error": "Not found"})
