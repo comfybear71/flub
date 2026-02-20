@@ -1026,6 +1026,252 @@ const UI = {
         });
     },
 
+    // ── Price Chart Modal ──────────────────────────────────────────────────────
+
+    _priceChart: null,
+    _priceChartRange: '1M',
+    _priceChartTrades: [],
+
+    openPriceChart() {
+        const asset = State.selectedAsset;
+        if (!asset) return;
+
+        const style = CONFIG.ASSET_STYLES[asset.code] || { color: '#3b82f6', icon: '?', name: asset.code };
+        const iconEl = document.getElementById('chartCoinIcon');
+        if (iconEl) {
+            iconEl.textContent = style.icon;
+            iconEl.style.background = style.color + '22';
+            iconEl.style.color = style.color;
+        }
+        document.getElementById('chartCoinName').textContent = style.name;
+        document.getElementById('chartCoinPrice').textContent =
+            '$' + (asset.usd_price ? asset.usd_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00');
+
+        // Reset range to 1M
+        this._priceChartRange = '1M';
+        document.querySelectorAll('.price-chart-range').forEach(b => b.classList.toggle('active', b.dataset.range === '1M'));
+
+        document.getElementById('priceChartModal')?.classList.add('show');
+        this._loadPriceChart();
+    },
+
+    closePriceChart() {
+        document.getElementById('priceChartModal')?.classList.remove('show');
+        this._priceChart?.destroy();
+        this._priceChart = null;
+    },
+
+    setChartRange(range) {
+        this._priceChartRange = range;
+        document.querySelectorAll('.price-chart-range').forEach(b => b.classList.toggle('active', b.dataset.range === range));
+        this._loadPriceChart();
+    },
+
+    async _loadPriceChart() {
+        const asset = State.selectedAsset;
+        if (!asset) return;
+
+        const loading = document.getElementById('priceChartLoading');
+        loading?.classList.remove('hidden');
+
+        const geckoId = CONFIG.COINGECKO_IDS[asset.code];
+        if (!geckoId) { loading?.classList.add('hidden'); return; }
+
+        // CoinGecko days param for each range
+        const RANGES = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
+        const days = RANGES[this._priceChartRange] || 30;
+
+        try {
+            const [priceData, tradeData] = await Promise.all([
+                this._fetchPriceHistory(asset.code, days),
+                this._fetchTradeMarkers(asset.code)
+            ]);
+
+            this._renderPriceChart(priceData, tradeData, asset.code);
+        } catch (e) {
+            console.error('Price chart error:', e);
+        } finally {
+            loading?.classList.add('hidden');
+        }
+    },
+
+    async _fetchPriceHistory(assetCode, days) {
+        const geckoId = CONFIG.COINGECKO_IDS[assetCode];
+        if (!geckoId) return [];
+
+        try {
+            const url = `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart?vs_currency=usd&days=${days}&precision=full`;
+            const res = await fetch(url);
+            if (!res.ok) return [];
+
+            const data = await res.json();
+            // CoinGecko returns { prices: [[timestamp_ms, price], ...] }
+            if (data && Array.isArray(data.prices)) {
+                return data.prices.map(([time, price]) => ({ time, price }));
+            }
+            return [];
+        } catch (e) {
+            console.error('CoinGecko price history error:', e);
+            return [];
+        }
+    },
+
+    async _fetchTradeMarkers(assetCode) {
+        try {
+            const trades = await API.fetchSwyftxOrderHistory(200);
+            const audRate = CONFIG.AUD_TO_USD_RATE || 0.70;
+            // Filter for this asset, convert AUD prices to USD to match chart
+            return trades.filter(t => t.coin === assetCode).map(t => {
+                let price = t.trigger || t.price || 0;
+                // If trade was in AUD, convert to USD for chart alignment
+                if (t.priCode === 'AUD' && price > 0) price *= audRate;
+                return {
+                    type: t.type,   // 'buy' or 'sell'
+                    price,
+                    time: t.timestamp ? new Date(t.timestamp).getTime() : 0,
+                    amount: t.quantity || t.amount || 0
+                };
+            }).filter(t => t.price > 0 && t.time > 0);
+        } catch (e) {
+            console.error('Trade markers fetch error:', e);
+            return [];
+        }
+    },
+
+    _renderPriceChart(priceData, tradeMarkers, assetCode) {
+        const ctx = document.getElementById('priceChartCanvas');
+        if (!ctx) return;
+
+        this._priceChart?.destroy();
+
+        const style = CONFIG.ASSET_STYLES[assetCode] || { color: '#3b82f6' };
+        const color = style.color;
+
+        // If no price data, show placeholder
+        if (!priceData.length) {
+            this._priceChart = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: { labels: ['No data'], datasets: [{ data: [0], borderColor: '#334155' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+            return;
+        }
+
+        const context = ctx.getContext('2d');
+        const gradient = context.createLinearGradient(0, 0, 0, 280);
+        gradient.addColorStop(0, color + '30');
+        gradient.addColorStop(1, color + '00');
+
+        // Build annotations from trade markers
+        const annotations = {};
+        const chartStart = priceData[0].time;
+        const chartEnd = priceData[priceData.length - 1].time;
+
+        tradeMarkers.forEach((t, i) => {
+            // Only show trades within chart range
+            if (t.time < chartStart || t.time > chartEnd) return;
+
+            const isBuy = t.type === 'buy';
+            annotations[`trade_${i}`] = {
+                type: 'point',
+                xValue: t.time,
+                yValue: t.price,
+                backgroundColor: isBuy ? '#22c55e' : '#ef4444',
+                borderColor: isBuy ? '#16a34a' : '#dc2626',
+                borderWidth: 2,
+                radius: 6,
+                label: {
+                    display: true,
+                    content: `${isBuy ? 'BUY' : 'SELL'} ${t.amount ? t.amount.toFixed(4) : ''}`,
+                    position: isBuy ? 'end' : 'start',
+                    backgroundColor: isBuy ? 'rgba(34,197,94,0.85)' : 'rgba(239,68,68,0.85)',
+                    color: '#fff',
+                    font: { size: 9, weight: 'bold' },
+                    padding: { left: 4, right: 4, top: 2, bottom: 2 },
+                    borderRadius: 4,
+                    yAdjust: isBuy ? 12 : -12
+                }
+            };
+        });
+
+        // Price formatting for y-axis
+        const maxPrice = Math.max(...priceData.map(p => p.price));
+        const decimals = maxPrice >= 1000 ? 0 : maxPrice >= 1 ? 2 : 4;
+
+        this._priceChart = new Chart(context, {
+            type: 'line',
+            data: {
+                labels: priceData.map(p => p.time),
+                datasets: [{
+                    data: priceData.map(p => p.price),
+                    borderColor: color,
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHitRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.95)',
+                        titleColor: '#94a3b8',
+                        bodyColor: '#e2e8f0',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        titleFont: { size: 10 },
+                        bodyFont: { size: 12, weight: 'bold' },
+                        callbacks: {
+                            title: (items) => {
+                                if (!items.length) return '';
+                                const d = new Date(items[0].parsed.x);
+                                return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            },
+                            label: (item) => '$' + item.parsed.y.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+                        }
+                    },
+                    annotation: {
+                        annotations
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            tooltipFormat: 'PP',
+                            displayFormats: {
+                                minute: 'HH:mm',
+                                hour: 'HH:mm',
+                                day: 'dd MMM',
+                                week: 'dd MMM',
+                                month: 'MMM yyyy'
+                            }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                        ticks: { color: '#475569', font: { size: 9 }, maxRotation: 0, maxTicksLimit: 6 }
+                    },
+                    y: {
+                        position: 'right',
+                        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                        ticks: {
+                            color: '#475569',
+                            font: { size: 9 },
+                            maxTicksLimit: 6,
+                            callback: (v) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+                        }
+                    }
+                }
+            }
+        });
+    },
+
     // ── Order Type Selector ───────────────────────────────────────────────────
 
     setOrderType(type) {

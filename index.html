@@ -10,6 +10,8 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <link rel="stylesheet" href="css/styles.css?v=20260220n">
 </head>
 <body class="pb-20">
@@ -265,7 +267,7 @@
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.5;margin-left:-2px;"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </div>
-                    <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
+                    <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.openPriceChart()" title="Price Chart">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 3v18h18"/>
                             <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
@@ -964,6 +966,42 @@
     </div>
 </div>
 
+<!-- Price Chart Modal -->
+<div id="priceChartModal" class="trade-modal-overlay">
+    <div class="price-chart-modal-content">
+        <div class="price-chart-header">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div class="price-chart-coin-icon" id="chartCoinIcon">₿</div>
+                <div>
+                    <div class="price-chart-coin-name" id="chartCoinName">Bitcoin</div>
+                    <div class="price-chart-coin-price" id="chartCoinPrice">$0.00</div>
+                </div>
+            </div>
+            <button onclick="UI.closePriceChart()" style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.06);border:none;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="price-chart-range-bar">
+            <button class="price-chart-range active" data-range="1D" onclick="UI.setChartRange('1D')">1D</button>
+            <button class="price-chart-range" data-range="1W" onclick="UI.setChartRange('1W')">1W</button>
+            <button class="price-chart-range" data-range="1M" onclick="UI.setChartRange('1M')">1M</button>
+            <button class="price-chart-range" data-range="3M" onclick="UI.setChartRange('3M')">3M</button>
+            <button class="price-chart-range" data-range="1Y" onclick="UI.setChartRange('1Y')">1Y</button>
+        </div>
+        <div class="price-chart-canvas-wrap">
+            <canvas id="priceChartCanvas"></canvas>
+            <div class="price-chart-loading" id="priceChartLoading">
+                <div class="price-chart-spinner"></div>
+                Loading chart...
+            </div>
+        </div>
+        <div class="price-chart-legend">
+            <span class="price-chart-legend-buy"><span class="legend-dot buy"></span> Buy</span>
+            <span class="price-chart-legend-sell"><span class="legend-dot sell"></span> Sell</span>
+        </div>
+    </div>
+</div>
+
 <script>
 // Dynamic script loader — defeats Phantom/Safari aggressive caching
 (function() {
@@ -976,7 +1014,7 @@
     scripts.forEach(function(src) {
         document.write('<script src="' + src + '?t=' + t + '"><\/script>');
     });
-    console.log('FLUB v7.6 nav-leaderboard-activity, built ' + new Date().toISOString());
+    console.log('FLUB v7.7 price-chart-annotations, built ' + new Date().toISOString());
 })();
 </script>
 </body>
