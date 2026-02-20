@@ -26,6 +26,11 @@ const AutoTrader = {
     checkCount: 0,
     tradeLog: [],
 
+    // Device ownership — prevents double-monitoring across devices
+    _deviceId: Math.random().toString(36).substring(2, 10),
+    _isOwner: false,       // true if THIS device runs the monitoring loop
+    HEARTBEAT_STALE: 5 * 60 * 1000,  // 5 minutes — heartbeat older than this = stale
+
     // Tier configuration (static)
     TIER_CONFIG: {
         1: { name: 'Blue Chips', color: '#3b82f6', devMin: 1, devMax: 15, allocMin: 1, allocMax: 25 },
@@ -210,17 +215,25 @@ const AutoTrader = {
             const tierCooldowns = tierCoins.filter(a => this._isOnCooldown(a.code));
             const showOverride = active && tierCooldowns.length > 0;
 
-            // Button colors
-            const btnColor = active ? '#ef4444' : cfg.color;
-            const btnText  = active ? 'Stop' : 'Start';
+            // Button: owner sees Stop, non-owner sees Take Over, inactive sees Start
+            let btnColor, btnText;
+            if (active && this._isOwner) {
+                btnColor = '#ef4444'; btnText = 'Stop';
+            } else if (active && !this._isOwner) {
+                btnColor = cfg.color; btnText = 'Take Over';
+            } else {
+                btnColor = cfg.color; btnText = 'Start';
+            }
 
             html += `<div class="tier-card" style="border-color:${cfg.color}30;">`;
 
             // Header
             html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">`;
             html += `<span style="font-size:11px;font-weight:700;color:${cfg.color};">T${t} – ${cfg.name}</span>`;
-            if (active) {
+            if (active && this._isOwner) {
                 html += `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:8px;background:${cfg.color}20;color:${cfg.color};text-transform:uppercase;">Active</span>`;
+            } else if (active && !this._isOwner) {
+                html += `<span style="font-size:7px;font-weight:600;padding:2px 5px;border-radius:8px;background:rgba(148,163,184,0.15);color:#94a3b8;">Remote</span>`;
             }
             html += `</div>`;
 
@@ -362,6 +375,7 @@ const AutoTrader = {
         }
 
         this.tierActive[tierNum] = true;
+        this._isOwner = true;   // This device owns the monitoring loop
         this.checkCount = 0;
 
         const cfg = this.TIER_CONFIG[tierNum];
@@ -391,13 +405,14 @@ const AutoTrader = {
         const cfg = this.TIER_CONFIG[tierNum];
         Logger.log(`Tier ${tierNum} (${cfg.name}) stopped`, 'info');
 
-        this._updateUI();
-        this._saveActiveState();
-
         // Stop monitoring if no tiers active
         if (!this.isActive) {
+            this._isOwner = false;
             this._stopMonitoring();
         }
+
+        this._updateUI();
+        this._saveActiveState();
     },
 
     // Backward compat: global start/stop
@@ -422,7 +437,7 @@ const AutoTrader = {
         if (this.isActive) return;
 
         // Handle old format: savedTargets was just targets object
-        // New format: { tierActive, targets }
+        // New format: { tierActive, targets, botDeviceId, botHeartbeat }
         let savedTargets, savedTierActive;
         if (savedState && savedState.tierActive) {
             savedTierActive = savedState.tierActive;
@@ -464,10 +479,26 @@ const AutoTrader = {
             }
         }
 
+        // ── Device ownership check ──
+        // If another device is actively running (fresh heartbeat), don't start monitoring here
+        const otherDevice = savedState.botDeviceId && savedState.botDeviceId !== this._deviceId;
+        const freshHeartbeat = savedState.botHeartbeat && (Date.now() - savedState.botHeartbeat < this.HEARTBEAT_STALE);
+
+        if (otherDevice && freshHeartbeat) {
+            this._isOwner = false;
+            Logger.log('Auto-trading active on another device — viewing only', 'info');
+            this._updateUI();
+            return;
+        }
+
+        // This device takes ownership
+        this._isOwner = true;
+
         const activeCoins = Object.keys(this.targets);
         if (activeCoins.length === 0) {
             Logger.log('Auto-trade resume: all coins on cooldown — waiting...', 'info');
             this._updateUI();
+            this._saveActiveState();
             this._ensureMonitoring();
             return;
         }
@@ -481,6 +512,7 @@ const AutoTrader = {
         });
 
         this._updateUI();
+        this._saveActiveState();
         this._ensureMonitoring();
     },
 
@@ -503,12 +535,21 @@ const AutoTrader = {
     // ── Price Monitoring (all coins) ─────────────────────────────────────────
 
     async _checkPrices() {
-        if (!this.isActive) {
+        if (!this.isActive || !this._isOwner) {
             this._stopMonitoring();
             return;
         }
 
         this.checkCount++;
+
+        // Refresh heartbeat every check so other devices know we're alive
+        this._saveActiveState();
+
+        // Every 3rd check (~9 min): verify no other device took over or stopped us remotely
+        if (this.checkCount % 3 === 0) {
+            const remoteOk = await this._verifyOwnership();
+            if (!remoteOk) return; // Ownership lost, monitoring stopped
+        }
 
         // Refresh portfolio data every 2 checks
         if (this.checkCount % 2 === 0) {
@@ -560,6 +601,52 @@ const AutoTrader = {
         const onCooldown = Object.keys(this.targets).length - remaining.length;
         if (remaining.length === 0 && onCooldown > 0) {
             Logger.log(`All ${onCooldown} coins on cooldown — waiting for cooldowns to expire...`, 'info');
+        }
+    },
+
+    // Verify this device still owns the bot (another device may have taken over or stopped)
+    async _verifyOwnership() {
+        try {
+            const wallet = typeof PhantomWallet !== 'undefined' ? PhantomWallet.walletAddress : null;
+            if (!wallet) return true; // Can't check, keep running
+
+            const res = await fetch(`/api/state?admin_wallet=${encodeURIComponent(wallet)}`);
+            if (!res.ok) return true; // Network error, keep running
+
+            const data = await res.json();
+            if (!data.autoActive) return true;
+
+            // Another device took over
+            if (data.autoActive.botDeviceId && data.autoActive.botDeviceId !== this._deviceId) {
+                Logger.log('Another device took over auto-trading — stopping local monitoring', 'info');
+                this._isOwner = false;
+                this._stopMonitoring();
+                this._updateUI();
+                return false;
+            }
+
+            // Stopped remotely
+            if (!data.autoActive.isActive) {
+                Logger.log('Auto-trading stopped from another device', 'info');
+                this.tierActive = { 1: false, 2: false, 3: false };
+                this._isOwner = false;
+                this._stopMonitoring();
+                this._updateUI();
+                return false;
+            }
+
+            // Sync tier active state from server (another device may have started/stopped a tier)
+            if (data.autoActive.tierActive) {
+                this.tierActive = {
+                    1: !!data.autoActive.tierActive[1],
+                    2: !!data.autoActive.tierActive[2],
+                    3: !!data.autoActive.tierActive[3]
+                };
+            }
+
+            return true;
+        } catch (e) {
+            return true; // Network error, keep running
         }
     },
 
@@ -656,8 +743,8 @@ const AutoTrader = {
             if (badge) { badge.style.display = 'inline-block'; badge.textContent = 'ACTIVE'; }
             if (status) {
                 status.style.display = 'block';
-                const count = Object.keys(this.targets).filter(c => !this._isOnCooldown(c)).length;
-                status.textContent = `Monitoring ${count} coins every 3 min...`;
+                // Render the full monitoring view immediately
+                this._updateStatus();
             }
         } else {
             if (badge) badge.style.display = 'none';
@@ -939,7 +1026,9 @@ const AutoTrader = {
         const state = {
             isActive: this.isActive,
             tierActive: this.tierActive,
-            targets: this.targets
+            targets: this.targets,
+            botDeviceId: this._deviceId,
+            botHeartbeat: Date.now()
         };
         localStorage.setItem('auto_active', JSON.stringify(state));
         if (typeof ServerState !== 'undefined') ServerState.saveAutoActive();
