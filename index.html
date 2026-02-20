@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260220f">
+    <link rel="stylesheet" href="css/styles.css?v=20260220g">
 </head>
 <body class="pb-20">
 
@@ -146,9 +146,10 @@
                                 <path d="m15 18-6-6 6-6"/>
                             </svg>
                         </button>
-                        <div class="coin-mini">
+                        <div class="coin-mini" onclick="UI.openCoinSelector()" style="cursor:pointer;">
                             <div class="coin-icon-tiny" id="tradeIcon" style="background: #f9731633; color: #f97316;">₿</div>
                             <span id="tradeName">BTC</span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.5;margin-left:-2px;"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </div>
                     <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
@@ -435,7 +436,7 @@
         <div class="holdings-header">
             <div style="display:flex;align-items:center;gap:6px;">
                 <h2 class="text-lg font-bold holdings-title">Holdings</h2>
-                <span id="holdingsCountdown" style="font-size:9px;font-weight:500;color:#475569;background:rgba(255,255,255,0.04);padding:2px 7px;border-radius:8px;"></span>
+                <span id="holdingsCountdown" style="font-size:9px;font-weight:600;color:#94a3b8;background:rgba(255,255,255,0.08);padding:2px 7px;border-radius:8px;"></span>
             </div>
 
             <div style="display:flex;align-items:center;gap:6px;">
@@ -558,6 +559,23 @@
             <button onclick="Trading.cancelTrade()" class="trade-modal-btn cancel">Cancel</button>
             <button onclick="Trading.confirmTrade()" class="trade-modal-btn confirm" id="modalConfirmBtn">Confirm</button>
         </div>
+    </div>
+</div>
+
+<!-- Coin Selector Modal (TradingView-style) -->
+<div class="coin-selector-overlay" id="coinSelectorOverlay" onclick="UI.closeCoinSelector()">
+    <div class="coin-selector-modal" onclick="event.stopPropagation()">
+        <div class="coin-selector-header">
+            <span class="coin-selector-title">Select Symbol</span>
+            <button class="coin-selector-close" onclick="UI.closeCoinSelector()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="coin-selector-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="coinSearchInput" placeholder="Search..." autocomplete="off" oninput="UI.filterCoinSelector(this.value)">
+        </div>
+        <div class="coin-selector-list" id="coinSelectorList"></div>
     </div>
 </div>
 

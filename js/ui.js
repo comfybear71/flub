@@ -697,6 +697,89 @@ const UI = {
         }).join('');
     },
 
+    // ── Coin Selector Modal (TradingView-style) ────────────────────────────
+
+    openCoinSelector() {
+        const overlay = document.getElementById('coinSelectorOverlay');
+        const list    = document.getElementById('coinSelectorList');
+        const input   = document.getElementById('coinSearchInput');
+        if (!overlay || !list) return;
+
+        // Build list from portfolio assets (exclude AUD & USDC)
+        const assets = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC'
+        );
+        const currentCode = State.selectedAsset?.code || '';
+
+        list.innerHTML = assets.map(asset => {
+            const style = CONFIG.ASSET_STYLES[asset.code] ?? { color: '#666', icon: asset.code[0], name: asset.code };
+            const change = asset.change_24h || 0;
+            const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
+            const changeSign  = change >= 0 ? '+' : '';
+            const isActive = asset.code === currentCode ? ' active' : '';
+            return `<div class="coin-selector-item${isActive}" data-code="${asset.code}" onclick="UI.selectCoin('${asset.code}')">
+                <div class="coin-selector-icon" style="background:${style.color}20;color:${style.color};">${style.icon}</div>
+                <div class="coin-selector-info">
+                    <div class="coin-selector-code">${asset.code}</div>
+                    <div class="coin-selector-name">${style.name}</div>
+                </div>
+                <div class="coin-selector-right">
+                    <div class="coin-selector-price">${Assets.formatCurrency(asset.usd_price)}</div>
+                    <div class="coin-selector-change" style="color:${changeColor};">${changeSign}${change.toFixed(2)}%</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        if (input) input.value = '';
+        overlay.classList.add('show');
+        setTimeout(() => input?.focus(), 200);
+    },
+
+    closeCoinSelector() {
+        document.getElementById('coinSelectorOverlay')?.classList.remove('show');
+    },
+
+    filterCoinSelector(query) {
+        const q = query.toLowerCase();
+        document.querySelectorAll('.coin-selector-item').forEach(item => {
+            const code = item.dataset.code.toLowerCase();
+            const name = (CONFIG.ASSET_STYLES[item.dataset.code]?.name || '').toLowerCase();
+            item.style.display = (code.includes(q) || name.includes(q)) ? '' : 'none';
+        });
+    },
+
+    selectCoin(code) {
+        this.closeCoinSelector();
+        // Switch the trading panel to the selected coin without closing/reopening
+        State.selectedAsset = State.portfolioData.assets.find(a => a.code === code);
+        if (!State.selectedAsset) return;
+        const style  = CONFIG.ASSET_STYLES[code];
+        const iconEl = document.getElementById('tradeIcon');
+        const nameEl = document.getElementById('tradeName');
+        if (iconEl) {
+            iconEl.textContent      = style.icon;
+            iconEl.style.background = style.color + '33';
+            iconEl.style.color      = style.color;
+        }
+        if (nameEl) nameEl.textContent = code;
+        // Reset sliders and state
+        State.amountSliderValue = 0;
+        State.triggerOffset     = 0;
+        const amountSlider  = document.getElementById('amountSlider');
+        const triggerSlider  = document.getElementById('triggerSlider');
+        if (amountSlider)  amountSlider.value  = 0;
+        if (triggerSlider) triggerSlider.value = 0;
+        this.setInstantSide('buy');
+        Trading.updateTriggerButtonBalances();
+        this.updateAmountDisplay();
+        Trading.updateTriggerDisplay();
+        Trading.updateAutoTradeDisplay();
+        // Update selected card highlight in holdings
+        document.querySelectorAll('.card').forEach(c => {
+            c.classList.toggle('selected', c.dataset.code === code);
+        });
+    },
+
     // ── Trading Panel (Admin Only) ───────────────────────────────────────────
 
     openTrade(code) {
@@ -1382,7 +1465,7 @@ const UI = {
                 html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
                 if (cdCoins.length > 0) html += ` <span style="color:#94a3b8;font-weight:400;">(${cdCoins.length} on cooldown)</span>`;
                 html += `</span>`;
-                html += `<span id="userPriceCountdown" style="font-size:9px;font-weight:400;color:#64748b;"></span>`;
+                html += `<span id="userPriceCountdown" style="font-size:9px;font-weight:600;color:#94a3b8;"></span>`;
                 html += `</div>`;
 
                 for (const code of activeCoins) {
