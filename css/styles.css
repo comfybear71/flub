@@ -948,7 +948,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .card.selected {
-    border-color: #3b82f6;
+    border-color: #3b82f6 !important;
     background: rgba(59, 130, 246, 0.1);
 }
 

@@ -380,8 +380,9 @@ const UI = {
                 const displayBalance = asset.balance * (State.userAllocation / 100);
                 const displayValue = asset.usd_value * (State.userAllocation / 100);
 
+                const borderColor = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
                 return `
-                <div class="card" data-code="${asset.code}" style="cursor:default;">
+                <div class="card" data-code="${asset.code}" style="cursor:default;border-color:${borderColor};">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-3">
                             <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
@@ -421,8 +422,9 @@ const UI = {
                 : '';
             const cursorStyle = isAdmin ? '' : 'cursor:default;';
 
+            const borderColor = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
             return `
-            <div class="card" data-code="${asset.code}" ${clickAction} style="${cursorStyle}">
+            <div class="card" data-code="${asset.code}" ${clickAction} style="${cursorStyle}border-color:${borderColor};">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
                         <div class="coin-icon-wrapper" style="background:${style.color}20;color:${style.color};">
