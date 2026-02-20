@@ -2104,13 +2104,15 @@ const UI = {
      * is flagged as "external" — i.e. done directly on Swyftx outside this app.
      */
     _mergeExternalTrades(dbTxns, swyftxOrders) {
-        // Build a set of "fingerprints" from our DB trades for fast lookup
-        // Match by: coin + type + timestamp within 60 seconds
+        // Build a set of known swyftxIds AND timestamp-based fingerprints
+        const knownSwyftxIds = new Set();
         const dbTradeKeys = new Set();
         for (const tx of dbTxns) {
             if (tx.type === 'buy' || tx.type === 'sell') {
+                // Match by swyftxId (most reliable)
+                if (tx.swyftxId) knownSwyftxIds.add(tx.swyftxId);
+                // Fallback: match by coin + type + timestamp bucket
                 const ts = tx.timestamp ? new Date(tx.timestamp).getTime() : 0;
-                // Create keys for a +-60s window
                 const coin = (tx.coin || '').toUpperCase();
                 const type = tx.type;
                 for (let offset = -60000; offset <= 60000; offset += 10000) {
@@ -2123,18 +2125,20 @@ const UI = {
         // Check each Swyftx order against our DB
         const external = [];
         for (const order of swyftxOrders) {
+            // Check swyftxId first (most reliable match)
+            if (order.swyftxId && knownSwyftxIds.has(order.swyftxId)) continue;
+
             const coin = (order.coin || '').toUpperCase();
-            const type = order.type; // 'buy' or 'sell'
+            const type = order.type;
             const ts = order.timestamp ? new Date(order.timestamp).getTime() : 0;
             const bucket = Math.round(ts / 10000);
 
-            // Check if this order matches any DB trade
+            // Check timestamp-based match
             const key = `${coin}_${type}_${bucket}`;
             if (!dbTradeKeys.has(key)) {
-                // Not found in our DB — this is an external Swyftx trade
                 external.push({
                     type: 'external',
-                    externalType: type, // original buy/sell
+                    externalType: type,
                     coin,
                     amount: order.quantity,
                     price: order.trigger || 0,

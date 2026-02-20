@@ -27,7 +27,8 @@ from database import (
     get_all_transactions,
     get_admin_stats,
     get_db_debug,
-    sync_deposits_from_client
+    sync_deposits_from_client,
+    sync_trades_from_swyftx
 )
 
 
@@ -240,6 +241,8 @@ class handler(BaseHTTPRequestHandler):
                 trade_type = body.get('type')
                 amount = body.get('amount')
                 price = body.get('price')
+                swyftx_id = body.get('swyftxId')
+                trade_timestamp = body.get('timestamp')
 
                 if not all([coin, trade_type, amount, price]):
                     self._send_json(400, {"error": "coin, type, amount, and price required"})
@@ -248,11 +251,26 @@ class handler(BaseHTTPRequestHandler):
                 # Get current allocations for all active users
                 allocations = calculate_pool_allocations()
 
-                if not allocations:
-                    self._send_json(400, {"error": "No active users with deposits"})
+                # Allow recording trades even without user deposits
+                # (pool trades happen before users join)
+                result = record_trade(
+                    coin, trade_type, float(amount), float(price),
+                    allocations, swyftx_id, trade_timestamp
+                )
+                self._send_json(200, result)
+
+            elif path == '/api/trade/sync':
+                admin_wallet = body.get('adminWallet')
+                if not admin_wallet or not is_admin(admin_wallet):
+                    self._send_json(403, {"error": "Admin access required"})
                     return
 
-                result = record_trade(coin, trade_type, float(amount), float(price), allocations)
+                trades = body.get('trades', [])
+                if not trades:
+                    self._send_json(400, {"error": "trades array required"})
+                    return
+
+                result = sync_trades_from_swyftx(trades)
                 self._send_json(200, result)
 
             else:

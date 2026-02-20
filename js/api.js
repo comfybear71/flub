@@ -253,6 +253,18 @@ const API = {
                             Logger.log(`Auto-removed ${removed} filled order(s) from pending list`, 'success');
                             localStorage.setItem(Trading._LOCAL_KEY, JSON.stringify(localOrders));
                             if (typeof ServerState !== 'undefined') ServerState.savePendingOrders();
+
+                            // Record filled orders to MongoDB
+                            for (const o of filled) {
+                                const code = idToCode[String(o.secondary_asset)] ?? '';
+                                const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                                const isBuy = ot === 1 || ot === 3 || ot === 5;
+                                const qty = parseFloat(o.quantity ?? 0);
+                                const trigger = parseFloat(o.trigger ?? 0);
+                                if (code && qty > 0 && trigger > 0) {
+                                    this.recordTradeInDB(code, isBuy ? 'buy' : 'sell', qty, trigger);
+                                }
+                            }
                         }
                     }
                 } catch (e) {
@@ -392,6 +404,75 @@ const API = {
             Logger.log('Error response: ' + errorBody, 'error');
         }
         return res;
+    },
+
+    // ── Record a trade to MongoDB ──────────────────────────────────────────────
+    // Called after every successful market order (instant + auto-trader).
+    // For trigger/limit orders, called when we detect they've been filled.
+
+    async recordTradeInDB(coin, tradeType, cryptoAmount, price) {
+        const adminWallet = CONFIG.ADMIN_WALLETS?.[0];
+        if (!adminWallet) return;
+
+        try {
+            const res = await fetch('/api/trade', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    adminWallet,
+                    coin,
+                    type: tradeType,   // 'buy' or 'sell'
+                    amount: cryptoAmount,
+                    price
+                })
+            });
+
+            if (res.ok) {
+                Logger.log(`Trade saved to DB: ${tradeType} ${cryptoAmount.toFixed(6)} ${coin} @ $${price.toFixed(2)}`, 'success');
+            } else {
+                const err = await res.text();
+                Logger.log(`Trade DB save failed: ${err}`, 'error');
+            }
+        } catch (e) {
+            Logger.log(`Trade DB save error: ${e.message}`, 'error');
+        }
+    },
+
+    // ── Sync Swyftx order history to MongoDB ────────────────────────────────
+    // One-time (or periodic) backfill of all filled Swyftx orders into the
+    // trades collection. Deduplicates by swyftxId so safe to call repeatedly.
+
+    async syncSwyftxTradesToDB() {
+        const adminWallet = CONFIG.ADMIN_WALLETS?.[0];
+        if (!adminWallet) return;
+
+        try {
+            const swyftxOrders = await this.fetchSwyftxOrderHistory(200);
+            if (swyftxOrders.length === 0) {
+                Logger.log('No Swyftx trades to sync', 'info');
+                return;
+            }
+
+            const res = await fetch('/api/trade/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    adminWallet,
+                    trades: swyftxOrders
+                })
+            });
+
+            if (res.ok) {
+                const result = await res.json();
+                if (result.imported > 0) {
+                    Logger.log(`Synced ${result.imported} Swyftx trades to DB (${result.skipped} already existed)`, 'success');
+                } else {
+                    Logger.log(`Swyftx trade sync: ${result.skipped} already in DB, 0 new`, 'info');
+                }
+            }
+        } catch (e) {
+            Logger.log(`Swyftx trade sync error: ${e.message}`, 'error');
+        }
     },
 
     /**

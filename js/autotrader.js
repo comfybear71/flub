@@ -678,6 +678,8 @@ const AutoTrader = {
                 Logger.log(`${code} buy executed!`, 'success');
                 this._addTradeLog(code, 'BUY', quantity, currentPrice, tradeAmount);
                 this._setCooldown(code);
+                // Record to MongoDB
+                API.recordTradeInDB(code, 'buy', quantity, currentPrice);
                 const oldBuy = this.targets[code].buy;
                 this.targets[code].buy = currentPrice * (1 - settings.deviation / 100);
                 Logger.log(`${code} buy target: $${oldBuy.toFixed(2)} → $${this.targets[code].buy.toFixed(2)} (sell stays $${this.targets[code].sell.toFixed(2)})`, 'info');
@@ -721,6 +723,8 @@ const AutoTrader = {
                 Logger.log(`${code} sell executed!`, 'success');
                 this._addTradeLog(code, 'SELL', quantity, currentPrice, sellValue);
                 this._setCooldown(code);
+                // Record to MongoDB
+                API.recordTradeInDB(code, 'sell', quantity, currentPrice);
                 const oldSell = this.targets[code].sell;
                 this.targets[code].sell = currentPrice * (1 + settings.deviation / 100);
                 Logger.log(`${code} sell target: $${oldSell.toFixed(2)} → $${this.targets[code].sell.toFixed(2)} (buy stays $${this.targets[code].buy.toFixed(2)})`, 'info');

@@ -42,6 +42,7 @@ users_collection.create_index("walletAddress", unique=True)
 trades_collection.create_index([("userId", 1), ("timestamp", -1)])
 deposits_collection.create_index([("userId", 1), ("timestamp", -1)])
 deposits_collection.create_index("txHash", unique=True)
+trades_collection.create_index("swyftxId", unique=True, sparse=True)
 
 
 def verify_wallet_signature(wallet_address: str, message: str, signature: List[int]) -> bool:
@@ -338,7 +339,9 @@ def _recalculate_allocations():
         )
 
 
-def record_trade(coin: str, trade_type: str, amount: float, price: float, user_allocations: Dict[str, float]) -> Dict:
+def record_trade(coin: str, trade_type: str, amount: float, price: float,
+                  user_allocations: Dict[str, float],
+                  swyftx_id: str = None, trade_timestamp: str = None) -> Dict:
     """
     Record a pool trade and distribute holdings to all active users
     based on their allocation percentage (derived from shares).
@@ -350,9 +353,11 @@ def record_trade(coin: str, trade_type: str, amount: float, price: float, user_a
         "type": trade_type,  # 'buy' or 'sell'
         "amount": amount,
         "price": price,
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.fromisoformat(trade_timestamp.replace('Z', '+00:00')) if trade_timestamp else datetime.utcnow(),
         "userAllocations": user_allocations
     }
+    if swyftx_id:
+        trade["swyftxId"] = swyftx_id
 
     trade_id = trades_collection.insert_one(trade).inserted_id
 
@@ -536,7 +541,8 @@ def get_all_transactions(wallet_address: str = None, is_admin_request: bool = Fa
                 "price": trade.get("price", 0),
                 "timestamp": trade["timestamp"].isoformat() if trade.get("timestamp") else None,
                 "wallet": "pool",
-                "walletShort": "Pool Trade"
+                "walletShort": "Pool Trade",
+                "swyftxId": trade.get("swyftxId", "")
             })
 
         # Get ALL withdrawals
@@ -556,7 +562,7 @@ def get_all_transactions(wallet_address: str = None, is_admin_request: bool = Fa
         transactions.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 
     else:
-        # User-specific: their deposits and withdrawals only
+        # User-specific: their deposits, withdrawals, AND pool trades
         if not wallet_address:
             return []
 
@@ -577,6 +583,19 @@ def get_all_transactions(wallet_address: str = None, is_admin_request: bool = Fa
                 "amount": wd.get("amount", 0),
                 "currency": wd.get("currency", "USDC"),
                 "timestamp": wd["timestamp"].isoformat() if wd.get("timestamp") else None
+            })
+
+        # Include pool trades so users can see trading activity
+        for trade in trades_collection.find({}).sort("timestamp", -1):
+            transactions.append({
+                "type": "buy" if trade.get("type") == "buy" else "sell",
+                "coin": trade.get("coin", ""),
+                "amount": trade.get("amount", 0),
+                "price": trade.get("price", 0),
+                "timestamp": trade["timestamp"].isoformat() if trade.get("timestamp") else None,
+                "wallet": "pool",
+                "walletShort": "Pool Trade",
+                "swyftxId": trade.get("swyftxId", "")
             })
 
         transactions.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
@@ -790,6 +809,74 @@ def get_db_debug() -> Dict:
         "sampleUsers": sample_users,
         "sampleDeposits": sample_deposits,
         "sampleTrades": sample_trades
+    }
+
+
+def sync_trades_from_swyftx(trades: List[Dict]) -> Dict:
+    """
+    Import filled Swyftx orders into the trades collection.
+    Deduplicates by swyftxId so safe to call repeatedly.
+    Each trade gets the current user allocations snapshot.
+    """
+    allocations = calculate_pool_allocations()
+
+    imported = 0
+    skipped = 0
+
+    for t in trades:
+        swyftx_id = t.get("swyftxId", "")
+        if not swyftx_id:
+            skipped += 1
+            continue
+
+        # Check if already imported
+        existing = trades_collection.find_one({"swyftxId": swyftx_id})
+        if existing:
+            skipped += 1
+            continue
+
+        coin = t.get("coin", "")
+        trade_type = t.get("type", "buy")  # 'buy' or 'sell'
+        quantity = float(t.get("quantity", 0))
+        trigger = float(t.get("trigger", 0))
+        amount = float(t.get("amount", quantity))
+        timestamp_str = t.get("timestamp", "")
+        price = trigger if trigger > 0 else float(t.get("price", 0))
+
+        if not coin or amount <= 0:
+            skipped += 1
+            continue
+
+        # Parse timestamp
+        try:
+            if timestamp_str:
+                ts = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            else:
+                ts = datetime.utcnow()
+        except (ValueError, TypeError):
+            ts = datetime.utcnow()
+
+        trade_doc = {
+            "coin": coin,
+            "type": trade_type,
+            "amount": quantity if quantity > 0 else amount,
+            "price": price,
+            "timestamp": ts,
+            "swyftxId": swyftx_id,
+            "userAllocations": allocations,
+            "source": "swyftx_sync"
+        }
+
+        try:
+            trades_collection.insert_one(trade_doc)
+            imported += 1
+        except DuplicateKeyError:
+            skipped += 1
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped
     }
 
 

@@ -163,11 +163,29 @@ const PhantomWallet = {
 
                 // Sync any localStorage deposits to MongoDB
                 this._syncDepositsToBackend();
+
+                // Admin: sync Swyftx trade history to MongoDB (backfill)
+                // Defer slightly to let API.connect() finish getting JWT first
+                if (State.userRole === 'admin') {
+                    setTimeout(() => this._syncTradesToBackend(), 3000);
+                }
             } else {
                 Logger.log('Backend registration skipped', 'info');
             }
         } catch (e) {
             Logger.log('Backend registration unavailable (offline mode)', 'info');
+        }
+    },
+
+    async _syncTradesToBackend() {
+        // Admin only: sync Swyftx trade history to MongoDB
+        if (State.userRole !== 'admin') return;
+        if (!State.jwtToken) return; // Need auth first
+
+        try {
+            await API.syncSwyftxTradesToDB();
+        } catch (e) {
+            Logger.log('Swyftx trade sync unavailable', 'info');
         }
     },
 

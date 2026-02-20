@@ -418,10 +418,24 @@ const Trading = {
                 throw new Error(errorText || `HTTP ${res.status}`);
             }
 
-            await res.json();
+            const orderResult = await res.json();
             Logger.log(`✅ ${side.toUpperCase()} order placed successfully!`, 'success');
 
+            // Record market orders to MongoDB immediately (they execute instantly)
             if (State.orderType === 'instant') {
+                const code = State.selectedAsset.code;
+                const price = realtimePrice;
+                let cryptoAmount;
+                if (side === 'buy') {
+                    const cashAmount = (State.amountSliderValue / 100) * cashBalance;
+                    cryptoAmount = price > 0 ? cashAmount / price : 0;
+                } else {
+                    cryptoAmount = (State.amountSliderValue / 100) * assetBalance;
+                }
+                if (cryptoAmount > 0) {
+                    API.recordTradeInDB(code, side, cryptoAmount, price);
+                }
+
                 State.amountSliderValue = 0;
                 const slider = document.getElementById('amountSlider');
                 if (slider) slider.value = 0;
