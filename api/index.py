@@ -28,7 +28,8 @@ from database import (
     get_admin_stats,
     get_db_debug,
     sync_deposits_from_client,
-    sync_trades_from_swyftx
+    sync_trades_from_swyftx,
+    admin_import_user
 )
 
 
@@ -271,6 +272,27 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 result = sync_trades_from_swyftx(trades)
+                self._send_json(200, result)
+
+            elif path == '/api/admin/import-user':
+                admin_wallet = body.get('adminWallet')
+                if not admin_wallet or not is_admin(admin_wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+
+                wallet_address = body.get('walletAddress')
+                deposit_amount = body.get('amount')
+                pool_value = body.get('totalPoolValue')
+                tx_hash = body.get('txHash')
+
+                if not wallet_address or not deposit_amount or not pool_value:
+                    self._send_json(400, {"error": "walletAddress, amount, and totalPoolValue required"})
+                    return
+
+                result = admin_import_user(
+                    wallet_address, float(deposit_amount),
+                    float(pool_value), tx_hash
+                )
                 self._send_json(200, result)
 
             else:

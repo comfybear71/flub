@@ -812,6 +812,50 @@ def get_db_debug() -> Dict:
     }
 
 
+def admin_import_user(wallet_address: str, deposit_amount: float,
+                       total_pool_value: float, tx_hash: str = None) -> Dict:
+    """
+    Admin tool to manually register a user and record their deposit.
+    Used when users deposited before the DB existed and can't sync from localStorage.
+    Handles: user creation, deposit recording, share issuance, allocation recalculation.
+    """
+    # 1. Register user if needed
+    existing = users_collection.find_one({"walletAddress": wallet_address})
+    if not existing:
+        register_user(wallet_address)
+
+    # 2. Generate a unique txHash if not provided
+    if not tx_hash:
+        tx_hash = f"admin_import_{wallet_address[:8]}_{int(datetime.utcnow().timestamp())}"
+
+    # 3. Check if this deposit already exists
+    existing_dep = deposits_collection.find_one({"txHash": tx_hash})
+    if existing_dep:
+        return {
+            "success": False,
+            "error": "Deposit with this txHash already exists",
+            "existingAmount": existing_dep.get("amount", 0)
+        }
+
+    # 4. Record the deposit (issues shares, updates allocations)
+    try:
+        result = record_deposit(
+            wallet_address, deposit_amount, tx_hash,
+            total_pool_value, "USDC"
+        )
+        return {
+            "success": True,
+            "wallet": wallet_address,
+            "walletShort": wallet_address[:4] + "..." + wallet_address[-4:],
+            "amount": deposit_amount,
+            "shares": result.get("shares", 0),
+            "nav": result.get("nav", 0),
+            "txHash": tx_hash
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def sync_trades_from_swyftx(trades: List[Dict]) -> Dict:
     """
     Import filled Swyftx orders into the trades collection.
