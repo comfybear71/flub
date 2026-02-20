@@ -66,14 +66,15 @@ def verify_wallet_signature(wallet_address: str, message: str, signature: List[i
         return False
 
 
-def register_user(wallet_address: str, signature: List[int], message: str) -> Dict:
+def register_user(wallet_address: str, signature: List[int] = None, message: str = None) -> Dict:
     """
     Register a new user or return existing user data.
-    Verifies wallet ownership via signature.
+    Optionally verifies wallet ownership via signature (if provided).
     """
-    # Verify signature
-    if not verify_wallet_signature(wallet_address, message, signature):
-        raise ValueError("Invalid signature")
+    # Verify signature if provided
+    if signature and message:
+        if not verify_wallet_signature(wallet_address, message, signature):
+            raise ValueError("Invalid signature")
 
     # Check if user exists
     existing_user = users_collection.find_one({"walletAddress": wallet_address})
@@ -436,54 +437,57 @@ def get_leaderboard(total_pool_value: float) -> List[Dict]:
 
 def get_admin_stats(total_pool_value: float) -> Dict:
     """
-    Aggregated admin dashboard stats: user count, deposits, trades, activity.
+    Aggregated admin dashboard stats: ALL participants (including admin).
+    Shows total pool data so the admin always sees real values.
     """
     pool = get_pool_state()
     total_shares = pool["totalShares"]
     nav = total_pool_value / total_shares if total_shares > 0 else 1.0
 
-    # Active non-admin users
-    users = list(users_collection.find({
-        "isActive": True,
-        "walletAddress": {"$nin": ADMIN_WALLETS}
-    }))
-    user_count = len(users)
+    # ALL active users (including admin)
+    all_users = list(users_collection.find({"isActive": True}))
+    all_user_count = len(all_users)
 
-    # Total deposited by non-admin users
-    total_user_deposited = sum(u.get("totalDeposited", 0) for u in users)
+    # Total deposited by ALL users
+    total_deposited = sum(u.get("totalDeposited", 0) for u in all_users)
 
-    # Total current value held by non-admin users
-    total_user_value = sum(u.get("shares", 0) * nav for u in users)
+    # Total current value held by ALL users
+    total_value = sum(u.get("shares", 0) * nav for u in all_users)
 
-    # Last deposit (any user)
+    # Last deposit (anyone)
     last_dep = deposits_collection.find_one(
-        {"userId": {"$nin": ADMIN_WALLETS}},
         sort=[("timestamp", -1)]
     )
 
-    # Last user registration
+    # Last user registration (anyone)
     last_user = users_collection.find_one(
-        {"walletAddress": {"$nin": ADMIN_WALLETS}},
         sort=[("joinedDate", -1)]
     )
 
-    # Trade count
+    # Trade count (all)
     trade_count = trades_collection.count_documents({})
 
-    # Deposit count (non-admin)
-    deposit_count = deposits_collection.count_documents(
-        {"userId": {"$nin": ADMIN_WALLETS}}
-    )
+    # Deposit count (all)
+    deposit_count = deposits_collection.count_documents({})
 
-    # Withdrawal count (non-admin)
-    withdrawal_count = withdrawals_collection.count_documents(
-        {"userId": {"$nin": ADMIN_WALLETS}}
-    )
+    # Withdrawal count (all)
+    withdrawal_count = withdrawals_collection.count_documents({})
+
+    # Raw collection document counts for diagnostics
+    raw_counts = {
+        "users": users_collection.count_documents({}),
+        "deposits": deposits_collection.count_documents({}),
+        "trades": trades_collection.count_documents({}),
+        "withdrawals": withdrawals_collection.count_documents({}),
+        "poolState": 1 if pool_state_collection.find_one({"_id": "pool"}) else 0,
+        "traderState": 1 if trader_state_collection.find_one({"_id": "admin_state"}) else 0
+    }
 
     return {
-        "userCount": user_count,
-        "totalUserDeposited": round(total_user_deposited, 2),
-        "totalUserValue": round(total_user_value, 2),
+        "userCount": all_user_count,
+        "totalUserDeposited": round(total_deposited, 2),
+        "totalUserValue": round(total_value, 2),
+        "poolValue": round(total_pool_value, 2),
         "nav": round(nav, 6),
         "totalShares": round(total_shares, 2),
         "tradeCount": trade_count,
@@ -493,7 +497,8 @@ def get_admin_stats(total_pool_value: float) -> Dict:
         "lastDepositWallet": (last_dep.get("userId", "")[:4] + "..." + last_dep.get("userId", "")[-4:]) if last_dep and len(last_dep.get("userId", "")) > 8 else None,
         "lastDepositAmount": last_dep.get("amount", 0) if last_dep else 0,
         "lastUserJoined": last_user.get("joinedDate").isoformat() if last_user and last_user.get("joinedDate") else None,
-        "pnlPercent": round(((total_user_value / total_user_deposited) - 1) * 100, 2) if total_user_deposited > 0 else 0
+        "pnlPercent": round(((total_value / total_deposited) - 1) * 100, 2) if total_deposited > 0 else 0,
+        "dbCounts": raw_counts
     }
 
 
@@ -606,6 +611,186 @@ def save_trader_state(state: Dict) -> Dict:
         upsert=True
     )
     return {"success": True}
+
+
+def sync_deposits_from_client(wallet_address: str, deposits: List[Dict], total_pool_value: float) -> Dict:
+    """
+    Import deposit records from client localStorage into MongoDB.
+    Skips deposits that already exist (by txHash).
+    Also ensures the user exists and updates their shares/totalDeposited.
+    """
+    # Auto-create user if needed
+    user = users_collection.find_one({"walletAddress": wallet_address})
+    if not user:
+        register_user(wallet_address)
+        user = users_collection.find_one({"walletAddress": wallet_address})
+
+    # Ensure pool is initialized
+    pool = get_pool_state()
+    if pool["totalShares"] <= 0 and total_pool_value > 0:
+        initialize_pool(total_pool_value)
+        pool = get_pool_state()
+
+    imported = 0
+    skipped = 0
+    total_new_shares = 0.0
+    total_new_deposited = 0.0
+
+    for dep in deposits:
+        tx_hash = dep.get("txHash", "")
+        amount = dep.get("amount", 0)
+        if not tx_hash or amount <= 0:
+            skipped += 1
+            continue
+
+        # Check if deposit already recorded
+        existing = deposits_collection.find_one({"txHash": tx_hash})
+        if existing:
+            skipped += 1
+            continue
+
+        # Use the NAV from the original deposit if available, otherwise current
+        nav = dep.get("nav", 1.0)
+        shares = dep.get("shares", 0)
+        if shares <= 0:
+            shares = amount / nav if nav > 0 else amount
+
+        deposit_doc = {
+            "userId": wallet_address,
+            "amount": amount,
+            "currency": dep.get("currency", "USDC"),
+            "txHash": tx_hash,
+            "shares": shares,
+            "nav": nav,
+            "timestamp": datetime.utcnow(),
+            "status": "completed",
+            "source": "client_sync"
+        }
+
+        try:
+            deposits_collection.insert_one(deposit_doc)
+            total_new_shares += shares
+            total_new_deposited += amount
+            imported += 1
+        except DuplicateKeyError:
+            skipped += 1
+
+    # Update user's shares and totalDeposited
+    if total_new_shares > 0 or total_new_deposited > 0:
+        users_collection.update_one(
+            {"walletAddress": wallet_address},
+            {"$inc": {
+                "shares": total_new_shares,
+                "totalDeposited": total_new_deposited
+            }}
+        )
+
+        # Update pool totalShares
+        pool_state_collection.update_one(
+            {"_id": "pool"},
+            {"$inc": {"totalShares": total_new_shares}}
+        )
+
+        # Recalculate all allocations
+        _recalculate_allocations()
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "newShares": total_new_shares,
+        "newDeposited": total_new_deposited
+    }
+
+
+def get_db_debug() -> Dict:
+    """
+    Raw diagnostic dump of MongoDB collections.
+    Shows document counts, sample data, and connection status.
+    """
+    try:
+        # Test connection
+        db.command("ping")
+        connected = True
+    except Exception as e:
+        connected = False
+        return {"connected": False, "error": str(e)}
+
+    # Collection counts
+    counts = {
+        "users": users_collection.count_documents({}),
+        "deposits": deposits_collection.count_documents({}),
+        "trades": trades_collection.count_documents({}),
+        "withdrawals": withdrawals_collection.count_documents({}),
+        "pool_state": pool_state_collection.count_documents({}),
+        "trader_state": trader_state_collection.count_documents({})
+    }
+
+    # Pool state
+    pool_doc = pool_state_collection.find_one({"_id": "pool"})
+    pool_info = {
+        "totalShares": pool_doc.get("totalShares", 0) if pool_doc else None,
+        "initialized": pool_doc.get("initialized").isoformat() if pool_doc and pool_doc.get("initialized") else None,
+        "exists": pool_doc is not None
+    }
+
+    # Sample users (first 10, truncated wallets)
+    sample_users = []
+    for u in users_collection.find().limit(10):
+        w = u.get("walletAddress", "")
+        sample_users.append({
+            "wallet": w[:6] + "..." + w[-4:] if len(w) > 10 else w,
+            "shares": u.get("shares", 0),
+            "totalDeposited": u.get("totalDeposited", 0),
+            "allocation": u.get("allocation", 0),
+            "isActive": u.get("isActive"),
+            "joinedDate": u.get("joinedDate").isoformat() if u.get("joinedDate") else None
+        })
+
+    # Sample deposits (last 5)
+    sample_deposits = []
+    for d in deposits_collection.find().sort("timestamp", -1).limit(5):
+        w = d.get("userId", "")
+        sample_deposits.append({
+            "wallet": w[:6] + "..." + w[-4:] if len(w) > 10 else w,
+            "amount": d.get("amount", 0),
+            "currency": d.get("currency"),
+            "shares": d.get("shares", 0),
+            "nav": d.get("nav", 0),
+            "timestamp": d.get("timestamp").isoformat() if d.get("timestamp") else None
+        })
+
+    # Sample trades (last 5)
+    sample_trades = []
+    for t in trades_collection.find().sort("timestamp", -1).limit(5):
+        sample_trades.append({
+            "coin": t.get("coin"),
+            "type": t.get("type"),
+            "amount": t.get("amount", 0),
+            "price": t.get("price", 0),
+            "timestamp": t.get("timestamp").isoformat() if t.get("timestamp") else None
+        })
+
+    # ADMIN_WALLETS config
+    admin_config = {
+        "count": len(ADMIN_WALLETS),
+        "wallets": [w[:6] + "..." + w[-4:] if len(w) > 10 else w for w in ADMIN_WALLETS]
+    }
+
+    # All collection names in the database
+    all_collections = db.list_collection_names()
+
+    return {
+        "connected": connected,
+        "database": DB_NAME,
+        "collections": all_collections,
+        "counts": counts,
+        "poolState": pool_info,
+        "adminConfig": admin_config,
+        "sampleUsers": sample_users,
+        "sampleDeposits": sample_deposits,
+        "sampleTrades": sample_trades
+    }
 
 
 def calculate_pool_allocations() -> Dict[str, float]:

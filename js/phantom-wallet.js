@@ -87,6 +87,9 @@ const PhantomWallet = {
             // Determine role immediately from config
             this.determineRole();
 
+            // Auto-register in MongoDB (non-blocking)
+            this._registerInBackend();
+
             // Load server-synced state (auto-trader config, pending orders, etc.)
             if (typeof ServerState !== 'undefined' && State.userRole === 'admin') {
                 ServerState.load();
@@ -126,6 +129,9 @@ const PhantomWallet = {
             // Determine role immediately from config
             this.determineRole();
 
+            // Auto-register in MongoDB (non-blocking)
+            this._registerInBackend();
+
             // Load server-synced state
             if (typeof ServerState !== 'undefined' && State.userRole === 'admin') {
                 ServerState.load();
@@ -139,6 +145,69 @@ const PhantomWallet = {
 
             this.saveUserSession();
             UI.updateWalletStatus('connected', this.walletAddress);
+        }
+    },
+
+    async _registerInBackend() {
+        if (!this.walletAddress) return;
+        try {
+            const res = await fetch('/api/user/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ walletAddress: this.walletAddress })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                Logger.log(`Registered in backend: ${data.role}`, 'success');
+                this.saveUserData(data);
+
+                // Sync any localStorage deposits to MongoDB
+                this._syncDepositsToBackend();
+            } else {
+                Logger.log('Backend registration skipped', 'info');
+            }
+        } catch (e) {
+            Logger.log('Backend registration unavailable (offline mode)', 'info');
+        }
+    },
+
+    async _syncDepositsToBackend() {
+        if (!this.walletAddress) return;
+
+        const key = `flub_deposits_${this.walletAddress}`;
+        const depositsRaw = localStorage.getItem(key);
+        if (!depositsRaw) return;
+
+        const deposits = JSON.parse(depositsRaw);
+        if (!deposits || deposits.length === 0) return;
+
+        // Get current pool value for context
+        const totalPoolValue = State.portfolioData?.assets?.reduce(
+            (sum, a) => sum + (a.usd_value || 0), 0
+        ) || 0;
+
+        try {
+            const res = await fetch('/api/user/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    walletAddress: this.walletAddress,
+                    deposits: deposits,
+                    totalPoolValue: totalPoolValue
+                })
+            });
+
+            if (res.ok) {
+                const result = await res.json();
+                if (result.imported > 0) {
+                    Logger.log(
+                        `Synced ${result.imported} deposits to database ` +
+                        `(${result.skipped} already existed)`, 'success'
+                    );
+                }
+            }
+        } catch (e) {
+            Logger.log('Deposit sync to database unavailable', 'info');
         }
     },
 

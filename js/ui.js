@@ -394,6 +394,8 @@ const UI = {
             const ago = this._timeAgo(d);
             const who = stats.lastDepositWallet ?? '';
             lastDepEl.textContent = `Last deposit: $${this._fmtNum(stats.lastDepositAmount)} ${who} · ${ago}`;
+        } else if (lastDepEl) {
+            lastDepEl.textContent = 'Last deposit: --';
         }
 
         // Last user joined
@@ -401,6 +403,19 @@ const UI = {
         if (lastJoinEl && stats.lastUserJoined) {
             const d = new Date(stats.lastUserJoined);
             lastJoinEl.textContent = `Last joined: ${this._timeAgo(d)}`;
+        } else if (lastJoinEl) {
+            lastJoinEl.textContent = 'Last joined: --';
+        }
+
+        // Pool value (from Swyftx API)
+        const poolValEl = el('statPoolValue');
+        if (poolValEl) poolValEl.textContent = '$' + this._fmtNum(stats.poolValue ?? 0);
+
+        // DB diagnostic counts
+        const dbCountsEl = el('statDbCounts');
+        if (dbCountsEl && stats.dbCounts) {
+            const c = stats.dbCounts;
+            dbCountsEl.textContent = `DB: ${c.users}u ${c.deposits}d ${c.trades}t ${c.poolState ? 'pool' : 'no-pool'}`;
         }
     },
 

@@ -107,7 +107,7 @@ const ShareLedger = {
     async recordDeposit(wallet, amount, txHash, totalPoolValue) {
         // Try API first
         try {
-            const res = await fetch('/api/deposit', {
+            let res = await fetch('/api/deposit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -117,6 +117,31 @@ const ShareLedger = {
                     totalPoolValue: totalPoolValue
                 })
             });
+
+            // If user not found, auto-register and retry
+            if (!res.ok) {
+                const err = await res.json();
+                if (err.error && err.error.includes('not found')) {
+                    Logger.log('ShareLedger: Auto-registering user before deposit...', 'info');
+                    await fetch('/api/user/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ walletAddress: wallet })
+                    });
+
+                    // Retry deposit
+                    res = await fetch('/api/deposit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            walletAddress: wallet,
+                            amount: amount,
+                            txHash: txHash,
+                            totalPoolValue: totalPoolValue
+                        })
+                    });
+                }
+            }
 
             if (res.ok) {
                 const result = await res.json();
@@ -131,13 +156,12 @@ const ShareLedger = {
                 return { shares: result.shares, nav: result.nav };
             }
 
-            const err = await res.json();
-            Logger.log(`ShareLedger: API deposit error: ${err.error}`, 'error');
+            Logger.log(`ShareLedger: API deposit failed`, 'error');
         } catch (e) {
             Logger.log('ShareLedger: API unreachable for deposit, using localStorage fallback', 'warn');
         }
 
-        // Fallback: localStorage
+        // Fallback: localStorage (also always store locally for offline access)
         return this._issueSharesLocalStorage(wallet, amount, totalPoolValue);
     },
 

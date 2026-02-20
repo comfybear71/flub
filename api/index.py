@@ -25,7 +25,9 @@ from database import (
     get_user_position,
     get_leaderboard,
     get_all_transactions,
-    get_admin_stats
+    get_admin_stats,
+    get_db_debug,
+    sync_deposits_from_client
 )
 
 
@@ -134,6 +136,14 @@ class handler(BaseHTTPRequestHandler):
                 )
                 self._send_json(200, {"transactions": txns, "count": len(txns), "isAdmin": admin_req})
 
+            elif path == '/api/debug':
+                wallet = params.get('wallet')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+                debug_info = get_db_debug()
+                self._send_json(200, debug_info)
+
             else:
                 self._send_json(404, {"error": "Not found"})
 
@@ -150,10 +160,11 @@ class handler(BaseHTTPRequestHandler):
                 signature = body.get('signature')
                 message = body.get('message')
 
-                if not all([wallet_address, signature, message]):
-                    self._send_json(400, {"error": "walletAddress, signature, and message required"})
+                if not wallet_address:
+                    self._send_json(400, {"error": "walletAddress required"})
                     return
 
+                # Signature verification is optional — allows simple registration on connect
                 user_data = register_user(wallet_address, signature, message)
                 self._send_json(200, user_data)
 
@@ -203,6 +214,20 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 result = save_trader_state(update)
+                self._send_json(200, result)
+
+            elif path == '/api/user/sync':
+                wallet_address = body.get('walletAddress')
+                deposits = body.get('deposits', [])
+                pool_value = body.get('totalPoolValue', 0)
+
+                if not wallet_address:
+                    self._send_json(400, {"error": "walletAddress required"})
+                    return
+
+                result = sync_deposits_from_client(
+                    wallet_address, deposits, float(pool_value)
+                )
                 self._send_json(200, result)
 
             elif path == '/api/trade':

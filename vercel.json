@@ -18,6 +18,7 @@
     { "source": "/api/admin/stats", "destination": "/api/index.py" },
     { "source": "/api/leaderboard", "destination": "/api/index.py" },
     { "source": "/api/transactions", "destination": "/api/index.py" },
+    { "source": "/api/debug", "destination": "/api/index.py" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
