@@ -366,6 +366,11 @@ const API = {
             Logger.log(`Pending orders: ${normalised.length} local + ${apiOrders.length} API = ${State.pendingOrders.length} total`, 'info');
             UI.renderPendingOrders();
 
+            // Persist enriched orders to DB so non-admin users can see them
+            if (State.userRole === 'admin') {
+                ServerState.saveEnrichedOrders();
+            }
+
         } catch (error) {
             Logger.log(`Pending orders error: ${error.message}`, 'error');
         }

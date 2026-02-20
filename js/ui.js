@@ -1378,10 +1378,17 @@ const UI = {
             const data = await res.json();
             if (data.error) return;
 
+            // ── Pending orders (enriched by admin, readable by users) ──
+            const orders = data.enrichedOrders || data.pendingOrders || [];
+            State.pendingOrders = orders;
+            const countEl = document.getElementById('userPendingCount');
+            if (countEl) {
+                const count = orders.length;
+                countEl.textContent = count === 0 ? 'None' : `${count} order${count !== 1 ? 's' : ''}`;
+            }
+
+            // ── Auto-trader status ──
             const isActive = data.autoActive?.isActive || false;
-            const targets = data.autoActive?.targets || data.autoActive?.basePrices || {};
-            const cooldowns = data.autoCooldowns || {};
-            const now = Date.now();
 
             if (isActive) {
                 statusEl.textContent = 'Active';

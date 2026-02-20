@@ -160,5 +160,10 @@ const ServerState = {
 
     saveTierAssignments() {
         this.save({ autoTierAssignments: AutoTrader.tierAssignments });
+    },
+
+    // Save enriched (fully normalised) pending orders so non-admin users can see them
+    saveEnrichedOrders() {
+        this.save({ enrichedOrders: State.pendingOrders || [] });
     }
 };
