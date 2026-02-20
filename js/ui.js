@@ -209,19 +209,11 @@ const UI = {
             if (hasAllocation) {
                 // User has allocation — show their proportional crypto holdings
                 const userCrypto = cryptoAssets.map(a => (a.usd_value || 0) * (State.userAllocation / 100));
-                const userCryptoTotal = userCrypto.reduce((s, v) => s + v, 0);
-                // Remaining USDC deposit not yet allocated
-                const usdcRemaining = Math.max(0, deposited - userCryptoTotal);
                 chartData = [...userCrypto];
                 chartColors = [...cryptoAssets.map(a => CONFIG.ASSET_STYLES[a.code]?.color ?? '#666')];
                 chartLabels = [...cryptoAssets.map(a => a.code)];
-                if (usdcRemaining > 0.01) {
-                    chartData.push(usdcRemaining);
-                    chartColors.push('#22c55e');
-                    chartLabels.push('USDC');
-                }
                 centerLabel = 'My Portfolio';
-                centerValue = Assets.formatCurrency(deposited);
+                centerValue = Assets.formatCurrency(State.userCurrentValue || deposited);
                 subtitle = `${State.userAllocation.toFixed(1)}% of pool`;
             } else {
                 // User deposited but has NO allocation yet — show USDC only
@@ -498,7 +490,7 @@ const UI = {
 
             let displayTotal;
             if (isUser && this.chartView === 'user') {
-                displayTotal = State.userDeposits || 0;
+                displayTotal = State.userCurrentValue || State.userDeposits || 0;
             } else {
                 displayTotal = cryptoTotal + usdcVal + audVal;
             }
@@ -1176,42 +1168,69 @@ const UI = {
         // Only calculate for users who have deposited
         if (State.userRole !== 'user' || !State.userDeposits) {
             State.userAllocation = 0;
+            State.userShares = 0;
+            State.userCurrentValue = 0;
             return;
         }
 
-        // Total pool value = all assets from Swyftx (USDC + AUD + crypto)
         const totalPoolValue = State.portfolioData.assets.reduce(
             (sum, a) => sum + (a.usd_value || 0), 0
         );
 
         if (totalPoolValue <= 0) {
             State.userAllocation = 0;
+            State.userShares = 0;
+            State.userCurrentValue = 0;
             return;
         }
 
-        // User's allocation = their deposits / total pool value * 100
-        // Cap at 100% in case deposits exceed pool value (shouldn't happen normally)
-        State.userAllocation = Math.min(100, (State.userDeposits / totalPoolValue) * 100);
+        // Initialize pool shares if needed
+        ShareLedger.initializePool(totalPoolValue);
 
-        Logger.log(`User allocation: ${State.userAllocation.toFixed(2)}% ($${State.userDeposits.toFixed(2)} / $${totalPoolValue.toFixed(2)})`, 'info');
+        // Get wallet and migrate legacy deposits if needed
+        const wallet = typeof PhantomWallet !== 'undefined' ? PhantomWallet.walletAddress : null;
+        if (wallet) {
+            ShareLedger.migrateIfNeeded(wallet, State.userDeposits, totalPoolValue);
+        }
+
+        // Share-based allocation: user value = userShares × NAV
+        const position = ShareLedger.getUserPosition(wallet, totalPoolValue);
+        State.userShares = position.shares;
+        State.userAllocation = position.allocation;
+        State.userCurrentValue = position.currentValue;
+
+        Logger.log(
+            `User allocation: ${State.userAllocation.toFixed(2)}% ` +
+            `(${State.userShares.toFixed(2)} shares, NAV $${position.nav.toFixed(4)}, ` +
+            `value $${State.userCurrentValue.toFixed(2)})`, 'info'
+        );
     },
 
     // ── Deposit tracking (localStorage until backend) ────────────────────────
 
     _recordDeposit(wallet, amount, txHash) {
+        // Get current pool value for NAV calculation
+        const totalPoolValue = State.portfolioData.assets.reduce(
+            (sum, a) => sum + (a.usd_value || 0), 0
+        );
+
+        // Issue shares via ShareLedger (NAV-based)
+        const { shares, nav } = ShareLedger.issueShares(wallet, amount, totalPoolValue);
+
+        // Record deposit with share data for audit trail
         const key = `flub_deposits_${wallet}`;
         const deposits = JSON.parse(localStorage.getItem(key) || '[]');
-        deposits.push({ amount, txHash, timestamp: Date.now() });
+        deposits.push({ amount, shares, nav, txHash, timestamp: Date.now() });
         localStorage.setItem(key, JSON.stringify(deposits));
 
         // Update state
         const total = deposits.reduce((sum, d) => sum + d.amount, 0);
         State.userDeposits = total;
 
-        // Recalculate allocation with new deposit
+        // Recalculate allocation from shares
         this.calculateUserAllocation();
 
-        Logger.log(`Total deposited: $${total.toFixed(2)} USDC`, 'success');
+        Logger.log(`Deposited $${amount.toFixed(2)} USDC → ${shares.toFixed(4)} shares @ NAV $${nav.toFixed(4)}`, 'success');
     },
 
     // ── User Insight Cards (read-only views) ───────────────────────────────
@@ -1594,11 +1613,14 @@ const UI = {
         const total = deposits.reduce((sum, d) => sum + d.amount, 0);
         State.userDeposits = total;
 
+        // Load share balance
+        State.userShares = ShareLedger.getUserShares(wallet);
+
         // Update wallet panel
         const depositedEl = document.getElementById('walletPanelDeposited');
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(total);
 
-        // Calculate allocation based on current pool data
+        // Calculate allocation from shares (will also handle migration)
         this.calculateUserAllocation();
 
         // Update portfolio info panel
@@ -1620,9 +1642,8 @@ const UI = {
         const totalDeposited = State.userDeposits || 0;
         const alloc = State.userAllocation || 0;
 
-        // Calculate current portfolio value
-        const totalPoolValue = State.portfolioData.assets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
-        const currentValue = alloc > 0 ? (totalPoolValue * alloc / 100) : totalDeposited;
+        // Current value from share-based accounting
+        const currentValue = State.userCurrentValue || totalDeposited;
 
         // P&L calculation
         const pnl = currentValue - totalDeposited;

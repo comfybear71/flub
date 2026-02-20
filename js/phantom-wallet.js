@@ -486,10 +486,9 @@ const PhantomWallet = {
         if (allocEl) allocEl.textContent = (State.userAllocation || 0).toFixed(2) + '%';
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(State.userDeposits || 0);
 
-        // Calculate current portfolio value based on allocation
+        // Current portfolio value from share-based accounting
         const alloc = State.userAllocation || 0;
-        const totalPoolValue = State.portfolioData.assets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
-        const currentValue = alloc > 0 ? (totalPoolValue * alloc / 100) : (State.userDeposits || 0);
+        const currentValue = State.userCurrentValue || (State.userDeposits || 0);
         if (valueEl) valueEl.textContent = Assets.formatCurrency(currentValue);
 
         // On-chain balances

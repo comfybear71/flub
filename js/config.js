@@ -95,6 +95,8 @@ const State = {
     userAllocation: 0,
     userHoldings: {},
     userDeposits: 0,
+    userShares: 0,
+    userCurrentValue: 0,
     userRole: null,
     walletBalances: { sol: 0, usdc: 0, budju: 0 }
 };
