@@ -45,7 +45,7 @@
     display: flex;
     justify-content: center;
     gap: 8px;
-    padding: 10px 16px 4px;
+    margin-top: 8px;
 }
 #adminQuickNav button {
     display: inline-flex;

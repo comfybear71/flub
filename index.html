@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260220e">
+    <link rel="stylesheet" href="css/styles.css?v=20260220f">
 </head>
 <body class="pb-20">
 
@@ -60,6 +60,22 @@
                     <span id="dot-pool" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.2);margin:0 3px;transition:all 0.2s;cursor:pointer;"></span>
                 </div>
                 <p class="text-xs text-slate-500 mt-1 font-medium" id="portfolioHint">Tap coin to trade</p>
+
+                <!-- Admin quick-nav buttons -->
+                <div class="admin-only" id="adminQuickNav">
+                    <button onclick="UI.quickNav('instant')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Instant
+                    </button>
+                    <button onclick="UI.quickNav('trigger')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                        Trigger
+                    </button>
+                    <button onclick="UI.quickNav('auto')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                        Auto
+                    </button>
+                </div>
 
                 <!-- Cash balances: admin sees USDC+AUD, user sees deposited USDC -->
                 <div class="cash-balances-header admin-only" style="margin-top:8px;justify-content:center;">
@@ -413,22 +429,6 @@
             </div>
             
         </div>
-    </div>
-
-    <!-- Admin quick-nav buttons (outside chart slider so overflow:hidden can't clip them) -->
-    <div class="admin-only" id="adminQuickNav">
-        <button onclick="UI.quickNav('instant')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            Instant
-        </button>
-        <button onclick="UI.quickNav('trigger')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
-            Trigger
-        </button>
-        <button onclick="UI.quickNav('auto')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-            Auto
-        </button>
     </div>
 
     <div class="holdings-container" id="holdingsContainer">
