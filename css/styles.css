@@ -817,12 +817,9 @@ input[type="range"]::-moz-range-thumb {
 
 /* NEW: Cash balances in header */
 .cash-balances-header {
-    display: flex;
+    display: inline-flex;
     gap: 16px;
     align-items: center;
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
     background: rgba(30, 41, 59, 0.8);
     padding: 8px 16px;
     border-radius: 12px;
