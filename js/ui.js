@@ -723,6 +723,9 @@ const UI = {
     // ── Pending Orders ──────────────────────────────────────────────────────
 
     renderPendingOrders() {
+        // Always keep user insight cards in sync (even if admin panel absent)
+        this.updateUserInsightCards();
+
         const container = document.getElementById('pendingOrdersList');
         const countEl   = document.getElementById('pendingOrdersCount');
         if (!container) return;
@@ -750,9 +753,6 @@ const UI = {
             3: 'Cancelled',
             4: 'Filled'
         };
-
-        // Also update user insight cards
-        this.updateUserInsightCards();
 
         container.innerHTML = orders.map(order => {
             const side       = order.isBuy ? 'buy' : 'sell';
@@ -1378,12 +1378,16 @@ const UI = {
             const data = await res.json();
             if (data.error) return;
 
-            // ── Pending orders (enriched by admin, readable by users) ──
-            const orders = data.enrichedOrders || data.pendingOrders || [];
-            State.pendingOrders = orders;
+            // ── Pending orders: use MongoDB as fallback only ──
+            // State.pendingOrders may already be populated from Swyftx API
+            // (via fetchPendingOrders), so only overwrite if currently empty
+            const serverOrders = data.enrichedOrders || data.pendingOrders || [];
+            if ((!State.pendingOrders || State.pendingOrders.length === 0) && serverOrders.length > 0) {
+                State.pendingOrders = serverOrders;
+            }
             const countEl = document.getElementById('userPendingCount');
             if (countEl) {
-                const count = orders.length;
+                const count = (State.pendingOrders || []).length;
                 countEl.textContent = count === 0 ? 'None' : `${count} order${count !== 1 ? 's' : ''}`;
             }
 
@@ -1409,10 +1413,29 @@ const UI = {
         }
     },
 
-    showUserPendingOrders() {
+    async showUserPendingOrders() {
         const modal = document.getElementById('userPendingModal');
         const list = document.getElementById('userPendingList');
         if (!modal || !list) return;
+
+        // Show modal immediately with loading state
+        list.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px;">Loading orders\u2026</div>';
+        modal.classList.add('show');
+
+        // Fetch fresh orders from server so data is never stale
+        try {
+            const adminWallet = CONFIG.ADMIN_WALLETS[0];
+            if (adminWallet) {
+                const res = await fetch(`/api/state?admin_wallet=${encodeURIComponent(adminWallet)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!data.error) {
+                        const fresh = data.enrichedOrders || data.pendingOrders || [];
+                        if (fresh.length > 0) State.pendingOrders = fresh;
+                    }
+                }
+            }
+        } catch (e) { /* fall through to State.pendingOrders */ }
 
         const orders = State.pendingOrders || [];
 
@@ -1426,17 +1449,18 @@ const UI = {
                 const style = CONFIG.ASSET_STYLES[order.assetCode] ?? { color:'#666', icon: order.assetCode?.[0] ?? '?' };
                 const typeLabel = ORDER_TYPE_LABELS[order.orderType] ?? 'Trigger';
                 const currSymbol = order.priCode === 'AUD' ? 'A$' : '$';
+                const dist = typeof order.distance === 'number' ? order.distance : 100;
                 const maxDist = 30;
-                const clampedDist = Math.min(order.distance, maxDist);
+                const clampedDist = Math.min(dist, maxDist);
                 const proximity = Math.max(0, ((maxDist - clampedDist) / maxDist) * 100);
 
                 let distClass = 'far';
-                if (order.distance < 2) distClass = 'very-close';
-                else if (order.distance < 5) distClass = 'close';
+                if (dist < 2) distClass = 'very-close';
+                else if (dist < 5) distClass = 'close';
 
-                const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger);
-                const currentFormatted = currSymbol + Assets.formatNumber(order.currentPrice);
-                const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity);
+                const triggerFormatted = currSymbol + Assets.formatNumber(order.trigger ?? 0);
+                const currentFormatted = order.currentPrice ? (currSymbol + Assets.formatNumber(order.currentPrice)) : '—';
+                const qtyDisplay = currSymbol + Assets.formatNumber(order.quantity ?? 0);
 
                 return `
                 <div class="pending-order-card ${side}">
@@ -1457,7 +1481,7 @@ const UI = {
                         <div class="proximity-bar-track">
                             <div class="proximity-bar-fill ${side}" style="width:${proximity}%;"></div>
                         </div>
-                        <span class="proximity-label ${distClass}">${order.distance.toFixed(1)}% away</span>
+                        <span class="proximity-label ${distClass}">${dist.toFixed(1)}% away</span>
                     </div>
                     <div class="pending-order-current">
                         <span>Now: ${currentFormatted}</span>
@@ -1466,8 +1490,6 @@ const UI = {
                 </div>`;
             }).join('');
         }
-
-        modal.classList.add('show');
     },
 
     showUserAutoTrader() {
