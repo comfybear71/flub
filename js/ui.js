@@ -1117,25 +1117,56 @@ const UI = {
     },
 
     async _fetchTradeMarkers(assetCode) {
+        let markers = [];
+
+        // Source 1: MongoDB (already has all synced Swyftx trades)
         try {
-            const trades = await API.fetchSwyftxOrderHistory(200);
-            const audRate = CONFIG.AUD_TO_USD_RATE || 0.70;
-            // Filter for this asset, convert AUD prices to USD to match chart
-            return trades.filter(t => t.coin === assetCode).map(t => {
-                let price = t.trigger || t.price || 0;
-                // If trade was in AUD, convert to USD for chart alignment
-                if (t.priCode === 'AUD' && price > 0) price *= audRate;
-                return {
-                    type: t.type,   // 'buy' or 'sell'
-                    price,
-                    time: t.timestamp ? new Date(t.timestamp).getTime() : 0,
-                    amount: t.quantity || t.amount || 0
-                };
-            }).filter(t => t.price > 0 && t.time > 0);
+            const adminWallet = CONFIG.ADMIN_WALLETS?.[0];
+            if (adminWallet) {
+                const res = await fetch(`/api/transactions?wallet=${adminWallet}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const txns = data.transactions || [];
+                    console.log(`[Chart] MongoDB returned ${txns.length} total txns, filtering for ${assetCode} trades`);
+                    markers = txns
+                        .filter(t => (t.type === 'buy' || t.type === 'sell') && t.coin === assetCode)
+                        .map(t => ({
+                            type: t.type,
+                            price: parseFloat(t.price || 0),
+                            time: t.timestamp ? new Date(t.timestamp).getTime() : 0,
+                            amount: parseFloat(t.amount || 0)
+                        }))
+                        .filter(t => t.price > 0 && t.time > 0);
+                    console.log(`[Chart] Found ${markers.length} ${assetCode} trade markers from MongoDB`);
+                }
+            }
         } catch (e) {
-            console.error('Trade markers fetch error:', e);
-            return [];
+            console.warn('[Chart] MongoDB trade fetch failed:', e.message);
         }
+
+        // Source 2: Swyftx API (fallback / additional)
+        if (markers.length === 0) {
+            try {
+                const trades = await API.fetchSwyftxOrderHistory(200);
+                console.log(`[Chart] Swyftx returned ${trades.length} filled orders`);
+                const audRate = CONFIG.AUD_TO_USD_RATE || 0.70;
+                markers = trades.filter(t => t.coin === assetCode).map(t => {
+                    let price = t.trigger || t.price || 0;
+                    if (t.priCode === 'AUD' && price > 0) price *= audRate;
+                    return {
+                        type: t.type,
+                        price,
+                        time: t.timestamp ? new Date(t.timestamp).getTime() : 0,
+                        amount: t.quantity || t.amount || 0
+                    };
+                }).filter(t => t.price > 0 && t.time > 0);
+                console.log(`[Chart] Found ${markers.length} ${assetCode} trade markers from Swyftx`);
+            } catch (e) {
+                console.warn('[Chart] Swyftx trade fetch failed:', e.message);
+            }
+        }
+
+        return markers;
     },
 
     _renderPriceChart(priceData, tradeMarkers, assetCode) {
@@ -1167,6 +1198,11 @@ const UI = {
         const chartStart = priceData[0].time;
         const chartEnd = priceData[priceData.length - 1].time;
 
+        console.log(`[Chart] ${tradeMarkers.length} trade markers for ${assetCode}, chart range: ${new Date(chartStart).toISOString()} – ${new Date(chartEnd).toISOString()}`);
+        tradeMarkers.forEach((t, i) => {
+            console.log(`[Chart] Trade #${i}: ${t.type} ${t.amount} @ $${t.price} on ${new Date(t.time).toISOString()}`);
+        });
+
         tradeMarkers.forEach((t, i) => {
             // Only show trades within chart range
             if (t.time < chartStart || t.time > chartEnd) return;
@@ -1179,20 +1215,22 @@ const UI = {
                 backgroundColor: isBuy ? '#22c55e' : '#ef4444',
                 borderColor: isBuy ? '#16a34a' : '#dc2626',
                 borderWidth: 2,
-                radius: 6,
+                radius: 7,
                 label: {
+                    enabled: true,
                     display: true,
-                    content: `${isBuy ? 'BUY' : 'SELL'} ${t.amount ? t.amount.toFixed(4) : ''}`,
-                    position: isBuy ? 'end' : 'start',
-                    backgroundColor: isBuy ? 'rgba(34,197,94,0.85)' : 'rgba(239,68,68,0.85)',
+                    content: `${isBuy ? 'BUY' : 'SELL'} $${t.price.toFixed(0)}`,
+                    backgroundColor: isBuy ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
                     color: '#fff',
                     font: { size: 9, weight: 'bold' },
-                    padding: { left: 4, right: 4, top: 2, bottom: 2 },
+                    padding: { left: 5, right: 5, top: 3, bottom: 3 },
                     borderRadius: 4,
-                    yAdjust: isBuy ? 12 : -12
+                    yAdjust: isBuy ? 16 : -16
                 }
             };
         });
+
+        console.log(`[Chart] ${Object.keys(annotations).length} annotations in chart range`);
 
         // Price formatting for y-axis
         const maxPrice = Math.max(...priceData.map(p => p.price));
