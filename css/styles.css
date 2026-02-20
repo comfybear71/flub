@@ -45,7 +45,31 @@
     display: flex;
     justify-content: center;
     gap: 8px;
-    margin-top: 10px;
+    padding: 10px 16px 4px;
+}
+#adminQuickNav button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid rgba(59,130,246,0.25);
+    background: rgba(59,130,246,0.1);
+    color: #60a5fa;
+}
+#adminQuickNav button:nth-child(2) {
+    border-color: rgba(168,85,247,0.25);
+    background: rgba(168,85,247,0.1);
+    color: #c084fc;
+}
+#adminQuickNav button:nth-child(3) {
+    border-color: rgba(168,85,247,0.25);
+    background: rgba(168,85,247,0.1);
+    color: #a855f7;
 }
 
 body {
