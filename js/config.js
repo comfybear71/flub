@@ -11,7 +11,7 @@ const CONFIG = {
     ],
     USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     BUDJU_MINT: '2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump',
-    BUDJU_REQUIRED: 1_000_000,
+    BUDJU_REQUIRED: 10_000_000,
     DEPOSIT_ADDRESS: '2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD',
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
     RPC_PROXY: '/api/rpc',

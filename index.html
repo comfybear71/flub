@@ -658,7 +658,12 @@
                 </div>
                 <div>
                     <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Wallet</div>
-                    <div id="walletPanelAddress" style="font-size:12px;color:#e2e8f0;font-weight:600;word-break:break-all;"></div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div id="walletPanelAddress" style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;"></div>
+                        <button id="copyWalletBtn" onclick="PhantomWallet.copyAddress()" title="Copy full address" style="background:none;border:1px solid rgba(148,163,184,0.2);border-radius:4px;padding:2px 4px;cursor:pointer;display:flex;align-items:center;flex-shrink:0;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
             <span id="walletPanelRole" class="wallet-panel-role-badge user">User</span>
@@ -681,8 +686,20 @@
                     <div id="walletPanelBudju" style="font-size:13px;font-weight:700;color:#e2e8f0;">0</div>
                 </div>
             </div>
-            <div id="budjuRequirement" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.15);border-radius:8px;font-size:10px;color:#ec4899;text-align:center;">
-                1,000,000 BUDJU required to use Flub (coming soon)
+            <div id="budjuRequirement" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.15);border-radius:10px;text-align:center;">
+                <div style="font-size:11px;color:#ec4899;font-weight:600;margin-bottom:6px;">10,000,000 BUDJU required to participate</div>
+                <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">You need <span id="budjuShortfall" style="color:#ec4899;font-weight:600;">10,000,000</span> more BUDJU</div>
+                <div style="display:flex;gap:6px;">
+                    <a href="https://jup.ag/swap/SOL-BUDJU" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);border-radius:8px;color:#c084fc;font-size:10px;font-weight:600;text-decoration:none;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                        Buy with SOL
+                    </a>
+                    <a href="https://jup.ag/swap/USDC-BUDJU" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);border-radius:8px;color:#4ade80;font-size:10px;font-weight:600;text-decoration:none;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                        Buy with USDC
+                    </a>
+                </div>
+                <div style="font-size:9px;color:#64748b;margin-top:6px;">Powered by Jupiter</div>
             </div>
         </div>
 

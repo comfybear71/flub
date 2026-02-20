@@ -477,7 +477,13 @@ const PhantomWallet = {
         const budjuReqEl = document.getElementById('budjuRequirement');
         const holdingsListEl = document.getElementById('walletPanelHoldingsList');
 
-        if (addrEl) addrEl.textContent = this.walletAddress || '';
+        if (addrEl && this.walletAddress) {
+            const w = this.walletAddress;
+            addrEl.textContent = `${w.substring(0, 4)}...${w.substring(w.length - 4)}`;
+            addrEl.title = w; // Full address on hover
+        } else if (addrEl) {
+            addrEl.textContent = '';
+        }
         if (roleEl) {
             const role = State.userRole || 'user';
             roleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1);
@@ -496,10 +502,16 @@ const PhantomWallet = {
         if (usdcEl) usdcEl.textContent = (State.walletBalances.usdc || 0).toFixed(2);
         if (budjuEl) budjuEl.textContent = Math.floor(State.walletBalances.budju || 0).toLocaleString();
 
-        // Show BUDJU requirement notice
+        // Show BUDJU requirement notice with shortfall
         if (budjuReqEl) {
             const budju = State.walletBalances.budju || 0;
-            budjuReqEl.style.display = budju < CONFIG.BUDJU_REQUIRED ? 'block' : 'none';
+            const needsMore = budju < CONFIG.BUDJU_REQUIRED;
+            budjuReqEl.style.display = needsMore ? 'block' : 'none';
+            if (needsMore) {
+                const shortfall = Math.ceil(CONFIG.BUDJU_REQUIRED - budju);
+                const shortfallEl = document.getElementById('budjuShortfall');
+                if (shortfallEl) shortfallEl.textContent = shortfall.toLocaleString();
+            }
         }
 
         // Build user's proportional holdings from pool data
@@ -526,6 +538,24 @@ const PhantomWallet = {
                 State.userHoldings = {};
                 holdingsListEl.textContent = State.userDeposits > 0 ? 'Awaiting trades...' : 'No holdings yet';
             }
+        }
+    },
+
+    // ── Copy wallet address ──────────────────────────────────────────────────
+
+    async copyAddress() {
+        if (!this.walletAddress) return;
+        try {
+            await navigator.clipboard.writeText(this.walletAddress);
+            const btn = document.getElementById('copyWalletBtn');
+            if (btn) {
+                btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+                }, 1500);
+            }
+        } catch (e) {
+            Logger.log('Failed to copy address', 'error');
         }
     },
 
