@@ -757,20 +757,38 @@ input[type="range"]::-moz-range-thumb {
     display: block;
 }
 
-/* Tier Cards - Full Width Stacked */
+/* Tier Cards Horizontal Scroll */
 .tier-cards-scroll {
     display: flex;
-    flex-direction: column;
     gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
     margin-bottom: 10px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tier-cards-scroll::-webkit-scrollbar {
+    height: 4px;
+}
+
+.tier-cards-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tier-cards-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
 }
 
 .tier-card {
-    width: 100%;
+    min-width: 250px;
+    flex: 0 0 auto;
     padding: 10px;
     border-radius: 8px;
     background: rgba(255,255,255,0.03);
     border: 1px solid;
+    scroll-snap-align: start;
 }
 
 .auto-header {

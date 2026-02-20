@@ -821,10 +821,11 @@ const AutoTrader = {
                 const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
                 const borderCol = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
 
-                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid ${borderCol};">`;
+                const tierBg = this._hexToRgba(cfg.color, 0.06);
+                html += `<div style="padding:6px 8px; border-radius:6px; background:${tierBg}; border:1px solid ${borderCol};">`;
                 html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
                 html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
-                html += `<span style="font-size:10px; color:#64748b;">T${t}</span>`;
+                html += `<span style="font-size:10px; color:${cfg.color}; opacity:0.7;">T${t}</span>`;
                 html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
                 html += `<div class="at-bar" data-code="${code}" style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.8s, background 0.8s;"></div>`;
                 html += `</div>`;
@@ -848,7 +849,8 @@ const AutoTrader = {
                 const cdChange = cdMid ? ((currentPrice - cdMid) / cdMid) * 100 : 0;
                 const cdBorder = cdChange >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
 
-                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid ${cdBorder}; opacity:0.5;">`;
+                const cdTierBg = this._hexToRgba(cfg.color, 0.04);
+                html += `<div style="padding:6px 8px; border-radius:6px; background:${cdTierBg}; border:1px solid ${cdBorder}; opacity:0.5;">`;
                 html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
                 html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
                 html += `<span style="font-size:10px; color:#64748b;">cooldown ${remaining}</span>`;
@@ -1044,6 +1046,13 @@ const AutoTrader = {
     _setFill(id, percent) {
         const el = document.getElementById(id);
         if (el) el.style.width = Math.max(0, Math.min(100, percent)) + '%';
+    },
+
+    _hexToRgba(hex, alpha) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
     },
 
     _showError(message) {
