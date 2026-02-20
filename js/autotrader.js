@@ -3,116 +3,326 @@
 // ==========================================
 //
 // Monitors ALL holdings simultaneously with tier-based settings:
-//   Tier 1 (Blue Chips): BTC, ETH, SOL, BNB, XRP
-//     - Lower deviation (e.g., 2%), higher allocation (e.g., 10%)
-//   Tier 2 (Alts): Everything else
-//     - Higher deviation (e.g., 5%), lower allocation (e.g., 5%)
+//   Tier 1 (Blue Chips): BTC, ETH, SOL, BNB, XRP (default)
+//   Tier 2 (Alts): User-assigned
+//   Tier 3 (Speculative): User-assigned
+//
+// Each tier has independent Start/Stop and Override controls.
+// Coins can be added/removed from any tier.
 //
 // Logic:
-//   - Records buy/sell targets for every coin when started
+//   - Records buy/sell targets for every coin when its tier starts
 //   - Buy target = startPrice - deviation%, Sell target = startPrice + deviation%
 //   - When a BUY triggers: new buy target moves down, sell target stays
 //   - When a SELL triggers: new sell target moves up, buy target stays
 //   - 24h cooldown per coin after each trade (one trade per day max)
-//   - Bot keeps running even when all coins on cooldown
 //   - Always keeps $100 USDC minimum reserve
 
 const AutoTrader = {
-    isActive: false,
+    tierActive: { 1: false, 2: false, 3: false },
     monitorInterval: null,
     targets: {},          // { BTC: { buy: 65660, sell: 68340 }, ... }
     cooldowns: {},
     checkCount: 0,
-    tradeLog: [],         // { time, coin, side, qty, price, amount }
+    tradeLog: [],
 
-    // Tier 1 defaults (blue chips)
-    TIER1_COINS: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'],
+    // Tier configuration (static)
+    TIER_CONFIG: {
+        1: { name: 'Blue Chips', color: '#3b82f6', devMin: 1, devMax: 15, allocMin: 1, allocMax: 25 },
+        2: { name: 'Alts',       color: '#eab308', devMin: 2, devMax: 20, allocMin: 1, allocMax: 20 },
+        3: { name: 'Speculative', color: '#f97316', devMin: 3, devMax: 30, allocMin: 1, allocMax: 15 }
+    },
+
+    // Tier settings (user-adjustable via sliders)
     tier1: { deviation: 2, allocation: 10 },
-
-    // Tier 2 defaults (everything else)
     tier2: { deviation: 5, allocation: 5 },
+    tier3: { deviation: 8, allocation: 3 },
+
+    // Coin-to-tier assignments: { BTC: 1, ETH: 1, SOL: 2, ... }
+    tierAssignments: {},
+    DEFAULT_T1: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'],
 
     // Safety
     COOLDOWN_HOURS: 24,
     MIN_USDC_RESERVE: 100,
     SELL_RATIO: 0.833,    // Sell 83% of buy amount (accumulate)
 
+    // Computed: any tier active?
+    get isActive() {
+        return this.tierActive[1] || this.tierActive[2] || this.tierActive[3];
+    },
+    set isActive(val) {
+        // Backward compat for user modal setting isActive from server
+        if (!val) {
+            this.tierActive = { 1: false, 2: false, 3: false };
+        } else if (val === true) {
+            // Mark tiers active based on which have targets
+            for (let t = 1; t <= 3; t++) {
+                const hasCoins = Object.keys(this.targets).some(c => this.getTier(c) === t);
+                if (hasCoins) this.tierActive[t] = true;
+            }
+        }
+    },
+
+    // Backward compat getter
+    get TIER1_COINS() {
+        return this._getCoinsForTier(1);
+    },
+
     // ── Tier helpers ─────────────────────────────────────────────────────────
 
+    _getCoinsForTier(tierNum) {
+        return Object.entries(this.tierAssignments)
+            .filter(([_, t]) => t === tierNum)
+            .map(([code]) => code);
+    },
+
     getTier(code) {
-        return this.TIER1_COINS.includes(code) ? 1 : 2;
+        return this.tierAssignments[code] || 0;
     },
 
     getSettings(code) {
-        return this.getTier(code) === 1 ? this.tier1 : this.tier2;
+        const tier = this.getTier(code);
+        if (tier >= 1 && tier <= 3) return this['tier' + tier];
+        return this.tier2; // fallback
+    },
+
+    getTierSettings(tierNum) {
+        return this['tier' + tierNum];
+    },
+
+    // ── Coin Assignment ─────────────────────────────────────────────────────
+
+    _ensureDefaultAssignments() {
+        if (Object.keys(this.tierAssignments).length > 0) return;
+        const holdings = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+        );
+        if (holdings.length === 0) return;
+        holdings.forEach(a => {
+            this.tierAssignments[a.code] = this.DEFAULT_T1.includes(a.code) ? 1 : 2;
+        });
+        this._saveTierAssignments();
+    },
+
+    assignCoin(code, tierNum) {
+        const oldTier = this.tierAssignments[code];
+        this.tierAssignments[code] = tierNum;
+        this._saveTierAssignments();
+
+        // If old tier was active, remove coin from targets
+        if (oldTier && this.tierActive[oldTier] && this.targets[code]) {
+            delete this.targets[code];
+        }
+
+        // If new tier is active, add coin with fresh targets
+        if (this.tierActive[tierNum] && !this._isOnCooldown(code)) {
+            const price = API.getRealtimePrice(code);
+            if (price) {
+                const dev = this.getTierSettings(tierNum).deviation;
+                this.targets[code] = {
+                    buy:  price * (1 - dev / 100),
+                    sell: price * (1 + dev / 100)
+                };
+            }
+        }
+
+        this.renderTierCards();
+        this._saveActiveState();
+        Logger.log(`${code} → Tier ${tierNum} (${this.TIER_CONFIG[tierNum].name})`, 'info');
+    },
+
+    unassignCoin(code, tierNum) {
+        if (this.tierAssignments[code] === tierNum) {
+            delete this.tierAssignments[code];
+        }
+        if (this.targets[code]) {
+            delete this.targets[code];
+        }
+        this._saveTierAssignments();
+        this.renderTierCards();
+        this._saveActiveState();
+        Logger.log(`${code} removed from Tier ${tierNum}`, 'info');
     },
 
     // ── UI sync ──────────────────────────────────────────────────────────────
 
     updateTierUI() {
-        const t1Dev   = document.getElementById('t1DevSlider');
-        const t1Alloc = document.getElementById('t1AllocSlider');
-        const t2Dev   = document.getElementById('t2DevSlider');
-        const t2Alloc = document.getElementById('t2AllocSlider');
+        for (let t = 1; t <= 3; t++) {
+            const cfg = this.TIER_CONFIG[t];
+            const settings = this['tier' + t];
+            const devSlider   = document.getElementById(`t${t}DevSlider`);
+            const allocSlider = document.getElementById(`t${t}AllocSlider`);
 
-        if (t1Dev)   this.tier1.deviation   = parseInt(t1Dev.value);
-        if (t1Alloc) this.tier1.allocation  = parseInt(t1Alloc.value);
-        if (t2Dev)   this.tier2.deviation   = parseInt(t2Dev.value);
-        if (t2Alloc) this.tier2.allocation  = parseInt(t2Alloc.value);
+            if (devSlider)   settings.deviation   = parseInt(devSlider.value);
+            if (allocSlider) settings.allocation   = parseInt(allocSlider.value);
 
-        // Update labels
-        this._setText('t1DevValue',   this.tier1.deviation + '%');
-        this._setText('t1AllocValue', this.tier1.allocation + '%');
-        this._setText('t2DevValue',   this.tier2.deviation + '%');
-        this._setText('t2AllocValue', this.tier2.allocation + '%');
-
-        // Update slider fills
-        this._setFill('t1DevFill',   (this.tier1.deviation - 1) / 14 * 100);
-        this._setFill('t1AllocFill', (this.tier1.allocation - 1) / 24 * 100);
-        this._setFill('t2DevFill',   (this.tier2.deviation - 2) / 18 * 100);
-        this._setFill('t2AllocFill', (this.tier2.allocation - 1) / 19 * 100);
-
-        // Save to localStorage
+            this._setText(`t${t}DevValue`,   settings.deviation + '%');
+            this._setText(`t${t}AllocValue`, settings.allocation + '%');
+            this._setFill(`t${t}DevFill`,   (settings.deviation - cfg.devMin) / (cfg.devMax - cfg.devMin) * 100);
+            this._setFill(`t${t}AllocFill`, (settings.allocation - cfg.allocMin) / (cfg.allocMax - cfg.allocMin) * 100);
+        }
         this._saveTierSettings();
     },
 
-    renderTierBadges() {
-        const holdings = State.portfolioData.assets.filter(
+    // ── Render Tier Cards (horizontal scroll) ────────────────────────────────
+
+    renderTierCards() {
+        const container = document.getElementById('tierCardsScroll');
+        if (!container) return;
+
+        this._ensureDefaultAssignments();
+
+        const holdings = (State.portfolioData?.assets || []).filter(
             a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
         );
 
-        const t1Container = document.getElementById('tier1Coins');
-        const t2Container = document.getElementById('tier2Coins');
-        if (!t1Container || !t2Container) return;
+        let html = '';
+        for (let t = 1; t <= 3; t++) {
+            const cfg = this.TIER_CONFIG[t];
+            const settings = this['tier' + t];
+            const active = this.tierActive[t];
+            const tierCoins = holdings.filter(a => this.getTier(a.code) === t);
 
-        const t1 = holdings.filter(a => this.getTier(a.code) === 1);
-        const t2 = holdings.filter(a => this.getTier(a.code) === 2);
+            // Coin badges
+            let badges = '';
+            tierCoins.forEach(a => {
+                const style = CONFIG.ASSET_STYLES[a.code] || { color: '#666' };
+                const cd = this._isOnCooldown(a.code);
+                const opacity = cd ? 'opacity:0.4;' : '';
+                const cdLabel = cd ? ' <span style="font-size:8px;">(cd)</span>' : '';
+                badges += `<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:600;padding:2px 5px 2px 7px;border-radius:10px;background:${style.color}20;color:${style.color};border:1px solid ${style.color}40;${opacity}">`;
+                badges += `${a.code}${cdLabel}`;
+                badges += `<span onclick="AutoTrader.unassignCoin('${a.code}',${t})" style="cursor:pointer;margin-left:1px;font-size:12px;line-height:1;opacity:0.5;">&times;</span>`;
+                badges += `</span>`;
+            });
+            if (tierCoins.length === 0) {
+                badges = `<span style="font-size:9px;color:#64748b;">No coins</span>`;
+            }
+            // Add button
+            badges += `<span onclick="AutoTrader.showAddCoin(${t})" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:11px;background:rgba(255,255,255,0.06);color:#94a3b8;font-size:13px;border:1px dashed rgba(255,255,255,0.15);">+</span>`;
 
-        const makeBadge = (a) => {
-            const style = CONFIG.ASSET_STYLES[a.code] || { color: '#666' };
-            const cd = this._isOnCooldown(a.code);
-            const opacity = cd ? 'opacity:0.4;' : '';
-            const cdLabel = cd ? ' (cd)' : '';
-            return `<span style="font-size:11px; font-weight:600; padding:3px 8px; border-radius:12px; background:${style.color}20; color:${style.color}; border:1px solid ${style.color}40; ${opacity}">${a.code}${cdLabel}</span>`;
-        };
+            // Slider fill calculations
+            const devFill   = (settings.deviation - cfg.devMin) / (cfg.devMax - cfg.devMin) * 100;
+            const allocFill = (settings.allocation - cfg.allocMin) / (cfg.allocMax - cfg.allocMin) * 100;
 
-        t1Container.innerHTML = t1.map(makeBadge).join('') ||
-            '<span style="font-size:11px; color:#64748b;">No Tier 1 holdings</span>';
-        t2Container.innerHTML = t2.map(makeBadge).join('') ||
-            '<span style="font-size:11px; color:#64748b;">No Tier 2 holdings</span>';
+            // Per-tier cooldowns
+            const tierCooldowns = tierCoins.filter(a => this._isOnCooldown(a.code));
+            const showOverride = active && tierCooldowns.length > 0;
+
+            // Button colors
+            const btnColor = active ? '#ef4444' : cfg.color;
+            const btnText  = active ? 'Stop' : 'Start';
+
+            html += `<div class="tier-card" style="border-color:${cfg.color}30;">`;
+
+            // Header
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">`;
+            html += `<span style="font-size:11px;font-weight:700;color:${cfg.color};">T${t} – ${cfg.name}</span>`;
+            if (active) {
+                html += `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:8px;background:${cfg.color}20;color:${cfg.color};text-transform:uppercase;">Active</span>`;
+            }
+            html += `</div>`;
+
+            // Coin badges
+            html += `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${badges}</div>`;
+
+            // Coin selector dropdown (hidden)
+            html += `<div id="tierCoinSelector${t}" style="display:none;margin-bottom:6px;padding:6px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);"></div>`;
+
+            // Sliders
+            html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">`;
+            // Dev slider
+            html += `<div>`;
+            html += `<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-bottom:2px;">`;
+            html += `<span>Dev</span><span id="t${t}DevValue" style="color:${cfg.color};font-weight:600;">${settings.deviation}%</span></div>`;
+            html += `<div class="slider-box" style="height:26px;"><div class="slider-track"></div>`;
+            html += `<div class="slider-fill" id="t${t}DevFill" style="width:${devFill}%;background:${cfg.color};"></div>`;
+            html += `<input type="range" id="t${t}DevSlider" min="${cfg.devMin}" max="${cfg.devMax}" value="${settings.deviation}" step="1" style="height:26px;" oninput="AutoTrader.updateTierUI()">`;
+            html += `</div></div>`;
+            // Alloc slider
+            html += `<div>`;
+            html += `<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-bottom:2px;">`;
+            html += `<span>Alloc</span><span id="t${t}AllocValue" style="color:#22c55e;font-weight:600;">${settings.allocation}%</span></div>`;
+            html += `<div class="slider-box" style="height:26px;"><div class="slider-track"></div>`;
+            html += `<div class="slider-fill" id="t${t}AllocFill" style="width:${allocFill}%;background:#22c55e;"></div>`;
+            html += `<input type="range" id="t${t}AllocSlider" min="${cfg.allocMin}" max="${cfg.allocMax}" value="${settings.allocation}" step="1" style="height:26px;" oninput="AutoTrader.updateTierUI()">`;
+            html += `</div></div>`;
+            html += `</div>`;
+
+            // Buttons row
+            html += `<div style="display:flex;gap:4px;">`;
+            html += `<button onclick="AutoTrader.toggle(${t})" style="flex:1;padding:7px;border-radius:8px;border:none;font-size:11px;font-weight:700;cursor:pointer;color:white;background:${btnColor};transition:all 0.2s;">${btnText}</button>`;
+            if (showOverride) {
+                html += `<button onclick="AutoTrader.overrideCooldowns(${t})" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);font-size:9px;font-weight:600;cursor:pointer;color:#ef4444;background:rgba(239,68,68,0.08);transition:all 0.2s;" title="Override cooldowns">Override</button>`;
+            }
+            html += `</div>`;
+
+            html += `</div>`;
+        }
+        container.innerHTML = html;
     },
 
-    // ── Start / Stop / Toggle ────────────────────────────────────────────────
+    // Backward compat alias
+    renderTierBadges() {
+        this.renderTierCards();
+    },
 
-    toggle() {
-        if (this.isActive) {
-            this.stop();
+    showAddCoin(tierNum) {
+        const selector = document.getElementById(`tierCoinSelector${tierNum}`);
+        if (!selector) return;
+
+        // Toggle off
+        if (selector.style.display !== 'none') {
+            selector.style.display = 'none';
+            return;
+        }
+
+        // Close other selectors
+        for (let t = 1; t <= 3; t++) {
+            if (t !== tierNum) {
+                const other = document.getElementById(`tierCoinSelector${t}`);
+                if (other) other.style.display = 'none';
+            }
+        }
+
+        // Get portfolio coins not in this tier
+        const holdings = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+        );
+        const available = holdings.filter(a => this.getTier(a.code) !== tierNum);
+
+        if (available.length === 0) {
+            selector.innerHTML = '<div style="font-size:9px;color:#64748b;">All coins in this tier</div>';
+            selector.style.display = 'block';
+            return;
+        }
+
+        let html = '<div style="display:flex;gap:3px;flex-wrap:wrap;">';
+        available.forEach(a => {
+            const style = CONFIG.ASSET_STYLES[a.code] || { color: '#666' };
+            const curTier = this.tierAssignments[a.code];
+            const curLabel = curTier ? ` <span style="font-size:7px;opacity:0.6;">T${curTier}</span>` : '';
+            html += `<span onclick="AutoTrader.assignCoin('${a.code}',${tierNum})" style="cursor:pointer;font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:${style.color}10;color:${style.color};border:1px dashed ${style.color}40;">`;
+            html += `${a.code}${curLabel}</span>`;
+        });
+        html += '</div>';
+
+        selector.innerHTML = html;
+        selector.style.display = 'block';
+    },
+
+    // ── Start / Stop / Toggle (per-tier) ─────────────────────────────────────
+
+    toggle(tierNum) {
+        if (this.tierActive[tierNum]) {
+            this.stopTier(tierNum);
         } else {
-            this.start();
+            this.startTier(tierNum);
         }
     },
 
-    start() {
+    startTier(tierNum) {
         // Check USDC balance
         const usdcAsset = State.portfolioData.assets.find(a => a.code === 'USDC');
         const usdcBalance = usdcAsset?.usd_value ?? 0;
@@ -122,65 +332,112 @@ const AutoTrader = {
             return;
         }
 
-        // Get all crypto holdings
-        const cryptoHoldings = State.portfolioData.assets.filter(
-            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+        // Get coins assigned to this tier with holdings
+        const tierCoins = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0 && this.getTier(a.code) === tierNum
         );
 
-        if (cryptoHoldings.length === 0) {
-            this._showError('No crypto holdings to monitor');
+        if (tierCoins.length === 0) {
+            this._showError(`No coins assigned to Tier ${tierNum}`);
             return;
         }
 
-        // Record buy/sell targets for all non-cooldown coins
-        this.targets = {};
-        cryptoHoldings.forEach(asset => {
+        // Set targets for non-cooldown coins
+        let added = 0;
+        tierCoins.forEach(asset => {
             if (!this._isOnCooldown(asset.code)) {
                 const price = asset.usd_price;
-                const dev = this.getSettings(asset.code).deviation;
+                const dev = this.getTierSettings(tierNum).deviation;
                 this.targets[asset.code] = {
                     buy:  price * (1 - dev / 100),
                     sell: price * (1 + dev / 100)
                 };
+                added++;
             }
         });
 
-        const activeCoins = Object.keys(this.targets);
-        if (activeCoins.length === 0) {
-            this._showError('All coins on cooldown — try again later');
+        if (added === 0) {
+            this._showError(`All Tier ${tierNum} coins on cooldown`);
             return;
         }
 
-        this.isActive = true;
+        this.tierActive[tierNum] = true;
         this.checkCount = 0;
 
-        Logger.log(`Auto-trading started: monitoring ${activeCoins.length} coins`, 'success');
-        activeCoins.forEach(code => {
-            const s = this.getSettings(code);
-            const t = this.getTier(code);
-            const tgt = this.targets[code];
-            Logger.log(`  ${code} (Tier ${t}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)} (±${s.deviation}%, ${s.allocation}% alloc)`, 'info');
+        const cfg = this.TIER_CONFIG[tierNum];
+        Logger.log(`Tier ${tierNum} (${cfg.name}) started: monitoring ${added} coin${added !== 1 ? 's' : ''}`, 'success');
+        tierCoins.forEach(asset => {
+            const tgt = this.targets[asset.code];
+            if (tgt) {
+                const s = this.getTierSettings(tierNum);
+                Logger.log(`  ${asset.code} (T${tierNum}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)} (±${s.deviation}%, ${s.allocation}% alloc)`, 'info');
+            }
         });
 
         this._updateUI();
         this._saveActiveState();
+        this._ensureMonitoring();
+    },
 
-        // Monitor every 180 seconds (3 minutes)
-        this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
-        this._checkPrices();
+    stopTier(tierNum) {
+        this.tierActive[tierNum] = false;
+
+        // Remove targets for this tier's coins
+        const tierCoins = this._getCoinsForTier(tierNum);
+        tierCoins.forEach(code => {
+            delete this.targets[code];
+        });
+
+        const cfg = this.TIER_CONFIG[tierNum];
+        Logger.log(`Tier ${tierNum} (${cfg.name}) stopped`, 'info');
+
+        this._updateUI();
+        this._saveActiveState();
+
+        // Stop monitoring if no tiers active
+        if (!this.isActive) {
+            this._stopMonitoring();
+        }
+    },
+
+    // Backward compat: global start/stop
+    start() {
+        // Start all tiers that have coins assigned
+        for (let t = 1; t <= 3; t++) {
+            const coins = this._getCoinsForTier(t);
+            if (coins.length > 0 && !this.tierActive[t]) {
+                this.startTier(t);
+            }
+        }
+    },
+
+    stop() {
+        for (let t = 1; t <= 3; t++) {
+            if (this.tierActive[t]) this.stopTier(t);
+        }
     },
 
     // Resume auto-trading from saved state (called on page load)
-    resume(savedTargets) {
-        if (this.isActive) return; // Already running
+    resume(savedState) {
+        if (this.isActive) return;
 
-        // Handle backward compat: old format was { BTC: 67000 }, new is { BTC: { buy, sell } }
+        // Handle old format: savedTargets was just targets object
+        // New format: { tierActive, targets }
+        let savedTargets, savedTierActive;
+        if (savedState && savedState.tierActive) {
+            savedTierActive = savedState.tierActive;
+            savedTargets = savedState.targets || {};
+        } else {
+            // Old format: savedState IS the targets
+            savedTargets = savedState || {};
+            savedTierActive = null;
+        }
+
         this.targets = {};
         for (const [code, val] of Object.entries(savedTargets)) {
             if (typeof val === 'object' && val.buy && val.sell) {
                 this.targets[code] = val;
             } else if (typeof val === 'number') {
-                // Old basePrices format — convert using current tier deviation
                 const dev = this.getSettings(code).deviation;
                 this.targets[code] = {
                     buy:  val * (1 - dev / 100),
@@ -189,68 +446,71 @@ const AutoTrader = {
             }
         }
 
-        // Remove any coins that are now on cooldown
+        // Remove coins on cooldown
         for (const code of Object.keys(this.targets)) {
             if (this._isOnCooldown(code)) {
                 delete this.targets[code];
             }
         }
 
+        // Restore per-tier active state
+        if (savedTierActive) {
+            this.tierActive = { 1: !!savedTierActive[1], 2: !!savedTierActive[2], 3: !!savedTierActive[3] };
+        } else {
+            // Old format: determine active tiers from targets
+            for (let t = 1; t <= 3; t++) {
+                const hasCoins = Object.keys(this.targets).some(c => this.getTier(c) === t);
+                if (hasCoins) this.tierActive[t] = true;
+            }
+        }
+
         const activeCoins = Object.keys(this.targets);
         if (activeCoins.length === 0) {
             Logger.log('Auto-trade resume: all coins on cooldown — waiting...', 'info');
-            // Still mark as active so bot keeps running and resumes when cooldowns expire
-            this.isActive = true;
-            this.checkCount = 0;
             this._updateUI();
-            this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
+            this._ensureMonitoring();
             return;
         }
-
-        this.isActive = true;
-        this.checkCount = 0;
 
         Logger.log(`Auto-trading resumed: monitoring ${activeCoins.length} coins`, 'success');
         activeCoins.forEach(code => {
             const s = this.getSettings(code);
             const t = this.getTier(code);
             const tgt = this.targets[code];
-            Logger.log(`  ${code} (Tier ${t}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)}`, 'info');
+            Logger.log(`  ${code} (T${t}): buy < $${tgt.buy.toFixed(2)}, sell > $${tgt.sell.toFixed(2)}`, 'info');
         });
 
         this._updateUI();
-
-        // Monitor every 180 seconds (3 minutes)
-        this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
-        this._checkPrices();
+        this._ensureMonitoring();
     },
 
-    stop() {
-        this.isActive = false;
-        this.checkCount = 0;
+    // ── Monitoring Control ───────────────────────────────────────────────────
 
+    _ensureMonitoring() {
+        if (!this.monitorInterval) {
+            this.monitorInterval = setInterval(() => this._checkPrices(), 180000);
+            this._checkPrices();
+        }
+    },
+
+    _stopMonitoring() {
         if (this.monitorInterval) {
             clearInterval(this.monitorInterval);
             this.monitorInterval = null;
         }
-
-        Logger.log('Auto-trading stopped', 'info');
-        this._updateUI();
-        this._saveActiveState();
-        this.renderTierBadges();
     },
 
     // ── Price Monitoring (all coins) ─────────────────────────────────────────
 
     async _checkPrices() {
         if (!this.isActive) {
-            this.stop();
+            this._stopMonitoring();
             return;
         }
 
         this.checkCount++;
 
-        // Refresh portfolio data every 2 checks for fresh prices
+        // Refresh portfolio data every 2 checks
         if (this.checkCount % 2 === 0) {
             Logger.log('Refreshing prices...', 'info');
             await API.refreshData();
@@ -260,6 +520,10 @@ const AutoTrader = {
 
         for (const code of Object.keys(this.targets)) {
             if (this._isOnCooldown(code)) continue;
+
+            // Only check coins in active tiers
+            const tier = this.getTier(code);
+            if (!this.tierActive[tier]) continue;
 
             const settings = this.getSettings(code);
             const currentPrice = API.getRealtimePrice(code);
@@ -281,17 +545,17 @@ const AutoTrader = {
             }
         }
 
-        // Refresh after any trades
+        // Refresh after trades
         if (tradeExecuted) {
             await API.refreshData();
-            this.renderTierBadges();
+            this.renderTierCards();
             this._saveActiveState();
         }
 
-        // Update status display with visual indicators + thresholds
+        // Update status display
         this._updateStatus();
 
-        // Log cooldown status (bot keeps running — coins resume when cooldowns expire)
+        // Log cooldown status
         const remaining = Object.keys(this.targets).filter(c => !this._isOnCooldown(c));
         const onCooldown = Object.keys(this.targets).length - remaining.length;
         if (remaining.length === 0 && onCooldown > 0) {
@@ -327,7 +591,6 @@ const AutoTrader = {
                 Logger.log(`${code} buy executed!`, 'success');
                 this._addTradeLog(code, 'BUY', quantity, currentPrice, tradeAmount);
                 this._setCooldown(code);
-                // Move buy target down — sell target stays where it is
                 const oldBuy = this.targets[code].buy;
                 this.targets[code].buy = currentPrice * (1 - settings.deviation / 100);
                 Logger.log(`${code} buy target: $${oldBuy.toFixed(2)} → $${this.targets[code].buy.toFixed(2)} (sell stays $${this.targets[code].sell.toFixed(2)})`, 'info');
@@ -344,7 +607,6 @@ const AutoTrader = {
         const asset = State.portfolioData.assets.find(a => a.code === code);
         const assetBalance = asset?.balance ?? 0;
 
-        // Sell less than we buy (accumulation mode)
         const sellPercent = settings.allocation * this.SELL_RATIO;
         const quantity = parseFloat(((sellPercent / 100) * assetBalance).toFixed(8));
 
@@ -372,7 +634,6 @@ const AutoTrader = {
                 Logger.log(`${code} sell executed!`, 'success');
                 this._addTradeLog(code, 'SELL', quantity, currentPrice, sellValue);
                 this._setCooldown(code);
-                // Move sell target up — buy target stays where it is
                 const oldSell = this.targets[code].sell;
                 this.targets[code].sell = currentPrice * (1 + settings.deviation / 100);
                 Logger.log(`${code} sell target: $${oldSell.toFixed(2)} → $${this.targets[code].sell.toFixed(2)} (buy stays $${this.targets[code].buy.toFixed(2)})`, 'info');
@@ -388,14 +649,10 @@ const AutoTrader = {
     // ── UI Updates ───────────────────────────────────────────────────────────
 
     _updateUI() {
-        const btn = document.getElementById('autoToggleBtn');
-        const btnText = document.getElementById('autoToggleBtnText');
         const badge = document.getElementById('autoStatusBadge');
         const status = document.getElementById('autoStatus');
 
         if (this.isActive) {
-            if (btn) btn.style.background = '#ef4444';
-            if (btnText) btnText.textContent = 'Stop Auto Trading';
             if (badge) { badge.style.display = 'inline-block'; badge.textContent = 'ACTIVE'; }
             if (status) {
                 status.style.display = 'block';
@@ -403,26 +660,24 @@ const AutoTrader = {
                 status.textContent = `Monitoring ${count} coins every 3 min...`;
             }
         } else {
-            if (btn) btn.style.background = '#a855f7';
-            if (btnText) btnText.textContent = 'Start Auto Trading (All Coins)';
             if (badge) badge.style.display = 'none';
             if (status) status.style.display = 'none';
         }
 
+        // Re-render tier cards to update button states
+        this.renderTierCards();
+
         // Keep user insight cards in sync
         if (typeof UI !== 'undefined') UI.updateUserInsightCards();
-
-        // Show/hide override button
-        this._updateOverrideButton();
     },
 
     _updateStatus() {
         const status = document.getElementById('autoStatus');
         if (!status) return;
 
-        const coins = Object.keys(this.targets);
-        const activeCoins = coins.filter(c => !this._isOnCooldown(c));
-        const cdCoins     = coins.filter(c => this._isOnCooldown(c));
+        const allCoins = Object.keys(this.targets);
+        const activeCoins = allCoins.filter(c => !this._isOnCooldown(c));
+        const cdCoins     = allCoins.filter(c => this._isOnCooldown(c));
 
         let html = `<div style="display:flex; justify-content:space-between; align-items:center; font-weight:600; margin-bottom:6px;">`;
         html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
@@ -431,68 +686,72 @@ const AutoTrader = {
         html += `<span id="priceCountdown" style="font-size:9px; font-weight:600; color:#94a3b8;"></span>`;
         html += '</div>';
 
-        // ── Per-coin threshold table ──
-        html += '<div style="display:flex; flex-direction:column; gap:4px;">';
-        for (const code of activeCoins) {
-            const currentPrice = API.getRealtimePrice(code);
-            const tgt = this.targets[code];
-            if (!tgt || !currentPrice) continue;
+        // Group coins by tier
+        for (let t = 1; t <= 3; t++) {
+            if (!this.tierActive[t]) continue;
 
-            const tier = this.getTier(code);
+            const cfg = this.TIER_CONFIG[t];
+            const tierActive = activeCoins.filter(c => this.getTier(c) === t);
+            const tierCd     = cdCoins.filter(c => this.getTier(c) === t);
 
-            // Progress: how close to the nearest target (0 = midpoint, 1 = at target)
-            const midPrice = (tgt.buy + tgt.sell) / 2;
-            const halfRange = (tgt.sell - tgt.buy) / 2;
-            let progress, direction;
-            if (currentPrice <= tgt.buy) {
-                progress = 1; direction = 'buy';
-            } else if (currentPrice >= tgt.sell) {
-                progress = 1; direction = 'sell';
-            } else if (currentPrice < midPrice) {
-                progress = (midPrice - currentPrice) / halfRange;
-                direction = 'buy';
-            } else {
-                progress = (currentPrice - midPrice) / halfRange;
-                direction = 'sell';
+            if (tierActive.length === 0 && tierCd.length === 0) continue;
+
+            // Tier header
+            html += `<div style="font-size:9px;font-weight:700;color:${cfg.color};margin:6px 0 3px;text-transform:uppercase;letter-spacing:0.5px;">T${t} – ${cfg.name}</div>`;
+
+            html += '<div style="display:flex; flex-direction:column; gap:4px; margin-bottom:4px;">';
+
+            for (const code of tierActive) {
+                const currentPrice = API.getRealtimePrice(code);
+                const tgt = this.targets[code];
+                if (!tgt || !currentPrice) continue;
+
+                const midPrice  = (tgt.buy + tgt.sell) / 2;
+                const halfRange = (tgt.sell - tgt.buy) / 2;
+                let progress, direction;
+                if (currentPrice <= tgt.buy) {
+                    progress = 1; direction = 'buy';
+                } else if (currentPrice >= tgt.sell) {
+                    progress = 1; direction = 'sell';
+                } else if (currentPrice < midPrice) {
+                    progress = (midPrice - currentPrice) / halfRange;
+                    direction = 'buy';
+                } else {
+                    progress = (currentPrice - midPrice) / halfRange;
+                    direction = 'sell';
+                }
+                progress = Math.max(0, Math.min(1, progress));
+
+                const change = ((currentPrice - midPrice) / midPrice) * 100;
+
+                let barColor;
+                if (progress < 0.5)      barColor = '#3b82f6';
+                else if (progress < 0.75) barColor = '#eab308';
+                else if (progress < 0.95) barColor = '#f97316';
+                else                      barColor = '#ef4444';
+
+                const sign = change >= 0 ? '+' : '';
+                const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
+                const borderCol = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
+
+                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid ${borderCol};">`;
+                html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
+                html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
+                html += `<span style="font-size:10px; color:#64748b;">T${t}</span>`;
+                html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
+                html += `<div class="at-bar" data-code="${code}" style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.8s, background 0.8s;"></div>`;
+                html += `</div>`;
+                html += `<span class="at-change" data-code="${code}" style="font-size:11px; font-weight:600; color:${barColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
+                html += `</div>`;
+                html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
+                html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
+                html += `<span class="at-price" data-code="${code}" data-field="at-current" style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+                html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
+                html += `</div></div>`;
             }
-            progress = Math.max(0, Math.min(1, progress));
 
-            // Change % from midpoint
-            const change = ((currentPrice - midPrice) / midPrice) * 100;
-
-            // Color gradient based on proximity
-            let barColor;
-            if (progress < 0.5)      barColor = '#3b82f6';  // blue — calm
-            else if (progress < 0.75) barColor = '#eab308';  // yellow — warming up
-            else if (progress < 0.95) barColor = '#f97316';  // orange — close
-            else                      barColor = '#ef4444';  // red — about to trigger
-
-            const sign = change >= 0 ? '+' : '';
-            const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
-
-            const borderCol = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
-            html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid ${borderCol};">`;
-            // Row 1: Coin name, change %, progress bar
-            html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
-            html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
-            html += `<span style="font-size:10px; color:#64748b;">T${tier}</span>`;
-            html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
-            html += `<div class="at-bar" data-code="${code}" style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.8s, background 0.8s;"></div>`;
-            html += `</div>`;
-            html += `<span class="at-change" data-code="${code}" style="font-size:11px; font-weight:600; color:${barColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
-            html += `</div>`;
-            // Row 2: Price thresholds
-            html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
-            html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
-            html += `<span class="at-price" data-code="${code}" data-field="at-current" style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
-            html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
-            html += `</div>`;
-            html += `</div>`;
-        }
-
-        // Cooldown coins (show their targets too)
-        if (cdCoins.length > 0) {
-            for (const code of cdCoins) {
+            // Cooldown coins
+            for (const code of tierCd) {
                 const tgt = this.targets[code];
                 const currentPrice = API.getRealtimePrice(code);
                 const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
@@ -501,6 +760,7 @@ const AutoTrader = {
                 const cdMid = tgt ? (tgt.buy + tgt.sell) / 2 : 0;
                 const cdChange = cdMid ? ((currentPrice - cdMid) / cdMid) * 100 : 0;
                 const cdBorder = cdChange >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
+
                 html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid ${cdBorder}; opacity:0.5;">`;
                 html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
                 html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
@@ -515,15 +775,13 @@ const AutoTrader = {
                 }
                 html += `</div>`;
             }
+
+            html += '</div>';
         }
-        html += '</div>';
 
         status.innerHTML = html;
 
-        // Show/hide override button based on cooldown state
-        this._updateOverrideButton();
-
-        // ── Update trade log panel ──
+        // Update trade log
         this._renderTradeLog();
     },
 
@@ -533,15 +791,14 @@ const AutoTrader = {
         const entry = {
             time: new Date(),
             coin,
-            side,          // 'BUY' or 'SELL'
+            side,
             quantity,
             price,
-            amount         // USDC value
+            amount
         };
-        this.tradeLog.unshift(entry); // newest first
+        this.tradeLog.unshift(entry);
         if (this.tradeLog.length > 50) this.tradeLog.pop();
 
-        // Persist locally + server
         localStorage.setItem('auto_trade_log', JSON.stringify(this.tradeLog));
         if (typeof ServerState !== 'undefined') ServerState.saveTradeLog();
 
@@ -612,18 +869,78 @@ const AutoTrader = {
         return `${hours}h ${minutes}m`;
     },
 
+    // ── Override Cooldowns (per-tier) ────────────────────────────────────────
+
+    overrideCooldowns(tierNum) {
+        const tierCoins = this._getCoinsForTier(tierNum);
+        let cleared = 0;
+
+        for (const code of tierCoins) {
+            if (this.cooldowns[code]) {
+                delete this.cooldowns[code];
+                cleared++;
+            }
+        }
+
+        if (cleared === 0) {
+            Logger.log(`No cooldowns to override in Tier ${tierNum}`, 'info');
+            return;
+        }
+
+        localStorage.setItem('auto_cooldowns', JSON.stringify(this.cooldowns));
+        if (typeof ServerState !== 'undefined') ServerState.saveCooldowns();
+
+        // Add coins that weren't in targets
+        const holdings = (State.portfolioData?.assets || []).filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0 && this.getTier(a.code) === tierNum
+        );
+        let added = 0;
+        for (const asset of holdings) {
+            if (!this.targets[asset.code]) {
+                const price = API.getRealtimePrice(asset.code) || asset.usd_price;
+                const dev = this.getTierSettings(tierNum).deviation;
+                this.targets[asset.code] = {
+                    buy:  price * (1 - dev / 100),
+                    sell: price * (1 + dev / 100)
+                };
+                added++;
+                Logger.log(`  Added ${asset.code}: buy < $${this.targets[asset.code].buy.toFixed(2)}, sell > $${this.targets[asset.code].sell.toFixed(2)}`, 'info');
+            }
+        }
+
+        Logger.log(`Tier ${tierNum} cooldowns overridden — ${cleared} cleared, ${added} coin(s) added`, 'success');
+
+        this._saveActiveState();
+        this._updateStatus();
+        this.renderTierCards();
+
+        if (this.tierActive[tierNum]) {
+            this._checkPrices();
+        }
+    },
+
     // ── Persistence ──────────────────────────────────────────────────────────
 
     _saveTierSettings() {
         localStorage.setItem('auto_tiers', JSON.stringify({
             tier1: this.tier1,
-            tier2: this.tier2
+            tier2: this.tier2,
+            tier3: this.tier3
         }));
         if (typeof ServerState !== 'undefined') ServerState.saveTiers();
     },
 
+    _saveTierAssignments() {
+        localStorage.setItem('auto_tier_assignments', JSON.stringify(this.tierAssignments));
+        if (typeof ServerState !== 'undefined') ServerState.saveTierAssignments();
+    },
+
     _saveActiveState() {
-        const state = { isActive: this.isActive, targets: this.targets };
+        const state = {
+            isActive: this.isActive,
+            tierActive: this.tierActive,
+            targets: this.targets
+        };
         localStorage.setItem('auto_active', JSON.stringify(state));
         if (typeof ServerState !== 'undefined') ServerState.saveAutoActive();
     },
@@ -680,25 +997,22 @@ const AutoTrader = {
                 const parsed = JSON.parse(tierData);
                 if (parsed.tier1) this.tier1 = parsed.tier1;
                 if (parsed.tier2) this.tier2 = parsed.tier2;
+                if (parsed.tier3) this.tier3 = parsed.tier3;
             } catch (e) {}
         }
 
-        // Sync sliders to loaded settings
-        this._syncSlidersToSettings();
-    },
+        // Load tier assignments
+        const assignData = localStorage.getItem('auto_tier_assignments');
+        if (assignData) {
+            try {
+                this.tierAssignments = JSON.parse(assignData);
+            } catch (e) {
+                this.tierAssignments = {};
+            }
+        }
 
-    _syncSlidersToSettings() {
-        const t1Dev   = document.getElementById('t1DevSlider');
-        const t1Alloc = document.getElementById('t1AllocSlider');
-        const t2Dev   = document.getElementById('t2DevSlider');
-        const t2Alloc = document.getElementById('t2AllocSlider');
-
-        if (t1Dev)   t1Dev.value   = this.tier1.deviation;
-        if (t1Alloc) t1Alloc.value = this.tier1.allocation;
-        if (t2Dev)   t2Dev.value   = this.tier2.deviation;
-        if (t2Alloc) t2Alloc.value = this.tier2.allocation;
-
-        this.updateTierUI();
+        // Render tier cards (may be empty until portfolio loads)
+        this.renderTierCards();
         this._renderTradeLog();
     },
 
@@ -707,60 +1021,6 @@ const AutoTrader = {
         localStorage.removeItem('auto_trade_log');
         if (typeof ServerState !== 'undefined') ServerState.saveTradeLog();
         this._renderTradeLog();
-    },
-
-    // One-shot override: clear all cooldowns and add any missing coins
-    overrideCooldowns() {
-        const cdCount = Object.keys(this.cooldowns).length;
-        if (cdCount === 0) {
-            Logger.log('No cooldowns to override', 'info');
-            return;
-        }
-
-        this.cooldowns = {};
-        localStorage.setItem('auto_cooldowns', JSON.stringify(this.cooldowns));
-        if (typeof ServerState !== 'undefined') ServerState.saveCooldowns();
-
-        // Add any portfolio coins that weren't in targets (they were skipped at start due to cooldown)
-        const cryptoHoldings = State.portfolioData.assets.filter(
-            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
-        );
-        let added = 0;
-        for (const asset of cryptoHoldings) {
-            if (!this.targets[asset.code]) {
-                const price = API.getRealtimePrice(asset.code) || asset.usd_price;
-                const dev = this.getSettings(asset.code).deviation;
-                this.targets[asset.code] = {
-                    buy:  price * (1 - dev / 100),
-                    sell: price * (1 + dev / 100)
-                };
-                added++;
-                Logger.log(`  Added ${asset.code}: buy < $${this.targets[asset.code].buy.toFixed(2)}, sell > $${this.targets[asset.code].sell.toFixed(2)}`, 'info');
-            }
-        }
-
-        Logger.log(`Cooldowns overridden — ${cdCount} cleared, ${added} coin(s) added`, 'success');
-
-        // Save updated targets
-        this._saveActiveState();
-
-        // Update displays
-        this._updateStatus();
-        this._updateOverrideButton();
-        this.renderTierBadges();
-
-        // Run a price check right away so trades can trigger
-        if (this.isActive) {
-            this._checkPrices();
-        }
-    },
-
-    _updateOverrideButton() {
-        const btn = document.getElementById('autoCooldownOverride');
-        if (!btn) return;
-
-        const hasCooldowns = Object.keys(this.cooldowns).some(c => this._isOnCooldown(c));
-        btn.style.display = (this.isActive && hasCooldowns) ? 'block' : 'none';
     }
 };
 

@@ -1369,9 +1369,17 @@ const UI = {
             if (res.ok) {
                 const data = await res.json();
                 if (!data.error) {
-                    // Apply active state
+                    // Apply active state (new per-tier format)
                     if (data.autoActive) {
-                        AutoTrader.isActive = data.autoActive.isActive || false;
+                        if (data.autoActive.tierActive) {
+                            AutoTrader.tierActive = {
+                                1: !!data.autoActive.tierActive[1],
+                                2: !!data.autoActive.tierActive[2],
+                                3: !!data.autoActive.tierActive[3]
+                            };
+                        } else {
+                            AutoTrader.isActive = data.autoActive.isActive || false;
+                        }
                         AutoTrader.targets = data.autoActive.targets || data.autoActive.basePrices || {};
                     } else {
                         AutoTrader.isActive = false;
@@ -1381,6 +1389,12 @@ const UI = {
                     if (data.autoTiers) {
                         if (data.autoTiers.tier1) AutoTrader.tier1 = data.autoTiers.tier1;
                         if (data.autoTiers.tier2) AutoTrader.tier2 = data.autoTiers.tier2;
+                        if (data.autoTiers.tier3) AutoTrader.tier3 = data.autoTiers.tier3;
+                    }
+
+                    // Apply tier assignments
+                    if (data.autoTierAssignments && typeof data.autoTierAssignments === 'object') {
+                        AutoTrader.tierAssignments = data.autoTierAssignments;
                     }
 
                     // Apply cooldowns (remove expired)
@@ -1429,28 +1443,31 @@ const UI = {
             }
         }
 
-        // Settings summary
+        // Settings summary (3 tiers)
         if (settingsEl && typeof AutoTrader !== 'undefined') {
-            settingsEl.innerHTML = `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <div style="padding:10px;border-radius:10px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);">
-                    <div style="font-size:10px;font-weight:700;color:#3b82f6;margin-bottom:6px;">Tier 1 – Blue Chips</div>
-                    <div style="font-size:10px;color:#94a3b8;">Dev: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier1.deviation}%</span></div>
-                    <div style="font-size:10px;color:#94a3b8;">Alloc: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier1.allocation}%</span></div>
-                    <div style="font-size:9px;color:#64748b;margin-top:4px;">${AutoTrader.TIER1_COINS.join(', ')}</div>
-                </div>
-                <div style="padding:10px;border-radius:10px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.15);">
-                    <div style="font-size:10px;font-weight:700;color:#eab308;margin-bottom:6px;">Tier 2 – Alts</div>
-                    <div style="font-size:10px;color:#94a3b8;">Dev: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier2.deviation}%</span></div>
-                    <div style="font-size:10px;color:#94a3b8;">Alloc: <span style="color:#e2e8f0;font-weight:600;">${AutoTrader.tier2.allocation}%</span></div>
-                    <div style="font-size:9px;color:#64748b;margin-top:4px;">All other coins</div>
-                </div>
-            </div>
-            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Cooldown: ${AutoTrader.COOLDOWN_HOURS}h</span>
-                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Reserve: $${AutoTrader.MIN_USDC_RESERVE}</span>
-                <span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Prices: 30s</span>
-            </div>`;
+            let tierHtml = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;">';
+            for (let t = 1; t <= 3; t++) {
+                const cfg = AutoTrader.TIER_CONFIG[t];
+                const settings = AutoTrader['tier' + t];
+                const coins = AutoTrader._getCoinsForTier(t);
+                const active = AutoTrader.tierActive[t];
+                const statusBadge = active
+                    ? `<span style="font-size:7px;font-weight:700;padding:1px 4px;border-radius:4px;background:${cfg.color}20;color:${cfg.color};">ON</span>`
+                    : '';
+                tierHtml += `<div style="min-width:120px;flex:0 0 auto;padding:8px;border-radius:8px;background:${cfg.color}0a;border:1px solid ${cfg.color}25;">`;
+                tierHtml += `<div style="display:flex;align-items:center;gap:4px;font-size:9px;font-weight:700;color:${cfg.color};margin-bottom:4px;">T${t} – ${cfg.name} ${statusBadge}</div>`;
+                tierHtml += `<div style="font-size:9px;color:#94a3b8;">Dev: <span style="color:#e2e8f0;font-weight:600;">${settings.deviation}%</span></div>`;
+                tierHtml += `<div style="font-size:9px;color:#94a3b8;">Alloc: <span style="color:#e2e8f0;font-weight:600;">${settings.allocation}%</span></div>`;
+                tierHtml += `<div style="font-size:8px;color:#64748b;margin-top:3px;">${coins.length > 0 ? coins.join(', ') : 'No coins'}</div>`;
+                tierHtml += `</div>`;
+            }
+            tierHtml += '</div>';
+            tierHtml += `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">`;
+            tierHtml += `<span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Cooldown: ${AutoTrader.COOLDOWN_HOURS}h</span>`;
+            tierHtml += `<span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Reserve: $${AutoTrader.MIN_USDC_RESERVE}</span>`;
+            tierHtml += `<span style="font-size:10px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);color:#94a3b8;">Prices: 30s</span>`;
+            tierHtml += `</div>`;
+            settingsEl.innerHTML = tierHtml;
         }
 
         // Monitoring status

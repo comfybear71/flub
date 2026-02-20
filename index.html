@@ -330,84 +330,14 @@
                         <div id="autoStatusBadge" style="display:none; font-size:10px; font-weight:700; padding:3px 8px; border-radius:12px; background:rgba(168,85,247,0.2); color:#a855f7;">ACTIVE</div>
                     </div>
 
-                    <!-- Tier 1: Blue Chips -->
-                    <div style="margin-bottom:10px; padding:10px; background:rgba(59,130,246,0.06); border-radius:8px; border:1px solid rgba(59,130,246,0.15);">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <span style="font-size:11px; font-weight:700; color:#3b82f6;">Tier 1 – Blue Chips</span>
-                        </div>
-                        <div id="tier1Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
-                            <span style="font-size:10px; color:#64748b;">Loading...</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Dev</span>
-                                    <span id="t1DevValue" style="color:#3b82f6; font-weight:600;">2%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t1DevFill" style="width:10%; background:#3b82f6;"></div>
-                                    <input type="range" id="t1DevSlider" min="1" max="15" value="2" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Alloc</span>
-                                    <span id="t1AllocValue" style="color:#22c55e; font-weight:600;">10%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t1AllocFill" style="width:40%; background:#22c55e;"></div>
-                                    <input type="range" id="t1AllocSlider" min="1" max="25" value="10" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tier 2: Alts -->
-                    <div style="margin-bottom:10px; padding:10px; background:rgba(234,179,8,0.06); border-radius:8px; border:1px solid rgba(234,179,8,0.15);">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <span style="font-size:11px; font-weight:700; color:#eab308;">Tier 2 – Alts</span>
-                        </div>
-                        <div id="tier2Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
-                            <span style="font-size:10px; color:#64748b;">Loading...</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Dev</span>
-                                    <span id="t2DevValue" style="color:#eab308; font-weight:600;">5%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t2DevFill" style="width:16%; background:#eab308;"></div>
-                                    <input type="range" id="t2DevSlider" min="2" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Alloc</span>
-                                    <span id="t2AllocValue" style="color:#22c55e; font-weight:600;">5%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t2AllocFill" style="width:25%; background:#22c55e;"></div>
-                                    <input type="range" id="t2AllocSlider" min="1" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Horizontally scrollable tier cards (rendered by AutoTrader.renderTierCards) -->
+                    <div id="tierCardsScroll" class="tier-cards-scroll"></div>
 
                     <!-- Error display -->
                     <div id="autoError" class="error-message" style="display:none; margin-bottom:8px;"></div>
 
-                    <!-- Live status -->
+                    <!-- Live status (monitoring) -->
                     <div id="autoStatus" style="display:none; padding:8px; border-radius:8px; margin-bottom:8px; font-size:10px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.4;"></div>
-
-                    <!-- Override cooldowns button (only visible when bot active & coins on cooldown) -->
-                    <button id="autoCooldownOverride" onclick="AutoTrader.overrideCooldowns()" style="display:none; width:100%; padding:8px; border-radius:8px; border:1px solid rgba(239,68,68,0.3); font-size:11px; font-weight:600; cursor:pointer; color:#ef4444; background:rgba(239,68,68,0.08); margin-bottom:8px; transition:all 0.2s;">
-                        Override Cooldowns
-                    </button>
 
                     <!-- Trade Log -->
                     <div style="margin-bottom:8px; border-radius:8px; border:1px solid rgba(168,85,247,0.15); overflow:hidden;">
@@ -419,11 +349,6 @@
                             <div style="font-size:10px; color:#64748b; text-align:center; padding:12px;">No auto-trades yet. Trades will appear here when triggered.</div>
                         </div>
                     </div>
-
-                    <!-- Start / Stop button -->
-                    <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; color:white; background:#a855f7; transition:all 0.2s;">
-                        <span id="autoToggleBtnText">Start Auto Trading</span>
-                    </button>
                 </div>
 
 
