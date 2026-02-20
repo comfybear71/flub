@@ -1136,8 +1136,8 @@ const UI = {
             // Send USDC on-chain via Phantom to the deposit address
             const txSignature = await PhantomWallet.sendUsdcDeposit(amount);
 
-            // Track deposit locally (until backend is built)
-            this._recordDeposit(PhantomWallet.walletAddress, amount, txSignature);
+            // Record deposit and issue shares (API → MongoDB)
+            await this._recordDeposit(PhantomWallet.walletAddress, amount, txSignature);
 
             this.closeDepositModal();
             Logger.log(`Deposit of ${amount} USDC sent! TX: ${txSignature.substring(0, 16)}...`, 'success');
@@ -1208,16 +1208,16 @@ const UI = {
 
     // ── Deposit tracking (localStorage until backend) ────────────────────────
 
-    _recordDeposit(wallet, amount, txHash) {
+    async _recordDeposit(wallet, amount, txHash) {
         // Get current pool value for NAV calculation
         const totalPoolValue = State.portfolioData.assets.reduce(
             (sum, a) => sum + (a.usd_value || 0), 0
         );
 
-        // Issue shares via ShareLedger (NAV-based)
-        const { shares, nav } = ShareLedger.issueShares(wallet, amount, totalPoolValue);
+        // Issue shares via ShareLedger (API → MongoDB, falls back to localStorage)
+        const { shares, nav } = await ShareLedger.recordDeposit(wallet, amount, txHash, totalPoolValue);
 
-        // Record deposit with share data for audit trail
+        // Also record in localStorage for offline access / audit trail
         const key = `flub_deposits_${wallet}`;
         const deposits = JSON.parse(localStorage.getItem(key) || '[]');
         deposits.push({ amount, shares, nav, txHash, timestamp: Date.now() });
@@ -1613,15 +1613,29 @@ const UI = {
         const total = deposits.reduce((sum, d) => sum + d.amount, 0);
         State.userDeposits = total;
 
-        // Load share balance
-        State.userShares = ShareLedger.getUserShares(wallet);
-
         // Update wallet panel
         const depositedEl = document.getElementById('walletPanelDeposited');
         if (depositedEl) depositedEl.textContent = Assets.formatCurrency(total);
 
-        // Calculate allocation from shares (will also handle migration)
+        // Calculate allocation from shares (sync — uses cache/localStorage)
         this.calculateUserAllocation();
+
+        // Fetch fresh position from API in background
+        const totalPoolValue = State.portfolioData.assets.reduce(
+            (sum, a) => sum + (a.usd_value || 0), 0
+        );
+        if (totalPoolValue > 0) {
+            ShareLedger.fetchUserPosition(wallet, totalPoolValue).then(position => {
+                State.userShares = position.shares;
+                State.userAllocation = position.allocation;
+                State.userCurrentValue = position.currentValue;
+                if (position.totalDeposited > 0) {
+                    State.userDeposits = position.totalDeposited;
+                }
+                this.updateUserPortfolioInfo();
+                this.renderPortfolio();
+            });
+        }
 
         // Update portfolio info panel
         this.updateUserPortfolioInfo();
