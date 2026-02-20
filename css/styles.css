@@ -782,13 +782,14 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .tier-card {
-    min-width: calc(100% - 20px);
-    flex: 0 0 auto;
+    flex: 0 0 100%;
+    min-width: 0;
     padding: 10px;
     border-radius: 8px;
     background: rgba(255,255,255,0.03);
     border: 1px solid;
     scroll-snap-align: start;
+    box-sizing: border-box;
 }
 
 .auto-header {
