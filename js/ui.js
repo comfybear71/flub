@@ -1705,38 +1705,5 @@ const UI = {
 
         const coinCountEl = document.getElementById('userInfoCoinCount');
         if (coinCountEl) coinCountEl.textContent = alloc > 0 ? cryptoAssets.length : 0;
-
-        // Holdings list
-        const holdingsSection = document.getElementById('userInfoHoldingsSection');
-        const holdingsList = document.getElementById('userInfoHoldingsList');
-
-        if (holdingsSection && holdingsList) {
-            if (alloc > 0 && cryptoAssets.length > 0) {
-                holdingsSection.style.display = 'block';
-
-                // Sort by USD value descending
-                const sorted = [...cryptoAssets].sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
-
-                holdingsList.innerHTML = sorted.map(a => {
-                    const userBal = a.balance * (alloc / 100);
-                    const userVal = a.usd_value * (alloc / 100);
-                    const style = CONFIG.ASSET_STYLES[a.code] || { color: '#666', icon: a.code?.[0] || '?' };
-
-                    return `<div class="holding-row">
-                        <div class="holding-coin">
-                            <div class="holding-coin-dot" style="background:${style.color}"></div>
-                            <span class="holding-coin-name">${a.code}</span>
-                        </div>
-                        <div class="holding-values">
-                            <div class="holding-amount">${userBal.toFixed(6)}</div>
-                            <div class="holding-usd">${Assets.formatCurrency(userVal)}</div>
-                        </div>
-                    </div>`;
-                }).join('');
-            } else {
-                holdingsSection.style.display = 'none';
-                holdingsList.innerHTML = '';
-            }
-        }
     }
 };
