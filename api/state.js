@@ -92,7 +92,7 @@ export default async function handler(req, res) {
                 return res.status(403).json({ error: 'Admin access required' });
             }
 
-            const allowedKeys = ['pendingOrders', 'autoTiers', 'autoCooldowns', 'autoTradeLog'];
+            const allowedKeys = ['pendingOrders', 'autoTiers', 'autoCooldowns', 'autoTradeLog', 'autoActive'];
             const update = {};
             for (const key of allowedKeys) {
                 if (body[key] !== undefined) update[key] = body[key];

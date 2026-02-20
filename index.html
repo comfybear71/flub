@@ -10,7 +10,7 @@
     <title>FLUB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260218d">
+    <link rel="stylesheet" href="css/styles.css?v=20260220n">
 </head>
 <body class="pb-20">
 
@@ -20,7 +20,7 @@
             <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
             Connecting...
         </div>
-        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7</div>
+        <div style="font-size:10px;color:#666;position:absolute;top:2px;right:8px;">v7.6</div>
         <div style="display:flex; align-items:center; gap:8px;">
             <button onclick="PhantomWallet.isConnected ? PhantomWallet.toggleWalletPanel() : PhantomWallet.connect()" class="phantom-btn" id="phantomBtn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -61,6 +61,22 @@
                 </div>
                 <p class="text-xs text-slate-500 mt-1 font-medium" id="portfolioHint">Tap coin to trade</p>
 
+                <!-- Admin quick-nav buttons -->
+                <div class="admin-only" id="adminQuickNav">
+                    <button onclick="UI.quickNav('instant')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Instant
+                    </button>
+                    <button onclick="UI.quickNav('trigger')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                        Trigger
+                    </button>
+                    <button onclick="UI.quickNav('auto')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                        Auto
+                    </button>
+                </div>
+
                 <!-- Cash balances: admin sees USDC+AUD, user sees deposited USDC -->
                 <div class="cash-balances-header admin-only" style="margin-top:8px;justify-content:center;">
                     <div class="cash-balance-item">
@@ -72,6 +88,40 @@
                         <div class="cash-dot aud-dot"></div>
                         <span class="cash-label">AUD</span>
                         <span class="cash-amount" id="headerAudBalance">$0.00</span>
+                    </div>
+                </div>
+
+                <!-- Admin pool stats panel -->
+                <div class="admin-only" id="adminStatsPanel" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 12px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Users</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statUserCount">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Deposited</div>
+                            <div style="font-size:14px;font-weight:700;color:#22c55e;" id="statTotalDeposited">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">User Value</div>
+                            <div style="font-size:14px;font-weight:700;color:#3b82f6;" id="statUserValue">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">NAV</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statNav">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Trades</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statTradeCount">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">User P&L</div>
+                            <div style="font-size:14px;font-weight:700;" id="statPnl">--</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:9px;color:#475569;" id="statLastDeposit">Last deposit: --</span>
+                        <span style="font-size:9px;color:#475569;" id="statLastJoined">Last joined: --</span>
                     </div>
                 </div>
 
@@ -92,6 +142,108 @@
                     </div>
                 </div>
 
+                <!-- ═══ User Insight Cards (read-only) ═══ -->
+                <div class="user-only user-insight-cards" id="userInsightCards" style="display:none;">
+                    <div class="insight-card pending-card" onclick="UI.showUserPendingOrders()">
+                        <div class="insight-card-icon pending-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div class="insight-card-body">
+                            <div class="insight-card-title">Orders</div>
+                            <div class="insight-card-value" id="userPendingCount">None</div>
+                        </div>
+                    </div>
+                    <div class="insight-card bot-card" onclick="UI.showUserAutoTrader()">
+                        <div class="insight-card-icon bot-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                            </svg>
+                        </div>
+                        <div class="insight-card-body">
+                            <div class="insight-card-title">Auto Trader</div>
+                            <div class="insight-card-value" id="userBotStatus">Inactive</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ User Portfolio Info Panel ═══ -->
+                <div class="user-only user-portfolio-info" id="userPortfolioInfo" style="display:none;">
+                    <!-- P&L Header -->
+                    <div class="portfolio-info-pnl">
+                        <div class="pnl-current">
+                            <span class="pnl-label">Current Value</span>
+                            <span class="pnl-value" id="userInfoValue">$0.00</span>
+                        </div>
+                        <div class="pnl-change" id="userInfoPnlBox">
+                            <span class="pnl-arrow" id="userInfoPnlArrow"></span>
+                            <span id="userInfoPnlAmount">$0.00</span>
+                            <span class="pnl-percent" id="userInfoPnlPercent">(0.00%)</span>
+                        </div>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="portfolio-info-grid">
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon deposit-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Total Deposited</span>
+                                <span class="stat-value" id="userInfoDeposited">$0.00</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon alloc-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Pool Share</span>
+                                <span class="stat-value" id="userInfoAllocation">0.00%</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon date-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Last Deposit</span>
+                                <span class="stat-value" id="userInfoLastDeposit">--</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon count-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Deposits</span>
+                                <span class="stat-value" id="userInfoDepositCount">0</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon member-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Member Since</span>
+                                <span class="stat-value" id="userInfoJoined">--</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-info-stat">
+                            <div class="stat-icon coins-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/></svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Coins Held</span>
+                                <span class="stat-value" id="userInfoCoinCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
             </div>
 
             <div class="trading-view" id="tradingView">
@@ -103,9 +255,10 @@
                                 <path d="m15 18-6-6 6-6"/>
                             </svg>
                         </button>
-                        <div class="coin-mini">
+                        <div class="coin-mini" onclick="UI.openCoinSelector()" style="cursor:pointer;">
                             <div class="coin-icon-tiny" id="tradeIcon" style="background: #f9731633; color: #f97316;">₿</div>
                             <span id="tradeName">BTC</span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.5;margin-left:-2px;"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </div>
                     <button class="chart-toggle-btn" id="chartToggleBtn" onclick="UI.toggleMiniChart()" title="Toggle Chart">
@@ -286,78 +439,13 @@
                         <div id="autoStatusBadge" style="display:none; font-size:10px; font-weight:700; padding:3px 8px; border-radius:12px; background:rgba(168,85,247,0.2); color:#a855f7;">ACTIVE</div>
                     </div>
 
-                    <!-- Tier 1: Blue Chips -->
-                    <div style="margin-bottom:10px; padding:10px; background:rgba(59,130,246,0.06); border-radius:8px; border:1px solid rgba(59,130,246,0.15);">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <span style="font-size:11px; font-weight:700; color:#3b82f6;">Tier 1 – Blue Chips</span>
-                        </div>
-                        <div id="tier1Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
-                            <span style="font-size:10px; color:#64748b;">Loading...</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Dev</span>
-                                    <span id="t1DevValue" style="color:#3b82f6; font-weight:600;">2%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t1DevFill" style="width:10%; background:#3b82f6;"></div>
-                                    <input type="range" id="t1DevSlider" min="1" max="15" value="2" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Alloc</span>
-                                    <span id="t1AllocValue" style="color:#22c55e; font-weight:600;">10%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t1AllocFill" style="width:40%; background:#22c55e;"></div>
-                                    <input type="range" id="t1AllocSlider" min="1" max="25" value="10" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tier 2: Alts -->
-                    <div style="margin-bottom:10px; padding:10px; background:rgba(234,179,8,0.06); border-radius:8px; border:1px solid rgba(234,179,8,0.15);">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <span style="font-size:11px; font-weight:700; color:#eab308;">Tier 2 – Alts</span>
-                        </div>
-                        <div id="tier2Coins" style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:8px;">
-                            <span style="font-size:10px; color:#64748b;">Loading...</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Dev</span>
-                                    <span id="t2DevValue" style="color:#eab308; font-weight:600;">5%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t2DevFill" style="width:16%; background:#eab308;"></div>
-                                    <input type="range" id="t2DevSlider" min="2" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:3px;">
-                                    <span>Alloc</span>
-                                    <span id="t2AllocValue" style="color:#22c55e; font-weight:600;">5%</span>
-                                </div>
-                                <div class="slider-box" style="height:28px;">
-                                    <div class="slider-track"></div>
-                                    <div class="slider-fill" id="t2AllocFill" style="width:25%; background:#22c55e;"></div>
-                                    <input type="range" id="t2AllocSlider" min="1" max="20" value="5" step="1" style="height:28px;" oninput="AutoTrader.updateTierUI()">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Horizontally scrollable tier cards (rendered by AutoTrader.renderTierCards) -->
+                    <div id="tierCardsScroll" class="tier-cards-scroll"></div>
 
                     <!-- Error display -->
                     <div id="autoError" class="error-message" style="display:none; margin-bottom:8px;"></div>
 
-                    <!-- Live status -->
+                    <!-- Live status (monitoring) -->
                     <div id="autoStatus" style="display:none; padding:8px; border-radius:8px; margin-bottom:8px; font-size:10px; font-weight:500; background:rgba(168,85,247,0.1); color:#c4b5fd; line-height:1.4;"></div>
 
                     <!-- Trade Log -->
@@ -370,11 +458,6 @@
                             <div style="font-size:10px; color:#64748b; text-align:center; padding:12px;">No auto-trades yet. Trades will appear here when triggered.</div>
                         </div>
                     </div>
-
-                    <!-- Start / Stop button -->
-                    <button id="autoToggleBtn" onclick="AutoTrader.toggle()" style="width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; color:white; background:#a855f7; transition:all 0.2s;">
-                        <span id="autoToggleBtnText">Start Auto Trading</span>
-                    </button>
                 </div>
 
 
@@ -385,7 +468,10 @@
 
     <div class="holdings-container" id="holdingsContainer">
         <div class="holdings-header">
-            <h2 class="text-lg font-bold holdings-title">Holdings</h2>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <h2 class="text-lg font-bold holdings-title">Holdings</h2>
+                <span id="holdingsCountdown" style="font-size:9px;font-weight:600;color:#94a3b8;background:rgba(255,255,255,0.08);padding:2px 7px;border-radius:8px;"></span>
+            </div>
 
             <div style="display:flex;align-items:center;gap:6px;">
                 <!-- Holdings toggle for users: Mine / Pool -->
@@ -510,6 +596,23 @@
     </div>
 </div>
 
+<!-- Coin Selector Modal (TradingView-style) -->
+<div class="coin-selector-overlay" id="coinSelectorOverlay" onclick="UI.closeCoinSelector()">
+    <div class="coin-selector-modal" onclick="event.stopPropagation()">
+        <div class="coin-selector-header">
+            <span class="coin-selector-title">Select Symbol</span>
+            <button class="coin-selector-close" onclick="UI.closeCoinSelector()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="coin-selector-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="coinSearchInput" placeholder="Search..." autocomplete="off" oninput="UI.filterCoinSelector(this.value)">
+        </div>
+        <div class="coin-selector-list" id="coinSelectorList"></div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="modalOverlay" onclick="UI.closeSort()"></div>
 <div class="sort-modal" id="sortModal">
     <div class="flex justify-between items-center mb-4">
@@ -541,40 +644,112 @@
 </div>
 
 <nav class="bottom-nav">
-    <div class="flex justify-around items-center max-w-lg mx-auto">
-        <a href="#" class="nav-item active">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="14" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <div class="nav-bar-inner">
+        <!-- Leaderboard -->
+        <button class="nav-item" id="navLeaderboard" onclick="UI.showLeaderboard()">
+            <div class="nav-glow"></div>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
             </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 3v18h18"/>
-                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+            <span class="nav-label">Leaders</span>
+        </button>
+
+        <!-- Home (center, raised) -->
+        <button class="nav-item nav-home active" id="navHome" onclick="UI.showHome()">
+            <div class="nav-glow nav-glow-home"></div>
+            <div class="nav-home-ring">
+                <svg class="nav-icon nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/>
+                    <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                </svg>
+            </div>
+            <span class="nav-label">Home</span>
+        </button>
+
+        <!-- Transactions -->
+        <button class="nav-item" id="navTransactions" onclick="UI.showTransactions()">
+            <div class="nav-glow"></div>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                <path d="M14 2v6h6"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+                <path d="M10 9H8"/>
             </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-        </a>
-        <a href="#" class="nav-item">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-        </a>
+            <span class="nav-label">Activity</span>
+        </button>
     </div>
 </nav>
+
+<!-- ═══ Leaderboard Overlay ═══ -->
+<div id="leaderboardOverlay" class="page-overlay">
+    <div class="page-overlay-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                    <path d="M4 22h16"/>
+                    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                </svg>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Leaderboard</span>
+            </div>
+            <button onclick="UI.showHome()" class="page-close-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="leaderboardContent" class="page-body">
+            <div class="page-loading">
+                <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+                <span style="font-size:12px;color:#64748b;">Loading leaderboard...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Transactions Overlay ═══ -->
+<div id="transactionsOverlay" class="page-overlay">
+    <div class="page-overlay-content">
+        <div class="page-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                    <path d="M14 2v6h6"/>
+                    <path d="M16 13H8"/>
+                    <path d="M16 17H8"/>
+                    <path d="M10 9H8"/>
+                </svg>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Activity</span>
+                <span id="txRoleBadge" style="display:none;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,0.2);color:#a78bfa;">ADMIN</span>
+            </div>
+            <button onclick="UI.showHome()" class="page-close-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <!-- Filter tabs (admin gets more) -->
+        <div id="txFilterBar" class="tx-filter-bar">
+            <button class="tx-filter active" data-filter="all" onclick="UI.filterTransactions('all')">All</button>
+            <button class="tx-filter" data-filter="deposits" onclick="UI.filterTransactions('deposits')">Deposits</button>
+            <button class="tx-filter admin-only" data-filter="withdrawals" onclick="UI.filterTransactions('withdrawals')">Withdrawals</button>
+            <button class="tx-filter admin-only" data-filter="buys" onclick="UI.filterTransactions('buys')">Buys</button>
+            <button class="tx-filter admin-only" data-filter="sells" onclick="UI.filterTransactions('sells')">Sells</button>
+            <button class="tx-filter admin-only" data-filter="external" onclick="UI.filterTransactions('external')">External</button>
+        </div>
+        <div id="transactionsContent" class="page-body">
+            <div class="page-loading">
+                <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#3b82f6;border-radius:50%;"></div>
+                <span style="font-size:12px;color:#64748b;">Loading transactions...</span>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Wallet Panel (slide-down when wallet button clicked while connected) -->
 <div id="walletPanel" class="wallet-panel-overlay">
@@ -589,7 +764,12 @@
                 </div>
                 <div>
                     <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Wallet</div>
-                    <div id="walletPanelAddress" style="font-size:12px;color:#e2e8f0;font-weight:600;word-break:break-all;"></div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div id="walletPanelAddress" style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;"></div>
+                        <button id="copyWalletBtn" onclick="PhantomWallet.copyAddress()" title="Copy full address" style="background:none;border:1px solid rgba(148,163,184,0.2);border-radius:4px;padding:2px 4px;cursor:pointer;display:flex;align-items:center;flex-shrink:0;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
             <span id="walletPanelRole" class="wallet-panel-role-badge user">User</span>
@@ -612,8 +792,20 @@
                     <div id="walletPanelBudju" style="font-size:13px;font-weight:700;color:#e2e8f0;">0</div>
                 </div>
             </div>
-            <div id="budjuRequirement" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.15);border-radius:8px;font-size:10px;color:#ec4899;text-align:center;">
-                1,000,000 BUDJU required to use Flub (coming soon)
+            <div id="budjuRequirement" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.15);border-radius:10px;text-align:center;">
+                <div style="font-size:11px;color:#ec4899;font-weight:600;margin-bottom:6px;">10,000,000 BUDJU required to participate</div>
+                <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">You need <span id="budjuShortfall" style="color:#ec4899;font-weight:600;">10,000,000</span> more BUDJU</div>
+                <div style="display:flex;gap:6px;">
+                    <a href="https://jup.ag/swap/SOL-BUDJU" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);border-radius:8px;color:#c084fc;font-size:10px;font-weight:600;text-decoration:none;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                        Buy with SOL
+                    </a>
+                    <a href="https://jup.ag/swap/USDC-BUDJU" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);border-radius:8px;color:#4ade80;font-size:10px;font-weight:600;text-decoration:none;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                        Buy with USDC
+                    </a>
+                </div>
+                <div style="font-size:9px;color:#64748b;margin-top:6px;">Powered by Jupiter</div>
             </div>
         </div>
 
@@ -714,19 +906,73 @@
     </div>
 </div>
 
+<!-- ═══ User Read-Only: Pending Orders Detail ═══ -->
+<div id="userPendingModal" class="trade-modal-overlay">
+    <div class="trade-modal-content" style="max-width:420px;max-height:80vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:32px;height:32px;border-radius:10px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Pending Orders</span>
+            </div>
+            <button onclick="document.getElementById('userPendingModal').classList.remove('show')" style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.06);border:none;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;">View only — orders are managed by the pool admin</div>
+        <div id="userPendingList" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="text-align:center;color:#64748b;font-size:12px;padding:20px;">No pending orders</div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ User Read-Only: Auto Trader Detail ═══ -->
+<div id="userAutoTraderModal" class="trade-modal-overlay">
+    <div class="trade-modal-content" style="max-width:420px;max-height:80vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:32px;height:32px;border-radius:10px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                </div>
+                <span style="font-size:16px;font-weight:700;color:#e2e8f0;">Auto Trader</span>
+                <span id="userBotBadge" style="display:none;font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(34,197,94,0.2);color:#22c55e;">ACTIVE</span>
+            </div>
+            <button onclick="UI.closeUserAutoTrader()" style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.06);border:none;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;">View only — the bot is managed by the pool admin</div>
+
+        <!-- Bot settings summary -->
+        <div id="userBotSettings" style="margin-bottom:12px;"></div>
+
+        <!-- Coin monitoring -->
+        <div id="userBotMonitor" style="margin-bottom:12px;"></div>
+
+        <!-- Trade log -->
+        <div style="border-radius:8px;border:1px solid rgba(59,130,246,0.15);overflow:hidden;">
+            <div style="padding:6px 10px;background:rgba(59,130,246,0.08);font-size:10px;font-weight:700;color:#3b82f6;">Trade Log</div>
+            <div id="userBotTradeLog" style="max-height:200px;overflow-y:auto;">
+                <div style="font-size:10px;color:#64748b;text-align:center;padding:12px;">No auto-trades yet.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // Dynamic script loader — defeats Phantom/Safari aggressive caching
 (function() {
     var t = Date.now();
     var scripts = [
-        'js/config.js','js/logger.js','js/assets.js','js/api.js',
-        'js/phantom-wallet.js','js/ui.js','js/autotrader.js',
+        'js/config.js','js/logger.js','js/assets.js','js/price-animator.js',
+        'js/share-ledger.js','js/api.js','js/phantom-wallet.js','js/ui.js','js/autotrader.js',
         'js/trading.js','js/server-state.js','js/app.js'
     ];
     scripts.forEach(function(src) {
         document.write('<script src="' + src + '?t=' + t + '"><\/script>');
     });
-    console.log('FLUB v7.3 fix-applyRole-tab-scope, built ' + new Date().toISOString());
+    console.log('FLUB v7.6 nav-leaderboard-activity, built ' + new Date().toISOString());
 })();
 </script>
 </body>

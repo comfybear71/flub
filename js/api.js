@@ -16,6 +16,7 @@ const API = {
             Logger.log('Connected!', 'success');
             UI.updateStatus('connected');
             await this.refreshData();
+            this.startPriceTicker();
             return true;
 
         } catch (error) {
@@ -87,10 +88,17 @@ const API = {
             State.portfolioData.assets = normalized
                 .filter(a => a.balance > 0 || a.code === 'AUD' || a.code === 'USDC');
 
+            // Fetch real USD prices from CoinGecko and overlay
+            await _applyCoinGeckoPrices(State.portfolioData.assets);
+
             Assets.sort(State.currentSort);
             UI.renderPortfolio();
             UI.renderHoldings();
             UI.updateLastUpdated();
+
+            // Trigger count-up from zero on initial load
+            requestAnimationFrame(() => UI.animateInitialPrices());
+
             Logger.log(`Loaded ${State.portfolioData.assets.length} assets`, 'success');
 
             // Fetch pending orders in background
@@ -113,7 +121,95 @@ const API = {
     },
 
     getRealtimePrice(assetCode) {
+        // Use live CoinGecko price if available, fall back to portfolio data
+        if (State.liveRates[assetCode]) return State.liveRates[assetCode];
         return State.portfolioData.assets.find(a => a.code === assetCode)?.usd_price ?? 0;
+    },
+
+    // Start background CoinGecko price ticker (every 30s)
+    PRICE_TICK_INTERVAL: 30,  // seconds
+
+    startPriceTicker() {
+        this._tickPrices();
+        this._priceTickerInterval = setInterval(() => this._tickPrices(), this.PRICE_TICK_INTERVAL * 1000);
+        // 1-second countdown updater
+        this._countdownInterval = setInterval(() => this._updatePriceCountdown(), 1000);
+        Logger.log(`CoinGecko price ticker started (${this.PRICE_TICK_INTERVAL}s interval)`, 'info');
+    },
+
+    stopPriceTicker() {
+        if (this._priceTickerInterval) {
+            clearInterval(this._priceTickerInterval);
+            this._priceTickerInterval = null;
+        }
+        if (this._countdownInterval) {
+            clearInterval(this._countdownInterval);
+            this._countdownInterval = null;
+        }
+    },
+
+    _updatePriceCountdown() {
+        if (!State.lastPriceTick) return;
+        const elapsed = Math.floor((Date.now() - State.lastPriceTick) / 1000);
+        const remaining = Math.max(0, this.PRICE_TICK_INTERVAL - elapsed);
+        const text = `${remaining}s`;
+
+        // Admin monitoring countdown
+        const el = document.getElementById('priceCountdown');
+        if (el) el.textContent = text;
+
+        // Holdings page countdown
+        const hEl = document.getElementById('holdingsCountdown');
+        if (hEl) hEl.textContent = text;
+    },
+
+    async _tickPrices() {
+        try {
+            const codeToGeckoId = CONFIG.COINGECKO_IDS || {};
+            const portfolioCodes = (State.portfolioData.assets || []).map(a => a.code);
+            const autoTraderCodes = typeof AutoTrader !== 'undefined' ? Object.keys(AutoTrader.targets || {}) : [];
+            const allCodes = [...new Set([...portfolioCodes, ...autoTraderCodes])].filter(c => codeToGeckoId[c]);
+
+            if (allCodes.length === 0) return;
+
+            const geckoIds = allCodes.map(c => codeToGeckoId[c]).join(',');
+            const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd`;
+
+            const res = await fetch(url);
+            if (!res.ok) return;
+
+            const data = await res.json();
+            State.lastPriceTick = Date.now();
+
+            // Build code → geckoId reverse map
+            const geckoIdToCode = {};
+            for (const [code, geckoId] of Object.entries(codeToGeckoId)) {
+                geckoIdToCode[geckoId] = code;
+            }
+
+            // Update live rates
+            for (const [geckoId, prices] of Object.entries(data)) {
+                if (prices.usd) {
+                    const code = geckoIdToCode[geckoId];
+                    if (code) {
+                        State.liveRates[code] = prices.usd;
+                        // Also update portfolio asset if it exists
+                        const asset = State.portfolioData.assets.find(a => a.code === code);
+                        if (asset) {
+                            asset.usd_price = prices.usd;
+                            asset.usd_value = asset.balance * prices.usd;
+                        }
+                    }
+                }
+            }
+
+            // Trigger animated price update in UI (display-only, no trading logic)
+            if (typeof UI !== 'undefined') {
+                UI.animatePriceUpdate();
+            }
+        } catch (err) {
+            // Silent fail — prices will use last known or AUD fallback
+        }
     },
 
     async fetchPendingOrders() {
@@ -296,6 +392,67 @@ const API = {
             Logger.log('Error response: ' + errorBody, 'error');
         }
         return res;
+    },
+
+    /**
+     * Fetch Swyftx order history (filled/completed orders).
+     * Returns normalised array of { type, coin, amount, price, timestamp, swyftxId }
+     * Used by the Activity page to detect external (non-app) trades.
+     */
+    async fetchSwyftxOrderHistory(limit = 100) {
+        try {
+            await this._ensureToken();
+            const res = await _fetchWithRetry('/api/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: `/orders/?limit=${limit}`,
+                    method: 'GET',
+                    authToken: State.jwtToken
+                })
+            });
+
+            if (!res.ok) return [];
+
+            const data = await res.json();
+            const raw = Array.isArray(data) ? data : (data.orders ?? []);
+
+            // Build reverse ID→code map
+            const idToCode = {};
+            for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
+                idToCode[String(id)] = code;
+            }
+
+            // Only include filled orders (status 4)
+            const filled = raw.filter(o => parseInt(o.status) === 4);
+
+            return filled.map(o => {
+                const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                const isBuy = ot === 1 || ot === 3 || ot === 5;
+                const secId = String(o.secondary_asset ?? '');
+                const priId = String(o.primary_asset ?? '');
+                const coin = idToCode[secId] ?? secId;
+                const priCode = idToCode[priId] ?? priId;
+                const quantity = parseFloat(o.quantity ?? 0);
+                const trigger = parseFloat(o.trigger ?? 0);
+                const amount = parseFloat(o.amount ?? o.total ?? quantity);
+
+                return {
+                    swyftxId: o.orderUuid ?? o.id ?? '',
+                    type: isBuy ? 'buy' : 'sell',
+                    coin,
+                    priCode,
+                    quantity,
+                    trigger,
+                    amount,
+                    timestamp: o.updated_time ?? o.created_time ?? '',
+                    orderType: ot
+                };
+            });
+        } catch (err) {
+            console.error('Swyftx history fetch error:', err);
+            return [];
+        }
     }
 };
 
@@ -376,4 +533,46 @@ function _normalizeAsset(asset) {
         change_24h: parseFloat(asset.change_24h ?? asset.change ?? 0),
         asset_id:   asset.asset_id ?? asset.id
     };
+}
+
+// Fetch real USD prices from CoinGecko and update asset usd_price/usd_value
+async function _applyCoinGeckoPrices(assets) {
+    try {
+        // Build list of CoinGecko IDs for assets we hold
+        const codeToGeckoId = CONFIG.COINGECKO_IDS || {};
+        const codes = assets.map(a => a.code).filter(c => codeToGeckoId[c]);
+        if (codes.length === 0) return;
+
+        const geckoIds = codes.map(c => codeToGeckoId[c]).join(',');
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd`;
+
+        const res = await fetch(url);
+        if (!res.ok) {
+            Logger.log(`CoinGecko: HTTP ${res.status} — using AUD fallback`, 'info');
+            return;
+        }
+
+        const data = await res.json();
+
+        // Build reverse map: geckoId → usd price
+        const geckoIdToUsd = {};
+        for (const [geckoId, prices] of Object.entries(data)) {
+            if (prices.usd) geckoIdToUsd[geckoId] = prices.usd;
+        }
+
+        // Overlay real USD prices onto assets
+        let updated = 0;
+        for (const asset of assets) {
+            const geckoId = codeToGeckoId[asset.code];
+            if (geckoId && geckoIdToUsd[geckoId]) {
+                asset.usd_price = geckoIdToUsd[geckoId];
+                asset.usd_value = asset.balance * asset.usd_price;
+                updated++;
+            }
+        }
+
+        Logger.log(`CoinGecko: updated ${updated} coin prices in USD`, 'success');
+    } catch (err) {
+        Logger.log(`CoinGecko error: ${err.message} — using AUD fallback`, 'info');
+    }
 }

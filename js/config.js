@@ -5,16 +5,16 @@
 const CONFIG = {
     API_URL: 'https://portfolio-api-jade-delta.vercel.app/api/portfolio',
     TRADE_PIN: '',
-    AUD_TO_USD_RATE: 0.65,
+    AUD_TO_USD_RATE: 0.70,
     ADMIN_WALLETS: [
         'AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq'
     ],
     USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     BUDJU_MINT: '2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump',
-    BUDJU_REQUIRED: 1_000_000,
+    BUDJU_REQUIRED: 10_000_000,
     DEPOSIT_ADDRESS: '2DfxgAZ655zkgt16r53e6qZ9Cf2Rse7iCGnypDk3nFhD',
     SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
-    HELIUS_API_KEY: 'b81f2789-b697-4987-83f5-6f7e0d24538e',
+    RPC_PROXY: '/api/rpc',
     ASSET_STYLES: {
         'BTC':  { color: '#f97316', icon: '₿',  name: 'Bitcoin' },
         'NEO':  { color: '#22c55e', icon: 'N',  name: 'NEO' },
@@ -32,6 +32,7 @@ const CONFIG = {
         'ADA':  { color: '#3b82f6', icon: 'A',  name: 'Cardano' },
         'POL':  { color: '#8b5cf6', icon: 'P',  name: 'Polygon' },
         'DOGE': { color: '#eab308', icon: 'Ð',  name: 'Dogecoin' },
+        'HYPE': { color: '#00e5a0', icon: 'H',  name: 'Hyperliquid' },
         'AUD':  { color: '#f59e0b', icon: 'A$', name: 'Australian Dollar' }
     },
     // Fallback IDs — dynamically overwritten from portfolio data in refreshData().
@@ -40,6 +41,27 @@ const CONFIG = {
         'ADA':  12, 'USD':  36, 'USDC': 53, 'DOGE': 73,
         'SOL':  130,'LUNA': 405,'LUNC': 406,'NEXO': 407,
         'SUI':  438,'ENA':  496,'POL':  569,'XAUT': 635
+    },
+    // CoinGecko IDs for real-time USD prices
+    COINGECKO_IDS: {
+        'BTC':  'bitcoin',
+        'ETH':  'ethereum',
+        'SOL':  'solana',
+        'XRP':  'ripple',
+        'BNB':  'binancecoin',
+        'ADA':  'cardano',
+        'SUI':  'sui',
+        'LUNA': 'terra-luna-2',
+        'DOGE': 'dogecoin',
+        'XAUT': 'tether-gold',
+        'NEO':  'neo',
+        'TRX':  'tron',
+        'BCH':  'bitcoin-cash',
+        'ENA':  'ethena',
+        'NEXO': 'nexo',
+        'POL':  'polygon-ecosystem-token',
+        'USDC': 'usd-coin',
+        'HYPE': 'hyperliquid'
     }
 };
 
@@ -73,6 +95,8 @@ const State = {
     userAllocation: 0,
     userHoldings: {},
     userDeposits: 0,
+    userShares: 0,
+    userCurrentValue: 0,
     userRole: null,
     walletBalances: { sol: 0, usdc: 0, budju: 0 }
 };

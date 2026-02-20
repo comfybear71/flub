@@ -1,5 +1,5 @@
 # ==========================================
-# API Routes - User, Deposit, Trade Endpoints
+# API Routes - User, Deposit, Trade, Share Endpoints
 # ==========================================
 from http.server import BaseHTTPRequestHandler
 import json
@@ -12,25 +12,32 @@ sys.path.insert(0, os.path.dirname(__file__))
 from database import (
     register_user,
     get_user_portfolio,
+    get_user_deposits,
     record_deposit,
     record_trade,
     get_all_active_users,
     calculate_pool_allocations,
     is_admin,
     get_trader_state,
-    save_trader_state
+    save_trader_state,
+    get_pool_state,
+    initialize_pool,
+    get_user_position,
+    get_leaderboard,
+    get_all_transactions,
+    get_admin_stats
 )
 
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
-        self._send_cors_headers()
         self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
     def do_GET(self):
-        self._send_cors_headers()
-
         try:
             path = self.path.split('?')[0]
             params = self._parse_query_params()
@@ -47,6 +54,29 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 self._send_json(200, portfolio)
+
+            elif path == '/api/user/deposits':
+                wallet = params.get('wallet')
+                if not wallet:
+                    self._send_json(400, {"error": "wallet parameter required"})
+                    return
+
+                deposits = get_user_deposits(wallet)
+                self._send_json(200, {"deposits": deposits, "count": len(deposits)})
+
+            elif path == '/api/user/position':
+                wallet = params.get('wallet')
+                pool_value = params.get('poolValue')
+                if not wallet or not pool_value:
+                    self._send_json(400, {"error": "wallet and poolValue parameters required"})
+                    return
+
+                position = get_user_position(wallet, float(pool_value))
+                self._send_json(200, position)
+
+            elif path == '/api/pool/state':
+                state = get_pool_state()
+                self._send_json(200, state)
 
             elif path == '/api/users':
                 wallet = params.get('admin_wallet')
@@ -72,6 +102,38 @@ class handler(BaseHTTPRequestHandler):
                 allocations = calculate_pool_allocations()
                 self._send_json(200, {"allocations": allocations})
 
+            elif path == '/api/admin/stats':
+                wallet = params.get('wallet')
+                pool_value = params.get('poolValue')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+                if not pool_value:
+                    self._send_json(400, {"error": "poolValue parameter required"})
+                    return
+                stats = get_admin_stats(float(pool_value))
+                self._send_json(200, stats)
+
+            elif path == '/api/leaderboard':
+                pool_value = params.get('poolValue')
+                if not pool_value:
+                    self._send_json(400, {"error": "poolValue parameter required"})
+                    return
+                board = get_leaderboard(float(pool_value))
+                self._send_json(200, {"leaderboard": board, "count": len(board)})
+
+            elif path == '/api/transactions':
+                wallet = params.get('wallet')
+                if not wallet:
+                    self._send_json(400, {"error": "wallet parameter required"})
+                    return
+                admin_req = is_admin(wallet)
+                txns = get_all_transactions(
+                    wallet_address=wallet,
+                    is_admin_request=admin_req
+                )
+                self._send_json(200, {"transactions": txns, "count": len(txns), "isAdmin": admin_req})
+
             else:
                 self._send_json(404, {"error": "Not found"})
 
@@ -79,8 +141,6 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
 
     def do_POST(self):
-        self._send_cors_headers()
-
         try:
             path = self.path.split('?')[0]
             body = self._read_body()
@@ -101,13 +161,31 @@ class handler(BaseHTTPRequestHandler):
                 wallet_address = body.get('walletAddress')
                 amount = body.get('amount')
                 tx_hash = body.get('txHash')
+                pool_value = body.get('totalPoolValue')
                 currency = body.get('currency', 'USDC')
 
-                if not all([wallet_address, amount, tx_hash]):
-                    self._send_json(400, {"error": "walletAddress, amount, and txHash required"})
+                if not all([wallet_address, amount, tx_hash, pool_value]):
+                    self._send_json(400, {"error": "walletAddress, amount, txHash, and totalPoolValue required"})
                     return
 
-                result = record_deposit(wallet_address, float(amount), tx_hash, currency)
+                result = record_deposit(
+                    wallet_address, float(amount), tx_hash,
+                    float(pool_value), currency
+                )
+                self._send_json(200, result)
+
+            elif path == '/api/pool/initialize':
+                admin_wallet = body.get('adminWallet')
+                pool_value = body.get('totalPoolValue')
+
+                if not admin_wallet or not is_admin(admin_wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+                if not pool_value:
+                    self._send_json(400, {"error": "totalPoolValue required"})
+                    return
+
+                result = initialize_pool(float(pool_value))
                 self._send_json(200, result)
 
             elif path == '/api/state':
@@ -117,7 +195,7 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 # Accept partial updates — only overwrite keys that are sent
-                allowed_keys = {'pendingOrders', 'autoTiers', 'autoCooldowns', 'autoTradeLog'}
+                allowed_keys = {'pendingOrders', 'autoTiers', 'autoCooldowns', 'autoTradeLog', 'autoActive'}
                 update = {k: v for k, v in body.items() if k in allowed_keys}
 
                 if not update:
@@ -162,13 +240,11 @@ class handler(BaseHTTPRequestHandler):
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _send_cors_headers(self):
+    def _send_json(self, status_code, data):
+        self.send_response(status_code)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-
-    def _send_json(self, status_code, data):
-        self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))

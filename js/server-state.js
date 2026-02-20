@@ -8,6 +8,7 @@
 
 const ServerState = {
     _saveTimer: null,
+    _pendingKeys: {},   // Accumulates keys between debounce ticks
     _loaded: false,
 
     // ── Load full state from server ──────────────────────────────────────────
@@ -35,7 +36,13 @@ const ServerState = {
             if (data.autoTiers) {
                 if (data.autoTiers.tier1) AutoTrader.tier1 = data.autoTiers.tier1;
                 if (data.autoTiers.tier2) AutoTrader.tier2 = data.autoTiers.tier2;
-                AutoTrader._syncSlidersToSettings();
+                if (data.autoTiers.tier3) AutoTrader.tier3 = data.autoTiers.tier3;
+                AutoTrader.renderTierCards();
+            }
+
+            if (data.autoTierAssignments && typeof data.autoTierAssignments === 'object') {
+                AutoTrader.tierAssignments = data.autoTierAssignments;
+                AutoTrader.renderTierCards();
             }
 
             if (data.autoCooldowns && typeof data.autoCooldowns === 'object') {
@@ -59,6 +66,17 @@ const ServerState = {
                 API.fetchPendingOrders();
             }
 
+            // ── Resume auto-trading if it was active ──
+            if (data.autoActive && data.autoActive.isActive) {
+                const savedTargets = data.autoActive.targets || data.autoActive.basePrices;
+                if (savedTargets && Object.keys(savedTargets).length > 0) {
+                    const coinCount = Object.keys(savedTargets).length;
+                    Logger.log(`ServerState: auto-trading was active (${coinCount} coins) — resuming...`, 'info');
+                    // Pass full state object for per-tier resume
+                    setTimeout(() => AutoTrader.resume(data.autoActive), 2000);
+                }
+            }
+
             Logger.log(`ServerState: loaded (${data.pendingOrders?.length ?? 0} orders, ${data.autoTradeLog?.length ?? 0} trades)`, 'info');
 
         } catch (err) {
@@ -69,15 +87,24 @@ const ServerState = {
     // ── Save specific keys to server (debounced) ─────────────────────────────
 
     save(keys) {
-        // keys: object with one or more of: pendingOrders, autoTiers, autoCooldowns, autoTradeLog
+        // Accumulate keys so rapid-fire saves all get included in one batch
+        Object.assign(this._pendingKeys, keys);
         clearTimeout(this._saveTimer);
-        this._saveTimer = setTimeout(() => this._doSave(keys), 500);
+        this._saveTimer = setTimeout(() => {
+            const batch = this._pendingKeys;
+            this._pendingKeys = {};
+            this._doSave(batch);
+        }, 500);
     },
 
     // Immediate save (for critical operations like placing orders)
     async saveNow(keys) {
+        // Merge any pending keys + the immediate keys and send now
+        Object.assign(this._pendingKeys, keys);
+        const batch = this._pendingKeys;
+        this._pendingKeys = {};
         clearTimeout(this._saveTimer);
-        await this._doSave(keys);
+        await this._doSave(batch);
     },
 
     async _doSave(keys) {
@@ -116,7 +143,7 @@ const ServerState = {
     },
 
     saveTiers() {
-        this.save({ autoTiers: { tier1: AutoTrader.tier1, tier2: AutoTrader.tier2 } });
+        this.save({ autoTiers: { tier1: AutoTrader.tier1, tier2: AutoTrader.tier2, tier3: AutoTrader.tier3 } });
     },
 
     saveCooldowns() {
@@ -125,5 +152,13 @@ const ServerState = {
 
     saveTradeLog() {
         this.save({ autoTradeLog: AutoTrader.tradeLog });
+    },
+
+    saveAutoActive() {
+        this.save({ autoActive: { isActive: AutoTrader.isActive, tierActive: AutoTrader.tierActive, targets: AutoTrader.targets } });
+    },
+
+    saveTierAssignments() {
+        this.save({ autoTierAssignments: AutoTrader.tierAssignments });
     }
 };
