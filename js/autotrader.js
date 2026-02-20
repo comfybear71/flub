@@ -476,14 +476,14 @@ const AutoTrader = {
             html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
             html += `<span style="font-size:10px; color:#64748b;">T${tier}</span>`;
             html += `<div style="flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">`;
-            html += `<div style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.5s;"></div>`;
+            html += `<div class="at-bar" data-code="${code}" style="width:${(progress * 100).toFixed(0)}%; height:100%; background:${barColor}; border-radius:2px; transition:width 0.8s, background 0.8s;"></div>`;
             html += `</div>`;
-            html += `<span style="font-size:11px; font-weight:600; color:${barColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
+            html += `<span class="at-change" data-code="${code}" style="font-size:11px; font-weight:600; color:${barColor}; min-width:50px; text-align:right;">${sign}${change.toFixed(2)}%</span>`;
             html += `</div>`;
             // Row 2: Price thresholds
             html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
             html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
-            html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+            html += `<span class="at-price" data-code="${code}" data-field="at-current" style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
             html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
             html += `</div>`;
             html += `</div>`;
@@ -505,7 +505,7 @@ const AutoTrader = {
                 if (tgt && currentPrice) {
                     html += `<div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b;">`;
                     html += `<span>Buy &lt; $${tgt.buy.toFixed(2)}</span>`;
-                    html += `<span style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
+                    html += `<span class="at-price" data-code="${code}" data-field="at-current" style="color:#94a3b8;">$${currentPrice.toFixed(2)}</span>`;
                     html += `<span>Sell &gt; $${tgt.sell.toFixed(2)}</span>`;
                     html += `</div>`;
                 }

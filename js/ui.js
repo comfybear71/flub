@@ -522,6 +522,51 @@ const UI = {
             }
             State.portfolioChart.update('none');  // 'none' = no animation, instant
         }
+
+        // ── AutoTrader monitoring panel prices ──
+        if (typeof AutoTrader !== 'undefined' && AutoTrader.isActive) {
+            document.querySelectorAll('.at-price[data-code]').forEach(el => {
+                const code = el.dataset.code;
+                const price = API.getRealtimePrice(code);
+                if (!price) return;
+                PriceAnimator.animateEl(el, price, v => '$' + v.toFixed(2));
+            });
+
+            // Update progress bars and change % in-place
+            document.querySelectorAll('.at-bar[data-code]').forEach(bar => {
+                const code = bar.dataset.code;
+                const tgt = AutoTrader.targets[code];
+                const price = API.getRealtimePrice(code);
+                if (!tgt || !price) return;
+
+                const midPrice = (tgt.buy + tgt.sell) / 2;
+                const halfRange = (tgt.sell - tgt.buy) / 2;
+                let progress;
+                if (price <= tgt.buy) progress = 1;
+                else if (price >= tgt.sell) progress = 1;
+                else if (price < midPrice) progress = (midPrice - price) / halfRange;
+                else progress = (price - midPrice) / halfRange;
+                progress = Math.max(0, Math.min(1, progress));
+
+                let barColor;
+                if (progress < 0.5)      barColor = '#3b82f6';
+                else if (progress < 0.75) barColor = '#eab308';
+                else if (progress < 0.95) barColor = '#f97316';
+                else                      barColor = '#ef4444';
+
+                bar.style.width = (progress * 100).toFixed(0) + '%';
+                bar.style.background = barColor;
+
+                // Update corresponding change % text
+                const changeEl = document.querySelector(`.at-change[data-code="${code}"]`);
+                if (changeEl) {
+                    const change = ((price - midPrice) / midPrice) * 100;
+                    const sign = change >= 0 ? '+' : '';
+                    changeEl.textContent = `${sign}${change.toFixed(2)}%`;
+                    changeEl.style.color = barColor;
+                }
+            });
+        }
     },
 
     /**
