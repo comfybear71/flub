@@ -428,7 +428,7 @@ const AutoTrader = {
         html += `<span>Monitoring ${activeCoins.length} coin${activeCoins.length !== 1 ? 's' : ''}`;
         if (cdCoins.length > 0) html += ` <span style="color:#94a3b8; font-weight:400;">(${cdCoins.length} on cooldown)</span>`;
         html += `</span>`;
-        html += `<span id="priceCountdown" style="font-size:9px; font-weight:400; color:#64748b;"></span>`;
+        html += `<span id="priceCountdown" style="font-size:9px; font-weight:600; color:#94a3b8;"></span>`;
         html += '</div>';
 
         // ── Per-coin threshold table ──
@@ -470,7 +470,8 @@ const AutoTrader = {
             const sign = change >= 0 ? '+' : '';
             const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
 
-            html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">`;
+            const borderCol = change >= 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
+            html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid ${borderCol};">`;
             // Row 1: Coin name, change %, progress bar
             html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
             html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
@@ -497,7 +498,10 @@ const AutoTrader = {
                 const style = CONFIG.ASSET_STYLES[code] || { color: '#666' };
                 const remaining = this._getCooldownRemaining(code);
 
-                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); opacity:0.5;">`;
+                const cdMid = tgt ? (tgt.buy + tgt.sell) / 2 : 0;
+                const cdChange = cdMid ? ((currentPrice - cdMid) / cdMid) * 100 : 0;
+                const cdBorder = cdChange >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
+                html += `<div style="padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid ${cdBorder}; opacity:0.5;">`;
                 html += `<div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">`;
                 html += `<span style="font-size:11px; font-weight:700; color:${style.color}; min-width:42px;">${code}</span>`;
                 html += `<span style="font-size:10px; color:#64748b;">cooldown ${remaining}</span>`;
