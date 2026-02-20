@@ -31,13 +31,13 @@ from database import (
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
-        self._send_cors_headers()
         self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
     def do_GET(self):
-        self._send_cors_headers()
-
         try:
             path = self.path.split('?')[0]
             params = self._parse_query_params()
@@ -141,8 +141,6 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
 
     def do_POST(self):
-        self._send_cors_headers()
-
         try:
             path = self.path.split('?')[0]
             body = self._read_body()
@@ -242,13 +240,11 @@ class handler(BaseHTTPRequestHandler):
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _send_cors_headers(self):
+    def _send_json(self, status_code, data):
+        self.send_response(status_code)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-
-    def _send_json(self, status_code, data):
-        self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))

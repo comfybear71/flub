@@ -339,7 +339,10 @@ const UI = {
 
         try {
             const res = await fetch(`/api/admin/stats?wallet=${wallet}&poolValue=${poolValue}`);
-            if (!res.ok) return;
+            if (!res.ok) {
+                console.warn('Admin stats API error:', res.status, await res.text());
+                return;
+            }
             const stats = await res.json();
             this._adminStatsCache = stats;
             this._adminStatsLastFetch = Date.now();
@@ -1906,17 +1909,25 @@ const UI = {
 
         try {
             const res = await fetch(`/api/leaderboard?poolValue=${poolValue}`);
+            if (!res.ok) {
+                const errText = await res.text();
+                console.error('Leaderboard API error:', res.status, errText);
+                container.innerHTML = `<div class="lb-empty">Leaderboard error (${res.status}). Check console for details.</div>`;
+                return;
+            }
             const data = await res.json();
             if (data.leaderboard) {
                 this._leaderboardCache = data.leaderboard;
                 this._leaderboardLastFetch = Date.now();
                 this._renderLeaderboard(data.leaderboard);
+            } else if (data.error) {
+                container.innerHTML = `<div class="lb-empty">${data.error}</div>`;
             } else {
-                container.innerHTML = '<div class="lb-empty">No leaderboard data available.</div>';
+                container.innerHTML = '<div class="lb-empty">No users with deposits yet.</div>';
             }
         } catch (err) {
             console.error('Leaderboard fetch error:', err);
-            container.innerHTML = '<div class="lb-empty">Failed to load leaderboard. Try again later.</div>';
+            container.innerHTML = `<div class="lb-empty">Failed to load leaderboard: ${err.message}</div>`;
         }
     },
 
@@ -2042,6 +2053,12 @@ const UI = {
         try {
             // Fetch our DB transactions
             const res = await fetch(`/api/transactions?wallet=${wallet}`);
+            if (!res.ok) {
+                const errText = await res.text();
+                console.error('Transactions API error:', res.status, errText);
+                container.innerHTML = `<div class="tx-empty">Transactions error (${res.status}). Check console for details.</div>`;
+                return;
+            }
             const data = await res.json();
             let txns = data.transactions || [];
 
@@ -2062,7 +2079,7 @@ const UI = {
             this._renderTransactions(txns);
         } catch (err) {
             console.error('Transactions fetch error:', err);
-            container.innerHTML = '<div class="tx-empty">Failed to load transactions. Try again later.</div>';
+            container.innerHTML = `<div class="tx-empty">Failed to load transactions: ${err.message}</div>`;
         }
     },
 
