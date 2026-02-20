@@ -91,6 +91,40 @@
                     </div>
                 </div>
 
+                <!-- Admin pool stats panel -->
+                <div class="admin-only" id="adminStatsPanel" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 12px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Users</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statUserCount">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Deposited</div>
+                            <div style="font-size:14px;font-weight:700;color:#22c55e;" id="statTotalDeposited">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">User Value</div>
+                            <div style="font-size:14px;font-weight:700;color:#3b82f6;" id="statUserValue">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">NAV</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statNav">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Trades</div>
+                            <div style="font-size:14px;font-weight:700;color:#e2e8f0;" id="statTradeCount">--</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">User P&L</div>
+                            <div style="font-size:14px;font-weight:700;" id="statPnl">--</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:9px;color:#475569;" id="statLastDeposit">Last deposit: --</span>
+                        <span style="font-size:9px;color:#475569;" id="statLastJoined">Last joined: --</span>
+                    </div>
+                </div>
+
                 <!-- User deposited + wallet balance (user-only) -->
                 <div class="user-only" id="userDepositedBanner" style="display:none;margin-top:6px;text-align:center;">
                     <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;flex-wrap:nowrap;">
@@ -703,6 +737,7 @@
         <div id="txFilterBar" class="tx-filter-bar">
             <button class="tx-filter active" data-filter="all" onclick="UI.filterTransactions('all')">All</button>
             <button class="tx-filter" data-filter="deposits" onclick="UI.filterTransactions('deposits')">Deposits</button>
+            <button class="tx-filter admin-only" data-filter="withdrawals" onclick="UI.filterTransactions('withdrawals')">Withdrawals</button>
             <button class="tx-filter admin-only" data-filter="buys" onclick="UI.filterTransactions('buys')">Buys</button>
             <button class="tx-filter admin-only" data-filter="sells" onclick="UI.filterTransactions('sells')">Sells</button>
             <button class="tx-filter admin-only" data-filter="external" onclick="UI.filterTransactions('external')">External</button>

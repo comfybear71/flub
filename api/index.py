@@ -24,7 +24,8 @@ from database import (
     initialize_pool,
     get_user_position,
     get_leaderboard,
-    get_all_transactions
+    get_all_transactions,
+    get_admin_stats
 )
 
 
@@ -100,6 +101,18 @@ class handler(BaseHTTPRequestHandler):
                     return
                 allocations = calculate_pool_allocations()
                 self._send_json(200, {"allocations": allocations})
+
+            elif path == '/api/admin/stats':
+                wallet = params.get('wallet')
+                pool_value = params.get('poolValue')
+                if not wallet or not is_admin(wallet):
+                    self._send_json(403, {"error": "Admin access required"})
+                    return
+                if not pool_value:
+                    self._send_json(400, {"error": "poolValue parameter required"})
+                    return
+                stats = get_admin_stats(float(pool_value))
+                self._send_json(200, stats)
 
             elif path == '/api/leaderboard':
                 pool_value = params.get('poolValue')

@@ -289,6 +289,11 @@ const UI = {
 
         // Update user deposited banner + low balance warning
         this._updateUserDepositBanner();
+
+        // Fetch admin stats (non-blocking)
+        if (State.userRole === 'admin') {
+            this._fetchAdminStats(totalValue);
+        }
     },
 
     _updateUserDepositBanner() {
@@ -312,6 +317,100 @@ const UI = {
         } else {
             bannerEl.style.display = 'none';
         }
+    },
+
+    // ── Admin Stats Panel ──────────────────────────────────────────────────
+
+    _adminStatsCache: null,
+    _adminStatsLastFetch: 0,
+
+    async _fetchAdminStats(poolValue) {
+        const panel = document.getElementById('adminStatsPanel');
+        if (!panel || State.userRole !== 'admin') return;
+
+        // Cache for 60s to avoid hammering the API on every portfolio refresh
+        if (this._adminStatsCache && Date.now() - this._adminStatsLastFetch < 60000) {
+            this._renderAdminStats(this._adminStatsCache);
+            return;
+        }
+
+        const wallet = typeof PhantomWallet !== 'undefined' ? PhantomWallet.walletAddress : null;
+        if (!wallet || !poolValue) return;
+
+        try {
+            const res = await fetch(`/api/admin/stats?wallet=${wallet}&poolValue=${poolValue}`);
+            if (!res.ok) return;
+            const stats = await res.json();
+            this._adminStatsCache = stats;
+            this._adminStatsLastFetch = Date.now();
+            this._renderAdminStats(stats);
+        } catch (e) {
+            console.warn('Admin stats fetch failed:', e);
+        }
+    },
+
+    _renderAdminStats(stats) {
+        const panel = document.getElementById('adminStatsPanel');
+        if (!panel) return;
+        panel.style.display = '';
+
+        const el = (id) => document.getElementById(id);
+
+        // User count
+        const userCountEl = el('statUserCount');
+        if (userCountEl) userCountEl.textContent = stats.userCount ?? '--';
+
+        // Total deposited
+        const depEl = el('statTotalDeposited');
+        if (depEl) depEl.textContent = '$' + this._fmtNum(stats.totalUserDeposited ?? 0);
+
+        // User value
+        const valEl = el('statUserValue');
+        if (valEl) valEl.textContent = '$' + this._fmtNum(stats.totalUserValue ?? 0);
+
+        // NAV
+        const navEl = el('statNav');
+        if (navEl) navEl.textContent = '$' + (stats.nav ?? 1).toFixed(4);
+
+        // Trade count
+        const tradeEl = el('statTradeCount');
+        if (tradeEl) tradeEl.textContent = stats.tradeCount ?? '--';
+
+        // P&L
+        const pnlEl = el('statPnl');
+        if (pnlEl) {
+            const pnl = stats.pnlPercent ?? 0;
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(1) + '%';
+            pnlEl.style.color = pnl >= 0 ? '#22c55e' : '#ef4444';
+        }
+
+        // Last deposit
+        const lastDepEl = el('statLastDeposit');
+        if (lastDepEl && stats.lastDeposit) {
+            const d = new Date(stats.lastDeposit);
+            const ago = this._timeAgo(d);
+            const who = stats.lastDepositWallet ?? '';
+            lastDepEl.textContent = `Last deposit: $${this._fmtNum(stats.lastDepositAmount)} ${who} · ${ago}`;
+        }
+
+        // Last user joined
+        const lastJoinEl = el('statLastJoined');
+        if (lastJoinEl && stats.lastUserJoined) {
+            const d = new Date(stats.lastUserJoined);
+            lastJoinEl.textContent = `Last joined: ${this._timeAgo(d)}`;
+        }
+    },
+
+    _timeAgo(date) {
+        const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (secs < 60) return 'just now';
+        const mins = Math.floor(secs / 60);
+        if (mins < 60) return mins + 'm ago';
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + 'h ago';
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return days + 'd ago';
+        return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
     },
 
     // ── Holdings List ─────────────────────────────────────────────────────────
@@ -2036,6 +2135,8 @@ const UI = {
         let filtered = txns;
         if (this._txFilter === 'deposits') {
             filtered = txns.filter(t => t.type === 'deposit');
+        } else if (this._txFilter === 'withdrawals') {
+            filtered = txns.filter(t => t.type === 'withdrawal');
         } else if (this._txFilter === 'buys') {
             filtered = txns.filter(t => t.type === 'buy');
         } else if (this._txFilter === 'sells') {
@@ -2062,14 +2163,18 @@ const UI = {
             const time = tx.timestamp ? new Date(tx.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '';
 
             if (tx.type === 'deposit') {
+                const isAdmin = State.userRole === 'admin';
                 const walletInfo = tx.walletShort ? `<span style="font-size:9px;color:#475569;margin-left:4px;">${tx.walletShort}</span>` : '';
+                const adminBadge = (isAdmin && tx.isAdmin) ? '<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:6px;background:rgba(234,179,8,0.15);color:#eab308;margin-left:4px;">ADMIN</span>' : '';
+                const sharesInfo = tx.shares ? ` · ${parseFloat(tx.shares).toFixed(2)} shares` : '';
+                const navInfo = (isAdmin && tx.nav) ? ` @ NAV $${parseFloat(tx.nav).toFixed(4)}` : '';
                 html += `<div class="tx-item">
                     <div class="tx-icon-box deposit">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 12l7 7 7-7"/></svg>
                     </div>
                     <div class="tx-info">
-                        <div class="tx-title">Deposit${walletInfo}</div>
-                        <div class="tx-subtitle">${tx.currency || 'USDC'}${tx.shares ? ' · ' + tx.shares.toFixed(2) + ' shares' : ''}</div>
+                        <div class="tx-title">Deposit${walletInfo}${adminBadge}</div>
+                        <div class="tx-subtitle">${tx.currency || 'USDC'}${sharesInfo}${navInfo}</div>
                     </div>
                     <div class="tx-right">
                         <div class="tx-amount positive">+$${this._fmtNum(tx.amount)}</div>
@@ -2077,13 +2182,15 @@ const UI = {
                     </div>
                 </div>`;
             } else if (tx.type === 'withdrawal') {
+                const isAdmin = State.userRole === 'admin';
                 const walletInfo = tx.walletShort ? `<span style="font-size:9px;color:#475569;margin-left:4px;">${tx.walletShort}</span>` : '';
+                const adminBadge = (isAdmin && tx.isAdmin) ? '<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:6px;background:rgba(234,179,8,0.15);color:#eab308;margin-left:4px;">ADMIN</span>' : '';
                 html += `<div class="tx-item">
                     <div class="tx-icon-box withdraw">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V3M5 12l7-7 7 7"/></svg>
                     </div>
                     <div class="tx-info">
-                        <div class="tx-title">Withdrawal${walletInfo}</div>
+                        <div class="tx-title">Withdrawal${walletInfo}${adminBadge}</div>
                         <div class="tx-subtitle">${tx.currency || 'USDC'}</div>
                     </div>
                     <div class="tx-right">

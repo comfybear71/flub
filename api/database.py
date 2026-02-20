@@ -434,6 +434,69 @@ def get_leaderboard(total_pool_value: float) -> List[Dict]:
     return leaderboard
 
 
+def get_admin_stats(total_pool_value: float) -> Dict:
+    """
+    Aggregated admin dashboard stats: user count, deposits, trades, activity.
+    """
+    pool = get_pool_state()
+    total_shares = pool["totalShares"]
+    nav = total_pool_value / total_shares if total_shares > 0 else 1.0
+
+    # Active non-admin users
+    users = list(users_collection.find({
+        "isActive": True,
+        "walletAddress": {"$nin": ADMIN_WALLETS}
+    }))
+    user_count = len(users)
+
+    # Total deposited by non-admin users
+    total_user_deposited = sum(u.get("totalDeposited", 0) for u in users)
+
+    # Total current value held by non-admin users
+    total_user_value = sum(u.get("shares", 0) * nav for u in users)
+
+    # Last deposit (any user)
+    last_dep = deposits_collection.find_one(
+        {"userId": {"$nin": ADMIN_WALLETS}},
+        sort=[("timestamp", -1)]
+    )
+
+    # Last user registration
+    last_user = users_collection.find_one(
+        {"walletAddress": {"$nin": ADMIN_WALLETS}},
+        sort=[("joinedDate", -1)]
+    )
+
+    # Trade count
+    trade_count = trades_collection.count_documents({})
+
+    # Deposit count (non-admin)
+    deposit_count = deposits_collection.count_documents(
+        {"userId": {"$nin": ADMIN_WALLETS}}
+    )
+
+    # Withdrawal count (non-admin)
+    withdrawal_count = withdrawals_collection.count_documents(
+        {"userId": {"$nin": ADMIN_WALLETS}}
+    )
+
+    return {
+        "userCount": user_count,
+        "totalUserDeposited": round(total_user_deposited, 2),
+        "totalUserValue": round(total_user_value, 2),
+        "nav": round(nav, 6),
+        "totalShares": round(total_shares, 2),
+        "tradeCount": trade_count,
+        "depositCount": deposit_count,
+        "withdrawalCount": withdrawal_count,
+        "lastDeposit": last_dep["timestamp"].isoformat() if last_dep and last_dep.get("timestamp") else None,
+        "lastDepositWallet": (last_dep.get("userId", "")[:4] + "..." + last_dep.get("userId", "")[-4:]) if last_dep and len(last_dep.get("userId", "")) > 8 else None,
+        "lastDepositAmount": last_dep.get("amount", 0) if last_dep else 0,
+        "lastUserJoined": last_user.get("joinedDate").isoformat() if last_user and last_user.get("joinedDate") else None,
+        "pnlPercent": round(((total_user_value / total_user_deposited) - 1) * 100, 2) if total_user_deposited > 0 else 0
+    }
+
+
 def get_all_transactions(wallet_address: str = None, is_admin_request: bool = False) -> List[Dict]:
     """
     Get transaction history.
