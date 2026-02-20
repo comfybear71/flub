@@ -139,6 +139,22 @@ def get_user_portfolio(wallet_address: str) -> Optional[Dict]:
     }
 
 
+def get_user_deposits(wallet_address: str) -> List[Dict]:
+    """Get all deposits for a user, sorted newest first"""
+    cursor = deposits_collection.find(
+        {"userId": wallet_address},
+        {"_id": 0, "userId": 0}
+    ).sort("timestamp", -1)
+
+    deposits = []
+    for doc in cursor:
+        d = dict(doc)
+        if "timestamp" in d and d["timestamp"]:
+            d["timestamp"] = d["timestamp"].isoformat()
+        deposits.append(d)
+    return deposits
+
+
 def record_deposit(wallet_address: str, amount: float, tx_hash: str, currency: str = "USDC") -> Dict:
     """Record a user deposit and update their allocation"""
     user = users_collection.find_one({"walletAddress": wallet_address})

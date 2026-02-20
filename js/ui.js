@@ -42,6 +42,10 @@ const UI = {
             const cards = document.getElementById('userInsightCards');
             if (cards) cards.style.display = 'flex';
             this.updateUserInsightCards();
+            // Show and populate portfolio info panel
+            const portfolioInfo = document.getElementById('userPortfolioInfo');
+            if (portfolioInfo) portfolioInfo.style.display = 'block';
+            this.updateUserPortfolioInfo();
             // Init swipe gestures
             this._initChartSwipe();
             // Close any open trading panel
@@ -191,6 +195,7 @@ const UI = {
 
         // Recalculate user allocation every time portfolio refreshes
         this.calculateUserAllocation();
+        this.updateUserPortfolioInfo();
 
         const isUser = State.userRole === 'user';
         const deposited = State.userDeposits || 0;
@@ -1596,6 +1601,142 @@ const UI = {
         // Calculate allocation based on current pool data
         this.calculateUserAllocation();
 
+        // Update portfolio info panel
+        this.updateUserPortfolioInfo();
+
         return total;
+    },
+
+    // ── User Portfolio Info Panel ────────────────────────────────────────────
+
+    updateUserPortfolioInfo() {
+        if (State.userRole !== 'user') return;
+
+        const panel = document.getElementById('userPortfolioInfo');
+        if (!panel) return;
+
+        const wallet = typeof PhantomWallet !== 'undefined' ? PhantomWallet.walletAddress : null;
+        const deposits = wallet ? JSON.parse(localStorage.getItem(`flub_deposits_${wallet}`) || '[]') : [];
+        const totalDeposited = State.userDeposits || 0;
+        const alloc = State.userAllocation || 0;
+
+        // Calculate current portfolio value
+        const totalPoolValue = State.portfolioData.assets.reduce((sum, a) => sum + (a.usd_value || 0), 0);
+        const currentValue = alloc > 0 ? (totalPoolValue * alloc / 100) : totalDeposited;
+
+        // P&L calculation
+        const pnl = currentValue - totalDeposited;
+        const pnlPercent = totalDeposited > 0 ? (pnl / totalDeposited) * 100 : 0;
+
+        // Current Value
+        const valueEl = document.getElementById('userInfoValue');
+        if (valueEl) valueEl.textContent = Assets.formatCurrency(currentValue);
+
+        // P&L box
+        const pnlBox = document.getElementById('userInfoPnlBox');
+        const pnlArrow = document.getElementById('userInfoPnlArrow');
+        const pnlAmountEl = document.getElementById('userInfoPnlAmount');
+        const pnlPercentEl = document.getElementById('userInfoPnlPercent');
+
+        if (pnlBox) {
+            pnlBox.classList.remove('positive', 'negative', 'neutral');
+            if (totalDeposited === 0) {
+                pnlBox.classList.add('neutral');
+            } else if (pnl >= 0) {
+                pnlBox.classList.add('positive');
+            } else {
+                pnlBox.classList.add('negative');
+            }
+        }
+        if (pnlArrow) pnlArrow.textContent = pnl > 0 ? '\u25B2' : pnl < 0 ? '\u25BC' : '\u25C6';
+        if (pnlAmountEl) pnlAmountEl.textContent = (pnl >= 0 ? '+' : '') + Assets.formatCurrency(pnl);
+        if (pnlPercentEl) pnlPercentEl.textContent = `(${pnl >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`;
+
+        // Total Deposited
+        const depositedEl = document.getElementById('userInfoDeposited');
+        if (depositedEl) depositedEl.textContent = Assets.formatCurrency(totalDeposited);
+
+        // Pool Share
+        const allocEl = document.getElementById('userInfoAllocation');
+        if (allocEl) allocEl.textContent = alloc.toFixed(2) + '%';
+
+        // Last Deposit date
+        const lastDepositEl = document.getElementById('userInfoLastDeposit');
+        if (lastDepositEl) {
+            if (deposits.length > 0) {
+                const sorted = [...deposits].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                const lastTs = sorted[0].timestamp;
+                if (lastTs) {
+                    const d = new Date(lastTs);
+                    lastDepositEl.textContent = d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+                } else {
+                    lastDepositEl.textContent = '--';
+                }
+            } else {
+                lastDepositEl.textContent = '--';
+            }
+        }
+
+        // Deposit count
+        const countEl = document.getElementById('userInfoDepositCount');
+        if (countEl) countEl.textContent = deposits.length;
+
+        // Member since (from first deposit or fallback)
+        const joinedEl = document.getElementById('userInfoJoined');
+        if (joinedEl) {
+            if (deposits.length > 0) {
+                const sorted = [...deposits].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                const firstTs = sorted[0].timestamp;
+                if (firstTs) {
+                    const d = new Date(firstTs);
+                    joinedEl.textContent = d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+                } else {
+                    joinedEl.textContent = '--';
+                }
+            } else {
+                joinedEl.textContent = '--';
+            }
+        }
+
+        // Coins held count and holdings breakdown
+        const cryptoAssets = State.portfolioData.assets.filter(
+            a => a.code !== 'AUD' && a.code !== 'USDC' && a.balance > 0
+        );
+
+        const coinCountEl = document.getElementById('userInfoCoinCount');
+        if (coinCountEl) coinCountEl.textContent = alloc > 0 ? cryptoAssets.length : 0;
+
+        // Holdings list
+        const holdingsSection = document.getElementById('userInfoHoldingsSection');
+        const holdingsList = document.getElementById('userInfoHoldingsList');
+
+        if (holdingsSection && holdingsList) {
+            if (alloc > 0 && cryptoAssets.length > 0) {
+                holdingsSection.style.display = 'block';
+
+                // Sort by USD value descending
+                const sorted = [...cryptoAssets].sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
+
+                holdingsList.innerHTML = sorted.map(a => {
+                    const userBal = a.balance * (alloc / 100);
+                    const userVal = a.usd_value * (alloc / 100);
+                    const style = CONFIG.ASSET_STYLES[a.code] || { color: '#666', icon: a.code?.[0] || '?' };
+
+                    return `<div class="holding-row">
+                        <div class="holding-coin">
+                            <div class="holding-coin-dot" style="background:${style.color}"></div>
+                            <span class="holding-coin-name">${a.code}</span>
+                        </div>
+                        <div class="holding-values">
+                            <div class="holding-amount">${userBal.toFixed(6)}</div>
+                            <div class="holding-usd">${Assets.formatCurrency(userVal)}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            } else {
+                holdingsSection.style.display = 'none';
+                holdingsList.innerHTML = '';
+            }
+        }
     }
 };

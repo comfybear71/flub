@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from database import (
     register_user,
     get_user_portfolio,
+    get_user_deposits,
     record_deposit,
     record_trade,
     get_all_active_users,
@@ -47,6 +48,15 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 self._send_json(200, portfolio)
+
+            elif path == '/api/user/deposits':
+                wallet = params.get('wallet')
+                if not wallet:
+                    self._send_json(400, {"error": "wallet parameter required"})
+                    return
+
+                deposits = get_user_deposits(wallet)
+                self._send_json(200, {"deposits": deposits, "count": len(deposits)})
 
             elif path == '/api/users':
                 wallet = params.get('admin_wallet')
