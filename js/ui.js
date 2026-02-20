@@ -1941,19 +1941,91 @@ const UI = {
         </div>`;
 
         try {
+            // Fetch our DB transactions
             const res = await fetch(`/api/transactions?wallet=${wallet}`);
             const data = await res.json();
-            if (data.transactions) {
-                this._txCache = data.transactions;
-                this._txLastFetch = Date.now();
-                this._renderTransactions(data.transactions);
-            } else {
-                container.innerHTML = '<div class="tx-empty">No transactions found.</div>';
+            let txns = data.transactions || [];
+
+            // For admin: also fetch Swyftx order history and flag external trades
+            if (State.userRole === 'admin' && typeof API !== 'undefined') {
+                try {
+                    const swyftxOrders = await API.fetchSwyftxOrderHistory(100);
+                    if (swyftxOrders.length > 0) {
+                        txns = this._mergeExternalTrades(txns, swyftxOrders);
+                    }
+                } catch (e) {
+                    console.warn('Swyftx history merge skipped:', e);
+                }
             }
+
+            this._txCache = txns;
+            this._txLastFetch = Date.now();
+            this._renderTransactions(txns);
         } catch (err) {
             console.error('Transactions fetch error:', err);
             container.innerHTML = '<div class="tx-empty">Failed to load transactions. Try again later.</div>';
         }
+    },
+
+    /**
+     * Compare Swyftx filled orders with our trades_collection.
+     * Any Swyftx order that doesn't match a DB trade (by coin + type + ~timestamp)
+     * is flagged as "external" — i.e. done directly on Swyftx outside this app.
+     */
+    _mergeExternalTrades(dbTxns, swyftxOrders) {
+        // Build a set of "fingerprints" from our DB trades for fast lookup
+        // Match by: coin + type + timestamp within 60 seconds
+        const dbTradeKeys = new Set();
+        for (const tx of dbTxns) {
+            if (tx.type === 'buy' || tx.type === 'sell') {
+                const ts = tx.timestamp ? new Date(tx.timestamp).getTime() : 0;
+                // Create keys for a +-60s window
+                const coin = (tx.coin || '').toUpperCase();
+                const type = tx.type;
+                for (let offset = -60000; offset <= 60000; offset += 10000) {
+                    const bucket = Math.round((ts + offset) / 10000);
+                    dbTradeKeys.add(`${coin}_${type}_${bucket}`);
+                }
+            }
+        }
+
+        // Check each Swyftx order against our DB
+        const external = [];
+        for (const order of swyftxOrders) {
+            const coin = (order.coin || '').toUpperCase();
+            const type = order.type; // 'buy' or 'sell'
+            const ts = order.timestamp ? new Date(order.timestamp).getTime() : 0;
+            const bucket = Math.round(ts / 10000);
+
+            // Check if this order matches any DB trade
+            const key = `${coin}_${type}_${bucket}`;
+            if (!dbTradeKeys.has(key)) {
+                // Not found in our DB — this is an external Swyftx trade
+                external.push({
+                    type: 'external',
+                    externalType: type, // original buy/sell
+                    coin,
+                    amount: order.quantity,
+                    price: order.trigger || 0,
+                    timestamp: order.timestamp,
+                    swyftxId: order.swyftxId,
+                    walletShort: 'Swyftx Direct'
+                });
+            }
+        }
+
+        if (external.length > 0) {
+            // Merge external trades into the list and re-sort
+            const merged = [...dbTxns, ...external];
+            merged.sort((a, b) => {
+                const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return tb - ta;
+            });
+            return merged;
+        }
+
+        return dbTxns;
     },
 
     _renderTransactions(txns) {
@@ -1968,6 +2040,8 @@ const UI = {
             filtered = txns.filter(t => t.type === 'buy');
         } else if (this._txFilter === 'sells') {
             filtered = txns.filter(t => t.type === 'sell');
+        } else if (this._txFilter === 'external') {
+            filtered = txns.filter(t => t.type === 'external');
         }
 
         if (filtered.length === 0) {
@@ -1979,7 +2053,9 @@ const UI = {
             return;
         }
 
-        let html = `<div style="font-size:10px;color:#475569;font-weight:600;padding:4px 0 8px;">${filtered.length} transaction${filtered.length !== 1 ? 's' : ''}</div>`;
+        // Count externals for the summary
+        const externalCount = txns.filter(t => t.type === 'external').length;
+        let html = `<div style="font-size:10px;color:#475569;font-weight:600;padding:4px 0 8px;">${filtered.length} transaction${filtered.length !== 1 ? 's' : ''}${externalCount > 0 && this._txFilter === 'all' ? ` · ${externalCount} external` : ''}</div>`;
 
         for (const tx of filtered) {
             const date = tx.timestamp ? new Date(tx.timestamp).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '--';
@@ -2040,6 +2116,21 @@ const UI = {
                     </div>
                     <div class="tx-right">
                         <div class="tx-amount neutral">${typeof tx.amount === 'number' ? tx.amount.toFixed(6) : tx.amount}</div>
+                        <div class="tx-date">${date} ${time}</div>
+                    </div>
+                </div>`;
+            } else if (tx.type === 'external') {
+                const isBuy = tx.externalType === 'buy';
+                html += `<div class="tx-item" style="border-color:rgba(139,92,246,0.12);">
+                    <div class="tx-icon-box external">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </div>
+                    <div class="tx-info">
+                        <div class="tx-title">${isBuy ? 'Buy' : 'Sell'} ${tx.coin || ''} <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:6px;background:rgba(139,92,246,0.15);color:#a78bfa;margin-left:4px;">EXTERNAL</span></div>
+                        <div class="tx-subtitle">Swyftx Direct${tx.price ? ' · @ $' + this._fmtNum(tx.price) : ''}</div>
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount" style="color:#a78bfa;">${typeof tx.amount === 'number' ? tx.amount.toFixed(6) : tx.amount}</div>
                         <div class="tx-date">${date} ${time}</div>
                     </div>
                 </div>`;

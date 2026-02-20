@@ -392,6 +392,67 @@ const API = {
             Logger.log('Error response: ' + errorBody, 'error');
         }
         return res;
+    },
+
+    /**
+     * Fetch Swyftx order history (filled/completed orders).
+     * Returns normalised array of { type, coin, amount, price, timestamp, swyftxId }
+     * Used by the Activity page to detect external (non-app) trades.
+     */
+    async fetchSwyftxOrderHistory(limit = 100) {
+        try {
+            await this._ensureToken();
+            const res = await _fetchWithRetry('/api/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: `/orders/?limit=${limit}`,
+                    method: 'GET',
+                    authToken: State.jwtToken
+                })
+            });
+
+            if (!res.ok) return [];
+
+            const data = await res.json();
+            const raw = Array.isArray(data) ? data : (data.orders ?? []);
+
+            // Build reverse ID→code map
+            const idToCode = {};
+            for (const [code, id] of Object.entries(CONFIG.CODE_TO_ID)) {
+                idToCode[String(id)] = code;
+            }
+
+            // Only include filled orders (status 4)
+            const filled = raw.filter(o => parseInt(o.status) === 4);
+
+            return filled.map(o => {
+                const ot = parseInt(o.order_type ?? o.orderType ?? 0);
+                const isBuy = ot === 1 || ot === 3 || ot === 5;
+                const secId = String(o.secondary_asset ?? '');
+                const priId = String(o.primary_asset ?? '');
+                const coin = idToCode[secId] ?? secId;
+                const priCode = idToCode[priId] ?? priId;
+                const quantity = parseFloat(o.quantity ?? 0);
+                const trigger = parseFloat(o.trigger ?? 0);
+                const amount = parseFloat(o.amount ?? o.total ?? quantity);
+
+                return {
+                    swyftxId: o.orderUuid ?? o.id ?? '',
+                    type: isBuy ? 'buy' : 'sell',
+                    coin,
+                    priCode,
+                    quantity,
+                    trigger,
+                    amount,
+                    timestamp: o.updated_time ?? o.created_time ?? '',
+                    orderType: ot
+                };
+            });
+        } catch (err) {
+            console.error('Swyftx history fetch error:', err);
+            return [];
+        }
     }
 };
 
